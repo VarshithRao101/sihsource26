@@ -167,7 +167,9 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 |---|---|---|
 | Mass error, flat terrain | −0.03% | improved by the inflow timestep limit |
 | Mass error, real channels | 0.000% dam break, −0.000% blockage | `meta.json` results |
-| Populations are class defaults | all 1,500 | `impact.json` `population_source` |
+| Populations measured, 4 sites still default | 16 of 22 WorldPop, 2 OSM census, 4 unmapped | `impact.json` `population_source` |
+| WorldPop is blank where no buildings detected | Chungthang, Rongek, Penlong, Golitar | kept as `class_default` |
+| Population assigned to nearest listed settlement | within 2 km, each cell counted once | `refine_population_worldpop` |
 | SAR validation in a gorge | CSI ≤ 0.02 | `validation.json` sensitivity sweep |
 | SPH is near-field only | first ~60 s | `sph_meta.json` limitation field |
 | Surrogate is an emulator | CSI 0.909 vs **our solver** | not validated against real floods |
@@ -175,8 +177,9 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | Breach parameter spread | up to 10× | `uncertainty.json` |
 | Delft3D | absent | reported as absent, never estimated |
 
-**Fixing the population numbers is a 10-minute job and the single highest-value manual task
-remaining** — see `README.md`.
+Populations are now measured from WorldPop 2020 (constrained, 100 m). Every mapped cell goes to
+its nearest settlement within 2 km, so nobody is counted twice. A settlement with a real OSM
+census tag keeps it, and one with no mapped buildings keeps its class default and says so.
 
 ---
 

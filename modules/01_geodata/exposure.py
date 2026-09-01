@@ -190,16 +190,25 @@ def fetch_roads(bbox: tuple[float, float, float, float]) -> list[dict]:
 def refine_population_worldpop(
     settlements: list[dict], site: str, radius_km: float = 2.0
 ) -> list[dict]:
-    """Replace class-default populations with a WorldPop sum where available.
+    """Replace class-default populations with a measured WorldPop count.
 
-    WorldPop publishes 100 m population-count rasters. Summing the cells within
-    a radius of a place node is a far better estimate than a class median, and
-    it is a real measurement rather than an assumption. Requires
-    data/exposure/{site}/population.tif; silently leaves settlements alone if
-    the raster is not there.
+    WorldPop publishes 100 m population-count rasters. Every mapped cell is
+    assigned to its nearest settlement within radius_km, so each person is
+    counted exactly once and the column sums to the mapped population of the
+    tile rather than exceeding it.
+
+    Settlements carrying a real OSM population tag are left alone - a census
+    tag beats anything a radius can measure. Settlements with no mapped
+    built-up area within radius_km keep their class default and stay labelled
+    class_default; the constrained product is blank wherever no buildings were
+    detected, which in high-altitude Sikkim includes some real villages.
+
+    Requires data/exposure/{site}/population.tif; silently leaves settlements
+    alone if the raster is not there.
 
     Source: WorldPop (2020), "Global High Resolution Population Denominators",
-    University of Southampton, doi:10.5258/SOTON/WP00660.
+    University of Southampton, doi:10.5258/SOTON/WP00660. Constrained
+    individual-countries product, 100 m, 2020.
     """
     pop_path = EXPOSURE_DIR / site / "population.tif"
     if not pop_path.exists():
@@ -212,18 +221,94 @@ def refine_population_worldpop(
         return settlements
 
     with rasterio.open(pop_path) as src:
+        band = src.read(1).astype(np.float64)
+        valid = np.isfinite(band) & (band >= 0)
+        if src.nodata is not None:
+            valid &= band != src.nodata
+        rows, cols = np.nonzero(valid)
+        if rows.size == 0:
+            return settlements
+        counts = band[rows, cols]
+
+        # Cell centres in the raster CRS, then in lon/lat.
+        xs, ys = src.xy(rows, cols)
+        xs, ys = np.asarray(xs), np.asarray(ys)
+        if src.crs is not None and not src.crs.is_geographic:
+            lon, lat = warp_transform(src.crs, "EPSG:4326", xs.tolist(), ys.tolist())
+            lon, lat = np.asarray(lon), np.asarray(lat)
+        else:
+            lon, lat = xs, ys
+
+        s_lon = np.array([s["lon"] for s in settlements], dtype=np.float64)
+        s_lat = np.array([s["lat"] for s in settlements], dtype=np.float64)
+
+        # Local equirectangular metres - exact enough over a single tile.
+        lat0 = float(np.mean(s_lat))
+        mx = 111_320.0 * float(np.cos(np.radians(lat0)))
+        my = 110_540.0
+        dx = (lon[:, None] - s_lon[None, :]) * mx
+        dy = (lat[:, None] - s_lat[None, :]) * my
+        d2 = dx * dx + dy * dy
+
+        # Every mapped person goes to exactly one settlement - the nearest -
+        # and only if it is within radius_km. Summing a box around each place
+        # instead would count anyone living between two villages twice, and the
+        # per-settlement column would add up to more people than the tile holds.
+        nearest = np.argmin(d2, axis=1)
+        within = d2[np.arange(d2.shape[0]), nearest] <= (radius_km * 1000.0) ** 2
+
+        totals = np.zeros(len(settlements), dtype=np.float64)
+        np.add.at(totals, nearest[within], counts[within])
+
+    for i, s in enumerate(settlements):
+        # Only the guesses get replaced. A settlement carrying a real OSM census
+        # tag already has a better number than this can give - a town sprawls
+        # past the radius, so overwriting Gangtok's tagged 100,300 with a
+        # truncated 26,434 would be a downgrade wearing the word "measured".
+        if s.get("population_source") != "class_default":
+            continue
+        if totals[i] <= 0:
+            continue  # no mapped built-up area here; keep the class default
+        s["population"] = int(round(float(totals[i])))
+        s["population_source"] = "worldpop2020"
+    return settlements
+
+    try:
+        import rasterio
+        from rasterio.warp import transform as warp_transform
+    except Exception:
+        return settlements
+
+    with rasterio.open(pop_path) as src:
         band = src.read(1)
         nodata = src.nodata
         for s in settlements:
+            # Only the guesses get replaced. A settlement carrying a real OSM
+            # census tag already has a better number than a 2 km sum can give -
+            # a town sprawls past the radius, so overwriting Gangtok's tagged
+            # 100,300 with a truncated 26,434 would be a downgrade wearing the
+            # word "measured".
+            if s.get("population_source") != "class_default":
+                continue
             xs, ys = warp_transform("EPSG:4326", src.crs, [s["lon"]], [s["lat"]])
             try:
                 row, col = src.index(xs[0], ys[0])
             except Exception:
                 continue
-            # radius in pixels, from the raster's own resolution
-            px = max(int(radius_km * 1000.0 / abs(src.transform.a) / 111_320 * 111_320), 1)
-            r0, r1 = max(row - px, 0), min(row + px + 1, src.height)
-            c0, c1 = max(col - px, 0), min(col + px + 1, src.width)
+            # Radius in pixels, from the raster's own resolution. WorldPop
+            # ships in EPSG:4326, so the pixel size is in degrees and has to be
+            # converted to metres before it means anything - and a degree of
+            # longitude shrinks with latitude while a degree of latitude does
+            # not, so the two axes get their own radius.
+            res_x, res_y = abs(src.transform.a), abs(src.transform.e)
+            if src.crs is not None and src.crs.is_geographic:
+                m_per_deg_lon = 111_320.0 * float(np.cos(np.radians(s["lat"])))
+                res_x *= max(m_per_deg_lon, 1.0)
+                res_y *= 110_540.0
+            pc = max(int(round(radius_km * 1000.0 / res_x)), 1)
+            pr = max(int(round(radius_km * 1000.0 / res_y)), 1)
+            r0, r1 = max(row - pr, 0), min(row + pr + 1, src.height)
+            c0, c1 = max(col - pc, 0), min(col + pc + 1, src.width)
             if r0 >= r1 or c0 >= c1:
                 continue
             window = band[r0:r1, c0:c1].astype(np.float64)

@@ -77,23 +77,31 @@ not. Recorded under `meta.json` → `blockage`.
 ## Manual tasks still outstanding
 
 Ordered by value per minute of your time. Nothing in the code is waiting on items 3–6.
+Item 1 is done.
 
-### 1. WorldPop population raster — 10 minutes, highest value
+### ~~1. WorldPop population raster~~ — DONE
 
-Every settlement currently reports population 1,500, labelled `population_source:
-class_default`, because OSM has no population tag for these villages. It is honest but weak, and it
-is the number a district officer cares about most.
+Populations are now measured. 16 of 22 Teesta settlements carry a WorldPop count labelled
+`population_source: worldpop2020`; Gangtok and Mangan keep their real OSM census tags; four
+(Chungthang, Rongek, Penlong, Golitar) keep `class_default` because WorldPop's constrained product
+has **no mapped built-up area** within 2 km of them — it is blank wherever no buildings were
+detected, and that includes some real high-altitude Sikkim villages. That gap is honest and stays
+visible in the table.
 
-Download **WorldPop India, 100 m, constrained, 2020** from <https://hub.worldpop.org/> and save it
-as:
+To reproduce on a fresh clone (the raster is gitignored — 531 MB):
 
+```bash
+curl -L -o data/worldpop/ind_ppp_2020_constrained.tif   https://data.worldpop.org/GIS/Population/Global_2000_2020_Constrained/2020/BSGM/IND/ind_ppp_2020_constrained.tif
 ```
-data\exposure\teesta\population.tif
-```
 
-The code path already exists (`modules/01_geodata/exposure.py` → `refine_population_worldpop`). It
-activates on its own; delete `data\exposure\teesta\exposure.json` and re-run so it refetches.
-Populations become measured sums instead of class medians.
+Then clip it to the site bbox into `data/exposure/{site}/population.tif` and delete
+`data/exposure/{site}/exposure.json` so it refetches. `refine_population_worldpop` activates on its
+own.
+
+**Method:** every mapped 100 m cell is assigned to its **nearest** settlement within 2 km, so each
+person is counted once. Summing a box around each place instead double-counted anyone living
+between two villages — it produced 83,966 people across the refined settlements when the whole tile
+only holds 152,239, a total a juror could break by adding up our own column.
 
 ### 2. Delft3D — start today, it has a queue
 
