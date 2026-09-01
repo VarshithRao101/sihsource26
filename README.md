@@ -57,6 +57,30 @@ copy .env.example .env          # then fill it in
 
 ---
 
+## Water release
+
+NTRO asks for "dam break **or water release**". They are different events and do not share an
+implementation. A release opens the gates on a structure that stays intact, so no breach regression
+is used at all - the water leaves through the outlet works the dam was built with:
+
+```
+gate      Q = Cd A sqrt(2 g (y - y_invert))     orifice, Fread (1988)
+spillway  Q = C L (y - y_crest)^1.5             broad-crested weir
+```
+
+Set `failure_mode="gated_release"` and `gate_opening_frac`. When the dam comes from the CWC register
+its **design spillway capacity is used as the gate capacity** - a measured number rather than an
+assumption - and the release is capped at it. Annamayya, 63.16 MCM behind a 25 m embankment:
+
+| scenario | peak | volume released |
+|---|---|---|
+| dam break, overtopping | 11,325 m3/s | 63.15 MCM |
+| gated release, gates 100% | 8,069 m3/s | 63.14 MCM |
+| gated release, gates 25% | 2,609 m3/s | 63.14 MCM |
+
+Same water, a quarter of the peak. That is the operational point of a controlled release, and it is
+recorded under `meta.json` -> `gated_release` with the capacity source named.
+
 ## River blockage
 
 A landslide dam, not an engineered one. Set `failure_mode="blockage_breach"` and

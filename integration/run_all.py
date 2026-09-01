@@ -374,6 +374,59 @@ def check_api_imports():
     return f"{len(paths)} routes, console present"
 
 
+def check_gated_release():
+    """A controlled release is not a relabelled dam break.
+
+    NTRO asks for "dam break OR water release". For a long time gated_release
+    was an enum value that returned byte-identical breach parameters to piping
+    and had no branch anywhere in the pipeline - a label, not a scenario. This
+    asserts the two are actually different physics, so it cannot silently
+    become a label again.
+    """
+    import numpy as np
+
+    from shared.hydro import (
+        breach_hydrograph,
+        froehlich_2008,
+        gated_release_hydrograph,
+    )
+
+    V, H, DESIGN = 63.16e6, 25.0, 8069.0  # Annamayya, from the CWC register
+
+    breach = froehlich_2008(V, H, "overtopping")
+    _, q_breach = breach_hydrograph(breach, dam_height_m=H, capacity_m3=V, duration_hr=24.0)
+
+    t, q, rel = gated_release_hydrograph(
+        dam_height_m=H, capacity_m3=V, design_spillway_cumecs=DESIGN, duration_hr=24.0
+    )
+
+    assert q.max() < q_breach.max(), (
+        f"a controlled release ({q.max():,.0f}) cannot peak above a dam break "
+        f"({q_breach.max():,.0f}) on the same reservoir"
+    )
+    assert q.max() <= DESIGN * 1.001, (
+        f"release {q.max():,.0f} exceeds the structure's design capacity {DESIGN:,.0f}"
+    )
+    assert rel.capacity_source.startswith("CWC"), (
+        f"design capacity should come from the register, got {rel.capacity_source!r}"
+    )
+
+    # Closing the gates must reduce the peak, or the opening does nothing.
+    _, q_half, _ = gated_release_hydrograph(
+        dam_height_m=H, capacity_m3=V, design_spillway_cumecs=DESIGN,
+        gate_opening_frac=0.25, duration_hr=24.0,
+    )
+    assert q_half.max() < q.max(), "gate_opening_frac has no effect on the release"
+
+    assert t[0] == 0.0 and np.all(np.diff(t) > 0), "time series must start at 0 and increase"
+
+    ratio = q_breach.max() / q.max()
+    return (
+        f"release {q.max():,.0f} vs breach {q_breach.max():,.0f} m3/s "
+        f"({ratio:.1f}x), capped at the register's design capacity"
+    )
+
+
 def check_delft3d_absence():
     """Delft3D absence is measured, not assumed.
 
@@ -520,6 +573,7 @@ def main() -> int:
     check("06_gee validation metrics", check_sar_metrics)
     check("04_backend API + console", check_api_imports)
     check("02_sph case generation", check_sph_case)
+    check("04_backend gated release physics", check_gated_release)
     check("03_delft3d absence is measured", check_delft3d_absence)
     check("07_ml maths (SCS, routing, MC)", check_ml_layer)
     check("07_ml surrogate", check_surrogate)

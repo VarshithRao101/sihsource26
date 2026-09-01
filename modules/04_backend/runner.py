@@ -267,27 +267,56 @@ def run_scenario(
         blockage_block = blockage.as_dict()
         effective_capacity_m3 = blockage.impounded_volume_mcm * 1e6
 
-    t_hr, q_cumecs = breach_hydrograph(
-        breach,
-        dam_height_m=(
-            spec.blockage_height_m
-            if spec.failure_mode == "blockage_breach"
-            else spec.site.dam_height_m
-        ),
-        capacity_m3=effective_capacity_m3,
-        reservoir_level_frac=(
-            1.0 if spec.failure_mode == "blockage_breach" else spec.reservoir_level_frac
-        ),
-        failure_mode=spec.failure_mode,
-        inflow_cumecs=spec.inflow_cumecs,
-        duration_hr=spec.end_hr,
-        output_step_hr=min(spec.output_step_hr, 0.05),
-        storage_exponent=spec.storage_exponent,
-    )
+    release_block = None
+    if spec.failure_mode == "gated_release":
+        # A controlled release is not a failure. The structure stays intact, so
+        # no breach regression is used at all - the water leaves through the
+        # outlet works the dam was built with.
+        from shared.hydro import gated_release_hydrograph
+
+        t_hr, q_cumecs, release = gated_release_hydrograph(
+            dam_height_m=spec.site.dam_height_m,
+            capacity_m3=effective_capacity_m3,
+            reservoir_level_frac=spec.reservoir_level_frac,
+            design_spillway_cumecs=spec.design_spillway_cumecs,
+            target_release_cumecs=spec.target_release_cumecs,
+            gate_opening_frac=spec.gate_opening_frac,
+            gate_open_time_hr=spec.gate_open_time_hr,
+            spillway_length_m=spec.spillway_length_m,
+            inflow_cumecs=spec.inflow_cumecs,
+            duration_hr=spec.end_hr,
+            output_step_hr=min(spec.output_step_hr, 0.05),
+            storage_exponent=spec.storage_exponent,
+        )
+        release_block = release.as_dict()
+        # The water enters the river over the spillway/outlet width, not over a
+        # breach that never opened.
+        release_width_m = max(spec.spillway_length_m, grid.cellsize_m())
+    else:
+        release_width_m = breach.average_width_m
+        t_hr, q_cumecs = breach_hydrograph(
+            breach,
+            dam_height_m=(
+                spec.blockage_height_m
+                if spec.failure_mode == "blockage_breach"
+                else spec.site.dam_height_m
+            ),
+            capacity_m3=effective_capacity_m3,
+            reservoir_level_frac=(
+                1.0
+                if spec.failure_mode == "blockage_breach"
+                else spec.reservoir_level_frac
+            ),
+            failure_mode=spec.failure_mode,
+            inflow_cumecs=spec.inflow_cumecs,
+            duration_hr=spec.end_hr,
+            output_step_hr=min(spec.output_step_hr, 0.05),
+            storage_exponent=spec.storage_exponent,
+        )
 
     # ---- 3. solve ------------------------------------------------------
     inflow_cells = find_inflow_cells(
-        grid, dem, spec.site.lat, spec.site.lon, breach.average_width_m
+        grid, dem, spec.site.lat, spec.site.lon, release_width_m
     )
     config = SolverConfig(
         dx_m=grid.cellsize_m(),
@@ -416,6 +445,8 @@ def run_scenario(
     )
     if blockage_block is not None:
         meta["blockage"] = blockage_block
+    if release_block is not None:
+        meta["gated_release"] = release_block
     meta["domain"]["reach_length_km"] = spec.reach_length_km
     write_meta(run_dir, meta)
 

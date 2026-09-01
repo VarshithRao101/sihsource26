@@ -166,6 +166,23 @@ class RunRequest(BaseModel):
     end_hr: float = Field(12.0, gt=0, le=120)
     scheme: Literal["swe", "inertial"] = "swe"
     manning_n: float = Field(0.035, ge=0.01, le=0.2)
+    gate_opening_frac: float = Field(
+        1.0, ge=0.0, le=1.0,
+        description=(
+            "Only for failure_mode='gated_release'. How far the outlet gates are "
+            "opened. 1.0 is a full emergency release. The dam does not fail in "
+            "this mode - no breach regression is used."
+        ),
+    )
+    gate_open_time_hr: float = Field(0.5, gt=0, le=24)
+    target_release_cumecs: float | None = Field(
+        None, gt=0,
+        description=(
+            "Override the release the operator is aiming for. Leave None to use "
+            "the dam's design spillway capacity from the CWC register."
+        ),
+    )
+    spillway_length_m: float = Field(60.0, gt=0, le=2000)
     keep_frames: bool = False
     real_terrain: bool = True
     """Use module 01's downloaded, conditioned DEM. False falls back to the
@@ -174,6 +191,7 @@ class RunRequest(BaseModel):
     notes: str = ""
 
     def to_spec(self) -> ScenarioSpec:
+        design_spillway: float | None = None
         if self.dam_id:
             from importlib import import_module
 
@@ -197,6 +215,10 @@ class RunRequest(BaseModel):
                 reservoir_capacity_mcm=float(dam["gross_storage_mcm"]),
                 source="CWC NRLD 2019",
             )
+            # The register carries the design discharge capacity for many dams.
+            # It is a measured number and beats any assumption we could make
+            # about how much water the outlet works can pass.
+            design_spillway = dam.get("spillway_cumecs")
         elif self.site_key:
             site = DEMO_SITES.get(self.site_key)
             if site is None:
@@ -220,6 +242,13 @@ class RunRequest(BaseModel):
             end_hr=self.end_hr,
             scheme=self.scheme,
             manning_n=self.manning_n,
+            gate_opening_frac=self.gate_opening_frac,
+            gate_open_time_hr=self.gate_open_time_hr,
+            design_spillway_cumecs=(
+                float(design_spillway) if design_spillway else None
+            ),
+            target_release_cumecs=self.target_release_cumecs,
+            spillway_length_m=self.spillway_length_m,
             notes=self.notes,
         )
 

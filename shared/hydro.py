@@ -451,6 +451,224 @@ def breach_hydrograph(
 
 
 # ==========================================================================
+# Controlled release through the outlet works
+# ==========================================================================
+#
+# NTRO's problem statement asks for "dam break OR water release". These are not
+# the same event and must not share an implementation. A breach is an
+# uncontrolled hole that grows; a release is an operator opening gates on a
+# structure that stays intact. The breach regressions in this module are fitted
+# to 74 documented embankment FAILURES and have no meaning for a gate opening.
+
+ORIFICE_CD = 0.6
+"""Discharge coefficient for a submerged outlet gate. Fread, D.L. (1988),
+'The NWS DAMBRK Model', National Weather Service."""
+
+WEIR_C_SI = 1.7
+"""Broad-crested weir coefficient in SI units: Q = C L H^1.5. Standard value
+for an ogee/broad-crested spillway."""
+
+
+@dataclass
+class GateRelease:
+    """What the structure actually opened, recorded so the run can be audited.
+
+    Every field here is either measured (from the dam register) or an assumption
+    we are naming out loud. `capacity_source` says which.
+    """
+
+    target_release_cumecs: float
+    gate_opening_frac: float
+    gate_area_m2: float
+    outlet_invert_m: float
+    spillway_crest_m: float
+    spillway_length_m: float
+    capacity_source: str
+    peak_cumecs: float = 0.0
+    released_volume_mcm: float = 0.0
+    drawdown_m: float = 0.0
+    spillway_engaged: bool = False
+
+    def as_dict(self) -> dict:
+        return {
+            "target_release_cumecs": round(self.target_release_cumecs, 1),
+            "gate_opening_frac": round(self.gate_opening_frac, 3),
+            "gate_area_m2": round(self.gate_area_m2, 2),
+            "outlet_invert_m": round(self.outlet_invert_m, 2),
+            "spillway_crest_m": round(self.spillway_crest_m, 2),
+            "spillway_length_m": round(self.spillway_length_m, 1),
+            "capacity_source": self.capacity_source,
+            "peak_cumecs": round(self.peak_cumecs, 1),
+            "released_volume_mcm": round(self.released_volume_mcm, 4),
+            "drawdown_m": round(self.drawdown_m, 2),
+            "spillway_engaged": bool(self.spillway_engaged),
+            "note": (
+                "Controlled release through outlet gates plus any uncontrolled "
+                "spillway flow. The dam does NOT fail: no breach regression is "
+                "used, and the structure stays intact. Gate discharge is orifice "
+                "flow (Fread 1988), spillway is broad-crested weir."
+            ),
+        }
+
+
+def gated_release_hydrograph(
+    dam_height_m: float,
+    capacity_m3: float,
+    reservoir_level_frac: float = 1.0,
+    design_spillway_cumecs: float | None = None,
+    target_release_cumecs: float | None = None,
+    gate_opening_frac: float = 1.0,
+    gate_open_time_hr: float = 0.5,
+    outlet_invert_frac: float = 0.05,
+    spillway_crest_frac: float = 0.85,
+    spillway_length_m: float = 60.0,
+    inflow_cumecs: float = 0.0,
+    duration_hr: float = 12.0,
+    dt_s: float = 5.0,
+    output_step_hr: float = 0.05,
+    storage_exponent: float = 2.7,
+) -> tuple[np.ndarray, np.ndarray, GateRelease]:
+    """Level-pool routing of a controlled release. No breach, no failure.
+
+    The physics: the operator winds the gates open over `gate_open_time_hr`.
+    Discharge through them is orifice flow driven by the head above the outlet
+    invert. If the water level is above the spillway crest, the uncontrolled
+    spillway passes water too, whatever the operator does. Both draw the
+    reservoir down, the head falls, and the discharge decays.
+
+        gate      Q = Cd A sqrt(2 g (y - y_invert))     orifice, Fread (1988)
+        spillway  Q = C L (y - y_crest)^1.5             broad-crested weir
+
+    This is the same level-pool (Puls) routing as `breach_hydrograph`, with the
+    breach replaced by the structure's real outlet works. The resulting
+    hydrograph looks nothing like a dam break: a plateau at the gate capacity
+    rather than a sharp spike, and the reservoir draws down only to the outlet
+    invert instead of emptying.
+
+    Args:
+        dam_height_m: full dam height.
+        capacity_m3: gross storage at full supply level.
+        reservoir_level_frac: how full at t = 0, 0..1.
+        design_spillway_cumecs: the structure's design discharge capacity, from
+            the CWC register when the register has it. This is a MEASURED number
+            and is used in preference to any assumption.
+        target_release_cumecs: what the operator is aiming to pass with gates
+            fully open. Defaults to the design capacity, or - if the register
+            has none - to the rate that would draw the reservoir down in 24
+            hours, which is an ASSUMPTION and is labelled as one.
+        gate_opening_frac: 0..1. How far the gates are opened. 1.0 is a full
+            emergency release.
+        gate_open_time_hr: how long the operator takes to wind them open.
+        outlet_invert_frac: outlet sill height as a fraction of dam height.
+        spillway_crest_frac: spillway crest as a fraction of dam height.
+        spillway_length_m: crest length of the uncontrolled spillway.
+        inflow_cumecs: steady inflow during the event.
+        duration_hr, dt_s, output_step_hr, storage_exponent: as breach_hydrograph.
+
+    Returns:
+        (time_hr, discharge_cumecs, GateRelease) - the series plus the block
+        that goes into meta.json so the assumptions travel with the result.
+
+    Raises:
+        ValueError: on non-physical inputs.
+    """
+    if not 0.0 <= reservoir_level_frac <= 1.0:
+        raise ValueError(
+            f"reservoir_level_frac must be 0..1, got {reservoir_level_frac}"
+        )
+    if capacity_m3 <= 0 or dam_height_m <= 0:
+        raise ValueError("capacity_m3 and dam_height_m must be positive")
+    if not 0.0 <= gate_opening_frac <= 1.0:
+        raise ValueError(f"gate_opening_frac must be 0..1, got {gate_opening_frac}")
+
+    outlet_invert = outlet_invert_frac * dam_height_m
+    spillway_crest = spillway_crest_frac * dam_height_m
+
+    # What the gates can pass, and where that number came from.
+    if target_release_cumecs is not None and target_release_cumecs > 0:
+        target = float(target_release_cumecs)
+        source = "operator-specified"
+    elif design_spillway_cumecs is not None and design_spillway_cumecs > 0:
+        target = float(design_spillway_cumecs)
+        source = "CWC NRLD design spillway capacity (measured)"
+    else:
+        # ASSUMPTION, stated: size the outlet to draw the reservoir down in 24 h.
+        target = capacity_m3 / (24.0 * 3600.0)
+        source = "ASSUMED - no spillway capacity in the register; sized to draw down in 24 h"
+
+    # Gate area that delivers `target` at full supply level.
+    head_full = max(dam_height_m - outlet_invert, 0.1)
+    gate_area = target / (ORIFICE_CD * math.sqrt(2.0 * GRAVITY * head_full))
+
+    level = dam_height_m * reservoir_level_frac
+    level0 = level
+    storage = storage_from_level(level, dam_height_m, capacity_m3, storage_exponent)
+
+    open_s = max(gate_open_time_hr * 3600.0, dt_s)
+    n_steps = int(duration_hr * 3600.0 / dt_s)
+
+    times, flows = [0.0], [0.0]
+    next_out_s = output_step_hr * 3600.0
+    peak = 0.0
+    released_m3 = 0.0
+    spill_engaged = False
+
+    for step in range(1, n_steps + 1):
+        t_s = step * dt_s
+
+        # Operators wind gates open; they do not appear fully open at t=0.
+        opening = min(t_s / open_s, 1.0) * gate_opening_frac
+
+        head_gate = max(level - outlet_invert, 0.0)
+        q_gate = ORIFICE_CD * gate_area * opening * math.sqrt(
+            2.0 * GRAVITY * head_gate
+        )
+
+        head_weir = max(level - spillway_crest, 0.0)
+        q_spill = WEIR_C_SI * spillway_length_m * head_weir**1.5
+        if q_spill > 0.0:
+            spill_engaged = True
+
+        q = q_gate + q_spill
+
+        # A structure cannot pass more than it was designed to pass.
+        if design_spillway_cumecs is not None and design_spillway_cumecs > 0:
+            q = min(q, float(design_spillway_cumecs))
+
+        storage = max(storage + (inflow_cumecs - q) * dt_s, 0.0)
+        level = level_from_storage(
+            storage, dam_height_m, capacity_m3, storage_exponent
+        )
+
+        released_m3 += q * dt_s
+        peak = max(peak, q)
+
+        if t_s >= next_out_s - 1e-9:
+            times.append(t_s / 3600.0)
+            flows.append(q)
+            next_out_s += output_step_hr * 3600.0
+
+    release = GateRelease(
+        target_release_cumecs=target,
+        gate_opening_frac=gate_opening_frac,
+        gate_area_m2=gate_area,
+        outlet_invert_m=outlet_invert,
+        spillway_crest_m=spillway_crest,
+        spillway_length_m=spillway_length_m,
+        capacity_source=source,
+        peak_cumecs=peak,
+        released_volume_mcm=released_m3 / 1e6,
+        drawdown_m=max(level0 - level, 0.0),
+        spillway_engaged=spill_engaged,
+    )
+    return (
+        np.asarray(times, dtype=np.float64),
+        np.asarray(flows, dtype=np.float64),
+        release,
+    )
+
+
+# ==========================================================================
 # Open-channel helpers
 # ==========================================================================
 

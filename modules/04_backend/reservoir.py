@@ -28,20 +28,22 @@ import math
 from dataclasses import asdict, dataclass
 
 from shared.contract import GRAVITY
-from shared.hydro import level_from_storage, storage_from_level
+from shared.hydro import (
+    ORIFICE_CD,
+    WEIR_C_SI,
+    level_from_storage,
+    storage_from_level,
+)
 
 MCM = 1.0e6
 """m3 per million cubic metres. The contract reports volume in MCM."""
 
-ORIFICE_CD = 0.6
-"""Sharp-edged orifice discharge coefficient, dimensionless.
-Source: Fread, D.L. (1988), "BREACH", NOAA NWS, section 3. The same value
-shared.hydro._piping_discharge uses - do not fork it to a different number."""
-
-WEIR_C_SI = 1.7
-"""Broad-crested weir coefficient, SI, for Q = C * L * H^1.5.
-Source: USACE HEC-RAS Hydraulic Reference Manual, weir flow; identical to the
-rectangular term in shared.hydro._breach_discharge."""
+# Outlet-works coefficients now live in shared.hydro, which is also what
+# gated_release_hydrograph uses. They were duplicated here with a comment
+# saying "do not fork it to a different number" - importing them is how you
+# actually guarantee that.
+#   ORIFICE_CD  Fread, D.L. (1988), "BREACH", NOAA NWS, section 3
+#   WEIR_C_SI   USACE HEC-RAS Hydraulic Reference Manual, weir flow
 
 
 # ==========================================================================

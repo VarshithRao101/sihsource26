@@ -13,7 +13,7 @@
 # PART 0 — WHAT ACTUALLY EXISTS TODAY
 
 This is not a plan. Everything below is built, running and tested. `python integration/run_all.py`
-passes **19/19** in about twenty seconds with the network unplugged.
+passes **20/20** in about twenty seconds with the network unplugged.
 
 ```
               CWC register (5,686 dams)

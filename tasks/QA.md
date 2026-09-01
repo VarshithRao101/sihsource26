@@ -123,7 +123,7 @@ knowledge. Log every step that fails, is ambiguous, or needs a credential you we
 This is the highest-value thing you will do all week. The setup instructions were written by someone
 who already had everything installed, which means they are wrong in ways only you can find.
 
-Expected gate at the end: `integration/run_all.py` prints **19/19**.
+Expected gate at the end: `integration/run_all.py` prints **20/20**.
 
 ### `[P1]` 6. Number audit
 

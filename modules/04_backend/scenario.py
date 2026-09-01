@@ -89,6 +89,26 @@ class ScenarioSpec:
     """Compass bearing the valley runs away from the dam. Module 01 replaces
     this with the real traced channel direction; it is only the first guess."""
 
+    # --- controlled release, failure_mode = 'gated_release' -------------
+    gate_opening_frac: float = 1.0
+    """How far the outlet gates are opened, 0..1. 1.0 is a full emergency
+    release. The dam does not fail in this mode - see
+    shared.hydro.gated_release_hydrograph."""
+
+    gate_open_time_hr: float = 0.5
+    """How long the operator takes to wind the gates open."""
+
+    design_spillway_cumecs: float | None = None
+    """The structure's design discharge capacity, m3/s. Filled in from the CWC
+    register when it has one; None means we fall back to a stated assumption."""
+
+    target_release_cumecs: float | None = None
+    """Override what the operator is aiming to pass. None uses the design
+    capacity."""
+
+    spillway_length_m: float = 60.0
+    """Crest length of the uncontrolled spillway."""
+
     blockage_height_m: float = 40.0
     """Height of the landslide debris above the river bed, for
     failure_mode = 'blockage_breach'.
