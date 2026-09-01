@@ -73,6 +73,14 @@
     padding: 8px; border-radius: 3px; font: 11px/1.4 ui-monospace, Consolas, monospace;
   }
   canvas { border: 1px solid var(--line); background: #fff; max-width: 100%; }
+  .damcard { border: 1px solid var(--line); border-radius: 3px; padding: 7px 9px; margin: 6px 0 2px;
+             font-size: 12px; background: #fff; line-height: 1.45; }
+  .damcard b { color: var(--fg); }
+  details#adv { border: 1px solid var(--line); border-radius: 3px; padding: 6px 9px; background: #fff;
+                margin-bottom: 10px; }
+  details#adv summary { cursor: pointer; font-size: 11px; text-transform: uppercase;
+                        letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  input[type=range] { accent-color: var(--accent); }
   .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
   .ch { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
   .ch h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
@@ -108,7 +116,7 @@
   <!-- ------------------------------------------------ controls -->
   <div class="side">
     <fieldset>
-      <legend>Pick a dam</legend>
+      <legend>1 · Which dam</legend>
       <div class="muted" style="font-size:11px;margin-bottom:4px">
         CWC National Register of Large Dams 2019 — <span id="damcount">…</span>
       </div>
@@ -120,57 +128,89 @@
       <input id="fq" placeholder="e.g. Hirakud, Teesta">
       <label>Dam</label>
       <select id="fdam" size="6"></select>
-      <div class="muted" id="daminfo" style="font-size:11px;min-height:15px"></div>
+      <div id="damcard" class="damcard muted">No dam selected — pick one above, or use a demo site.</div>
+      <label>Demo site <span class="muted">(already cached, runs offline)</span></label>
+      <select id="preset"><option value="">— none —</option></select>
     </fieldset>
 
     <fieldset>
-      <legend>Site</legend>
-      <label>Preset</label>
-      <select id="preset"><option value="">— custom —</option></select>
-      <label>Name</label><input id="name" value="Chungthang Dam">
-      <div class="row2">
-        <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value="27.6003"></div>
-        <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value="88.6428"></div>
-      </div>
-      <div class="row2">
-        <div><label>River</label><input id="river" value="Teesta"></div>
-        <div><label>State</label><input id="state" value="Sikkim"></div>
-      </div>
-      <div class="row2">
-        <div><label>Dam height (m)</label><input id="height" type="number" step="1" value="60"></div>
-        <div><label>Capacity (MCM)</label><input id="cap" type="number" step="0.1" value="5"></div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Scenario</legend>
-      <label>Failure mode</label>
+      <legend>2 · What happened</legend>
+      <label>Scenario</label>
       <select id="mode">
-        <option value="overtopping">overtopping</option>
-        <option value="piping">piping</option>
-        <option value="gated_release">gated_release</option>
-        <option value="blockage_breach">blockage_breach</option>
+        <option value="overtopping">Dam break — water over the crest</option>
+        <option value="piping">Dam break — internal erosion (piping)</option>
+        <option value="gated_release">Controlled release — gates opened, dam intact</option>
+        <option value="blockage_breach">River blockage — landslide dam</option>
       </select>
+      <div class="muted" id="modehelp" style="font-size:11px;margin:4px 0 2px"></div>
+
+      <div id="grp-level">
+        <label>How full is the reservoir? <b id="levellab">100%</b></label>
+        <input id="level" type="range" min="0" max="100" step="5" value="100" style="width:100%">
+      </div>
+
+      <div id="grp-gate" style="display:none">
+        <label>How far are the gates opened? <b id="gatelab">100%</b></label>
+        <input id="gate" type="range" min="5" max="100" step="5" value="100" style="width:100%">
+        <div class="muted" style="font-size:11px">Capacity comes from the register's design
+          spillway discharge where it has one.</div>
+      </div>
+
+      <div id="grp-blockage" style="display:none">
+        <label>Height of the landslide dam (m)</label>
+        <input id="blockheight" type="number" step="5" min="5" max="200" value="40">
+        <div class="muted" style="font-size:11px">The impounded volume is read off the terrain —
+          nobody publishes a landslide dam's storage.</div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · How far, how long</legend>
+      <div class="row2">
+        <div><label>Look downstream (km)</label><input id="reach" type="number" step="5" value="40"></div>
+        <div><label>Simulate (hours)</label><input id="endhr" type="number" step="1" value="8"></div>
+      </div>
+    </fieldset>
+
+    <details id="adv">
+      <summary>Advanced — physics and numerics</summary>
+      <div class="muted" style="font-size:11px;margin:6px 0">
+        Defaults are the ones we validate against. Change them only if you know why.
+      </div>
       <label>Breach regression</label>
       <select id="regression">
-        <option value="froehlich2008">Froehlich (2008)</option>
+        <option value="froehlich2008">Froehlich (2008) — default</option>
         <option value="vonthun1990">Von Thun &amp; Gillette (1990)</option>
         <option value="macdonald1984">MacDonald &amp; Langridge-Monopolis (1984)</option>
       </select>
-      <label>Reservoir level fraction</label>
-      <input id="level" type="number" step="0.05" min="0" max="1" value="1.0">
       <div class="row2">
-        <div><label>Reach (km)</label><input id="reach" type="number" step="5" value="40"></div>
         <div><label>Cell size (m)</label><input id="cell" type="number" step="10" value="90"></div>
-      </div>
-      <div class="row2">
-        <div><label>Duration (hr)</label><input id="endhr" type="number" step="1" value="8"></div>
         <div><label>Scheme</label>
           <select id="scheme"><option value="swe">swe</option><option value="inertial">inertial</option></select>
         </div>
       </div>
       <label><input type="checkbox" id="real" checked style="width:auto"> Real terrain (COP30)</label>
-    </fieldset>
+
+      <div class="muted" style="font-size:11px;margin:10px 0 4px">
+        Override the site manually — only if the dam is not in the register.
+      </div>
+      <label><input type="checkbox" id="manual" style="width:auto"> Enter a site by hand</label>
+      <div id="grp-manual" style="display:none">
+        <label>Name</label><input id="name" value="">
+        <div class="row2">
+          <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value=""></div>
+          <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value=""></div>
+        </div>
+        <div class="row2">
+          <div><label>River</label><input id="river" value=""></div>
+          <div><label>State</label><input id="state" value=""></div>
+        </div>
+        <div class="row2">
+          <div><label>Dam height (m)</label><input id="height" type="number" step="1" value="60"></div>
+          <div><label>Capacity (MCM)</label><input id="cap" type="number" step="0.1" value="5"></div>
+        </div>
+      </div>
+    </details>
 
     <button id="run">Run simulation</button>
     <button id="loadlast" class="sec" style="width:100%;margin-top:6px">Load most recent run</button>
@@ -200,8 +240,9 @@
       <div class="muted" id="timelab">t = —</div>
       <canvas id="map" width="600" height="420"></canvas>
       <div class="muted" style="font-size:12px;margin-top:6px">
-        Reconstructed from the arrival-time and peak-depth grids (packed.png), not
-        frame-by-frame solver output. Blue = deeper.
+        OpenStreetMap basemap, flood reprojected onto it cell by cell. Deeper water is
+        darker. Markers turn red as the water reaches each village. Reconstructed from the
+        arrival-time and peak-depth grids, not frame-by-frame solver output.
       </div>
     </div>
 
@@ -264,7 +305,7 @@
 
 <script>
 const API = "";
-let RUN = null, META = null, PACKED = null, ENDHR = 12, IMPACT = null;
+let RUN = null, META = null, PACKED = null, ENDHR = 12, IMPACT = null, DAM = null;
 
 const $ = id => document.getElementById(id);
 const log = m => { const l = $("log"); l.textContent += "\n" + m; l.scrollTop = l.scrollHeight; };
@@ -292,12 +333,17 @@ async function jget(url) {
       $("preset").appendChild(o);
     }
     $("preset").onchange = () => {
-      const k = $("preset").value; if (!k) return;
+      const k = $("preset").value;
+      if (!k) { DAM = null; return; }
       const s2 = list[k]; if (!s2) return;
-      $("name").value = s2.name ?? ""; $("lat").value = s2.lat ?? "";
-      $("lon").value = s2.lon ?? ""; $("river").value = s2.river ?? "";
-      $("state").value = s2.state ?? ""; $("height").value = s2.dam_height_m ?? 60;
-      $("cap").value = s2.reservoir_capacity_mcm ?? 5;
+      DAM = null;                     // a demo site is sent as site_key, not dam_id
+      $("fdam").value = "";
+      $("damcard").classList.remove("muted");
+      $("damcard").innerHTML =
+        `<b>${s2.name ?? k}</b> <span class="muted">(demo site)</span><br>` +
+        `${s2.river ?? "?"} · ${s2.state ?? "?"}<br>` +
+        `${s2.dam_height_m ?? "?"} m high · ${s2.reservoir_capacity_mcm ?? "?"} MCM` +
+        `<br><span class="muted">cached locally — runs with the network unplugged</span>`;
     };
   } catch { /* presets are optional */ }
 })();
@@ -354,19 +400,45 @@ async function loadDams() {
   }
 }
 
+/* The operator picks a dam; every physical number comes from the register.
+   Nobody types a latitude. The card is read-only on purpose - if a value is
+   wrong it is wrong in the CWC register and editing it here would hide that. */
 function applyDam() {
   const d = DAMS.find(x => x.id === $("fdam").value);
   if (!d) return;
-  $("name").value = d.name;
-  $("lat").value = d.lat;
-  $("lon").value = d.lon;
-  $("river").value = d.river || "";
-  $("state").value = d.state || "";
-  $("height").value = d.height_m ?? 60;
-  $("cap").value = d.gross_storage_mcm ?? 5;
-  $("daminfo").textContent =
-    `${d.state} · ${d.nearest_city || "?"} · ${d.dam_type || "?"}` +
-    (d.year ? ` · built ${d.year}` : "") + ` · ${d.id}`;
+  DAM = d;
+  $("preset").value = "";
+  const cap = d.gross_storage_mcm != null ? d.gross_storage_mcm.toLocaleString() : "?";
+  $("damcard").classList.remove("muted");
+  $("damcard").innerHTML =
+    `<b>${d.name}</b><br>` +
+    `${d.river || "?"} · ${d.state || "?"} · near ${d.nearest_city || "?"}<br>` +
+    `${d.height_m ?? "?"} m high · ${cap} MCM` +
+    (d.spillway_cumecs ? ` · spillway ${Number(d.spillway_cumecs).toLocaleString()} m³/s` : "") +
+    `<br><span class="muted">${d.dam_type || "?"}` +
+    (d.year ? ` · built ${d.year}` : "") + ` · ${d.id} · CWC NRLD 2019</span>`;
+}
+
+const MODE_HELP = {
+  overtopping: "The reservoir overtops the crest and cuts a breach. The usual worst case.",
+  piping: "Internal erosion opens a pipe through the embankment, which then collapses.",
+  gated_release: "The operator opens the outlet gates. The dam does NOT fail — no breach is modelled.",
+  blockage_breach: "A landslide dams the river, water ponds behind the debris, then the debris fails."
+};
+
+function applyMode() {
+  const m = $("mode").value;
+  $("modehelp").textContent = MODE_HELP[m] || "";
+  $("grp-gate").style.display     = m === "gated_release"   ? "" : "none";
+  $("grp-blockage").style.display = m === "blockage_breach" ? "" : "none";
+  // A blockage has no engineered reservoir to be "full"; the lake is whatever
+  // the terrain holds behind the debris.
+  $("grp-level").style.display    = m === "blockage_breach" ? "none" : "";
+  // Breach regressions describe a FAILING embankment. A controlled release is
+  // not a failure, so the choice is meaningless there.
+  $("regression").closest("details") && ($("regression").previousElementSibling.style.display =
+    m === "gated_release" ? "none" : "");
+  $("regression").style.display = m === "gated_release" ? "none" : "";
 }
 
 $("fstate").onchange = async () => { await loadCities(); loadDams(); };
@@ -374,25 +446,51 @@ $("fcity").onchange = loadDams;
 let qTimer = null;
 $("fq").oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(loadDams, 250); };
 $("fdam").onchange = applyDam;
+$("mode").onchange = applyMode;
+$("level").oninput = () => { $("levellab").textContent = $("level").value + "%"; };
+$("gate").oninput  = () => { $("gatelab").textContent  = $("gate").value + "%"; };
+$("manual").onchange = () => {
+  const on = $("manual").checked;
+  $("grp-manual").style.display = on ? "" : "none";
+  if (on) DAM = null;
+};
+applyMode();
 loadStates().then(loadDams);
 
 // ---------------------------------------------------------------- run
 $("run").onclick = async () => {
+  const mode = $("mode").value;
   const body = {
-    site: {
-      name: $("name").value, lat: +$("lat").value, lon: +$("lon").value,
-      river: $("river").value, state: $("state").value,
-      dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value
-    },
-    failure_mode: $("mode").value,
+    failure_mode: mode,
     breach_regression: $("regression").value,
-    reservoir_level_frac: +$("level").value,
+    reservoir_level_frac: +$("level").value / 100,
     reach_length_km: +$("reach").value,
     cellsize_m: +$("cell").value,
     end_hr: +$("endhr").value,
     scheme: $("scheme").value,
     real_terrain: $("real").checked
   };
+
+  /* Send the dam_id when the operator picked from the register: the backend
+     then reads name, coordinates, height, storage AND the design spillway
+     capacity straight from CWC rather than trusting anything retyped here. */
+  if (DAM && !$("manual").checked) {
+    body.dam_id = DAM.id;
+  } else if ($("preset").value) {
+    body.site_key = $("preset").value;
+  } else if ($("manual").checked && $("lat").value !== "") {
+    body.site = {
+      name: $("name").value || "manual site", lat: +$("lat").value, lon: +$("lon").value,
+      river: $("river").value, state: $("state").value,
+      dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value
+    };
+  } else {
+    log("pick a dam from the register, choose a demo site, or tick 'Enter a site by hand'");
+    return;
+  }
+
+  if (mode === "gated_release") body.gate_opening_frac = +$("gate").value / 100;
+  if (mode === "blockage_breach") body.blockage_height_m = +$("blockheight").value;
   ENDHR = body.end_hr;
   $("run").disabled = true;
   clearLog("submitting…");
@@ -867,43 +965,206 @@ async function loadPacked(runId) {
 
 $("time").oninput = () => renderFlood($("time").value / 100);
 
+/* ---------------------------------------------------------------- map
+
+   A real slippy map with the flood on top, and still no dependencies.
+
+   The flood grid is EPSG:4326 (equal degrees) and web map tiles are Web
+   Mercator, so the two cannot simply be stacked - near 30 degrees north the
+   vertical scales differ by about 15%, which would slide villages out of the
+   water. Every output pixel is therefore projected: pixel -> Mercator ->
+   lon/lat -> grid cell. That costs one loop over the canvas and makes the
+   overlay geographically correct instead of approximately correct.
+
+   Tiles are OpenStreetMap raster. If they do not load - conference wifi, no
+   network - the flood still renders on a plain ground and the map simply says
+   so. The demo never depends on them.                                       */
+
+const TILE_PX = 256;
+const TILE_CACHE = new Map();     // url -> Image | "failed"
+let BASE_TILES_OK = null;         // null = untried, true/false once known
+let redrawTimer = null;
+
+const lon2mx = lon => (lon + 180) / 360;
+const lat2my = lat => {
+  const r = lat * Math.PI / 180;
+  return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2;
+};
+const mx2lon = mx => mx * 360 - 180;
+const my2lat = my => {
+  const n = Math.PI * (1 - 2 * my);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+};
+
+function tileURL(z, x, y) {
+  const sub = "abc"[(x + y) % 3];
+  return `https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+}
+
+function getTile(z, x, y) {
+  const url = tileURL(z, x, y);
+  const hit = TILE_CACHE.get(url);
+  if (hit) return hit === "failed" ? null : hit;
+
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    BASE_TILES_OK = true;
+    clearTimeout(redrawTimer);
+    redrawTimer = setTimeout(() => renderFlood($("time").value / 100), 60);
+  };
+  img.onerror = () => {
+    TILE_CACHE.set(url, "failed");
+    if (BASE_TILES_OK === null) BASE_TILES_OK = false;
+  };
+  TILE_CACHE.set(url, img);
+  img.src = url;
+  return null;
+}
+
+/** Where a lon/lat lands on the current canvas. */
+function project(lon, lat, v) {
+  return [
+    ((lon2mx(lon) - v.mx0) / (v.mx1 - v.mx0)) * v.W,
+    ((lat2my(lat) - v.my0) / (v.my1 - v.my0)) * v.H
+  ];
+}
+
 function renderFlood(frac) {
-  if (!PACKED) return;
+  if (!PACKED || !META) return;
   const c = $("map"), x = c.getContext("2d");
+  const bbox = (META.domain && META.domain.bbox) || null;
   const w = PACKED.width, h = PACKED.height;
 
-  // Fit the grid into the canvas, preserving aspect.
-  const scale = Math.min(600 / w, 560 / h);
-  c.width = Math.max(Math.round(w * scale), 1);
-  c.height = Math.max(Math.round(h * scale), 1);
+  // Canvas keeps the Mercator aspect of the domain, so nothing is stretched.
+  let v;
+  if (bbox) {
+    const [W_, S_, E_, N_] = bbox;
+    const mx0 = lon2mx(W_), mx1 = lon2mx(E_);
+    const my0 = lat2my(N_), my1 = lat2my(S_);   // y grows southward
+    const aspect = (mx1 - mx0) / (my1 - my0);
+    let W = 600, H = Math.round(W / aspect);
+    if (H > 560) { H = 560; W = Math.round(H * aspect); }
+    c.width = W; c.height = H;
+    v = { mx0, mx1, my0, my1, W, H, bbox };
+  } else {
+    const scale = Math.min(600 / w, 560 / h);
+    c.width = Math.max(Math.round(w * scale), 1);
+    c.height = Math.max(Math.round(h * scale), 1);
+    v = null;
+  }
 
-  const out = x.createImageData(w, h);
-  const src = PACKED.data, dst = out.data;
   const tNow = frac * ENDHR;
   $("timelab").textContent = `t = ${tNow.toFixed(2)} hr of ${ENDHR}`;
 
-  for (let i = 0; i < w * h; i++) {
-    const o = i * 4;
-    const arrival = (src[o] / 255) * ENDHR;   // R
-    const depth01 = src[o + 2] / 255;         // B
-    const everWet = src[o + 3] > 0;           // A
+  // ---- 1. basemap -------------------------------------------------
+  x.fillStyle = "#eceff1";
+  x.fillRect(0, 0, c.width, c.height);
 
-    let r = 245, g = 246, b = 248;            // dry ground
-    if (everWet && arrival <= tNow && depth01 > 0) {
-      // deeper -> darker blue
-      r = Math.round(190 - 170 * depth01);
-      g = Math.round(215 - 130 * depth01);
-      b = Math.round(245 - 60 * depth01);
+  if (v) {
+    const z = Math.max(0, Math.min(16,
+      Math.round(Math.log2(v.W / ((v.mx1 - v.mx0) * TILE_PX)))));
+    const n = Math.pow(2, z);
+    const tx0 = Math.floor(v.mx0 * n), tx1 = Math.floor(v.mx1 * n);
+    const ty0 = Math.floor(v.my0 * n), ty1 = Math.floor(v.my1 * n);
+    for (let tx = tx0; tx <= tx1; tx++) {
+      for (let ty = ty0; ty <= ty1; ty++) {
+        if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue;
+        const img = getTile(z, tx, ty);
+        if (!img) continue;
+        const px = ((tx / n - v.mx0) / (v.mx1 - v.mx0)) * v.W;
+        const py = ((ty / n - v.my0) / (v.my1 - v.my0)) * v.H;
+        const pw = (1 / n / (v.mx1 - v.mx0)) * v.W;
+        const ph = (1 / n / (v.my1 - v.my0)) * v.H;
+        try { x.drawImage(img, px, py, pw + 1, ph + 1); } catch { /* tainted */ }
+      }
     }
-    dst[o] = r; dst[o + 1] = g; dst[o + 2] = b; dst[o + 3] = 255;
   }
 
-  const tmp = document.createElement("canvas");
-  tmp.width = w; tmp.height = h;
-  tmp.getContext("2d").putImageData(out, 0, 0);
-  x.imageSmoothingEnabled = false;
-  x.clearRect(0, 0, c.width, c.height);
-  x.drawImage(tmp, 0, 0, c.width, c.height);
+  // ---- 2. flood, reprojected pixel by pixel -----------------------
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const dst = img.data, src = PACKED.data;
+  const dmax = (META.results || {}).packed_depth_max_m || 1;
+
+  for (let py = 0; py < c.height; py++) {
+    for (let px = 0; px < c.width; px++) {
+      let col, row;
+      if (v) {
+        const lon = mx2lon(v.mx0 + (px + 0.5) / v.W * (v.mx1 - v.mx0));
+        const lat = my2lat(v.my0 + (py + 0.5) / v.H * (v.my1 - v.my0));
+        const [W_, S_, E_, N_] = v.bbox;
+        col = Math.floor((lon - W_) / (E_ - W_) * w);
+        row = Math.floor((N_ - lat) / (N_ - S_) * h);
+      } else {
+        col = Math.floor(px / c.width * w);
+        row = Math.floor(py / c.height * h);
+      }
+      if (col < 0 || row < 0 || col >= w || row >= h) continue;
+
+      const s = (row * w + col) * 4;
+      if (!src[s + 3]) continue;                       // never wet
+      const arrival = (src[s] / 255) * ENDHR;          // R
+      if (arrival > tNow) continue;                    // not yet
+      const d01 = src[s + 2] / 255;                    // B
+      if (d01 <= 0) continue;
+
+      const o = (py * c.width + px) * 4;
+      const a = 0.40 + 0.55 * d01;                     // deeper -> more opaque
+      const r = 30 + 90 * (1 - d01), g = 110 + 90 * (1 - d01), b = 200 + 40 * (1 - d01);
+      dst[o]     = Math.round(dst[o]     * (1 - a) + r * a);
+      dst[o + 1] = Math.round(dst[o + 1] * (1 - a) + g * a);
+      dst[o + 2] = Math.round(dst[o + 2] * (1 - a) + b * a);
+      dst[o + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+
+  if (!v) return;
+
+  // ---- 3. what a district officer needs on the map ---------------
+  x.font = "11px system-ui";
+  const HAZ = { extreme: "#a11212", significant: "#c25708", moderate: "#a8410a", low: "#14663a" };
+
+  for (const s of (IMPACT && IMPACT.settlements) || []) {
+    const [sx, sy] = project(s.lon, s.lat, v);
+    if (sx < -20 || sy < -20 || sx > v.W + 20 || sy > v.H + 20) continue;
+    const reached = s.arrival_hr != null && s.arrival_hr <= tNow;
+    x.beginPath(); x.arc(sx, sy, 4.5, 0, Math.PI * 2);
+    x.fillStyle = reached ? (HAZ[s.hazard_class] || "#a11212") : "#5b6570";
+    x.fill();
+    x.strokeStyle = "#fff"; x.lineWidth = 1.5; x.stroke();
+    x.fillStyle = "#14171a"; x.textAlign = "left";
+    x.strokeStyle = "rgba(255,255,255,.9)"; x.lineWidth = 3;
+    x.strokeText(s.name, sx + 7, sy + 3.5);
+    x.fillText(s.name, sx + 7, sy + 3.5);
+  }
+
+  if (META.site && META.site.lat != null) {
+    const [dx_, dy_] = project(META.site.lon, META.site.lat, v);
+    x.fillStyle = "#14171a";
+    x.beginPath();
+    x.moveTo(dx_, dy_ - 8); x.lineTo(dx_ + 7, dy_ + 5); x.lineTo(dx_ - 7, dy_ + 5);
+    x.closePath(); x.fill();
+    x.strokeStyle = "#fff"; x.lineWidth = 1.5; x.stroke();
+  }
+
+  // scale bar, because a flood map without one is a picture
+  const midLat = my2lat((v.my0 + v.my1) / 2);
+  const mPerPx = (mx2lon(v.mx1) - mx2lon(v.mx0)) / v.W * 111320 * Math.cos(midLat * Math.PI / 180);
+  const targets = [1000, 2000, 5000, 10000, 20000, 50000];
+  const barM = targets.find(t => t / mPerPx < v.W * 0.3) || 1000;
+  const barPx = barM / mPerPx;
+  x.strokeStyle = "#14171a"; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(12, v.H - 14); x.lineTo(12 + barPx, v.H - 14); x.stroke();
+  x.fillStyle = "#14171a"; x.textAlign = "left";
+  x.strokeStyle = "rgba(255,255,255,.9)"; x.lineWidth = 3;
+  const barLab = barM >= 1000 ? `${barM / 1000} km` : `${barM} m`;
+  x.strokeText(barLab, 12, v.H - 18); x.fillText(barLab, 12, v.H - 18);
+
+  if (BASE_TILES_OK === false) {
+    x.fillStyle = "#5b6570"; x.textAlign = "right";
+    x.fillText("basemap offline - flood and markers are unaffected", v.W - 8, 14);
+  }
 }
 
 function dl(fmt) {

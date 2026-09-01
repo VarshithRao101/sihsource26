@@ -166,6 +166,14 @@ class RunRequest(BaseModel):
     end_hr: float = Field(12.0, gt=0, le=120)
     scheme: Literal["swe", "inertial"] = "swe"
     manning_n: float = Field(0.035, ge=0.01, le=0.2)
+    blockage_height_m: float = Field(
+        40.0, gt=0, le=300,
+        description=(
+            "Only for failure_mode='blockage_breach'. Height of the landslide "
+            "debris above the river bed. The impounded volume is read off the "
+            "DEM - nobody publishes a landslide dam's storage."
+        ),
+    )
     gate_opening_frac: float = Field(
         1.0, ge=0.0, le=1.0,
         description=(
@@ -242,6 +250,7 @@ class RunRequest(BaseModel):
             end_hr=self.end_hr,
             scheme=self.scheme,
             manning_n=self.manning_n,
+            blockage_height_m=self.blockage_height_m,
             gate_opening_frac=self.gate_opening_frac,
             gate_open_time_hr=self.gate_open_time_hr,
             design_spillway_cumecs=(
