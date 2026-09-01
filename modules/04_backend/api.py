@@ -585,6 +585,10 @@ def _execute(
         else:
             terrain, exposure = SyntheticTerrain(), None
 
+        # The solver publishes pct but no stage, so without this the label
+        # would still read "downloading settlements" at 99% - the operator
+        # would be watching a progress bar that lies about what it is doing.
+        REGISTRY.publish(run_id, {"stage": "solving shallow water", "pct": 0})
         run_scenario(
             spec,
             outputs_dir=OUTPUTS,
@@ -594,6 +598,7 @@ def _execute(
             exposure=exposure,
             progress=lambda u: REGISTRY.publish(run_id, u),
         )
+        REGISTRY.publish(run_id, {"stage": "validating run"})
         report = validate_run(OUTPUTS / run_id)
         if not report.ok:
             REGISTRY.finish(run_id, "; ".join(report.errors))

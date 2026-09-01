@@ -527,6 +527,10 @@ def build_impact(
                 "lat": round(lat, 5),
                 "lon": round(lon, 5),
                 "population": pop,
+                # Carried through so the table can say where the number came
+                # from. A WorldPop count and a class default are not the same
+                # kind of number and must not look the same on screen.
+                "population_source": s.get("population_source", "unknown"),
                 "arrival_hr": round(arr, 3) if np.isfinite(arr) else None,
                 "max_depth_m": round(depth, 2),
                 "max_velocity_ms": round(vel, 2),
@@ -574,6 +578,14 @@ def build_impact(
         "totals": {
             "settlements_affected": len(settlements_out),
             "population_affected": total_pop,
+            # How many of those people are a measurement and how many are a
+            # class default, so nobody has to open the settlement table to
+            # find out how solid the headline number is.
+            "population_by_source": {
+                src: sum(x["population"] for x in settlements_out
+                         if x["population_source"] == src)
+                for src in sorted({x["population_source"] for x in settlements_out})
+            },
             "roads_cut_km": roads_cut_km,
             "settlement_sample_radius_m": SETTLEMENT_RADIUS_M,
             **damage_block,

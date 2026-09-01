@@ -27,6 +27,9 @@ data/**/*.pdf
 DualSPHysics_v5.4/
 Delft3D*/
 D-Flow*/
+Deltares*/
+*.msi
+*.exe
 
 # simulation engine working directories
 modules/02_sph/cases/**/data/

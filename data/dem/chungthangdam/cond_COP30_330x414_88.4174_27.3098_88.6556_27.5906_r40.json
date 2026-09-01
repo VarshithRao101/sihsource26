@@ -1,0 +1,15 @@
+{
+  "site": "chungthangdam",
+  "source": "COP30",
+  "bbox": [
+    88.41742101082727,
+    27.309762808620164,
+    88.71824769234577,
+    27.644536839512934
+  ],
+  "nx": 330,
+  "ny": 414,
+  "cellsize_m": 89.92325331496242,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 464 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

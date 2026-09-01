@@ -73,6 +73,13 @@
     padding: 8px; border-radius: 3px; font: 11px/1.4 ui-monospace, Consolas, monospace;
   }
   canvas { border: 1px solid var(--line); background: #fff; max-width: 100%; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+  .ch { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+  .ch h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+           color: var(--muted); font-weight: 600; }
+  .ch h3 .u { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .7; }
+  .ch canvas { width: 100%; height: auto; display: block; border: 0; }
+  .cn { margin: 6px 0 0; font-size: 11px; color: var(--muted); line-height: 1.4; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -199,8 +206,34 @@
     </div>
 
     <div class="panel">
-      <h2>Outflow hydrograph</h2>
-      <canvas id="hydro" width="600" height="200"></canvas>
+      <h2>Analysis</h2>
+      <div class="charts">
+        <div class="ch">
+          <h3>Outflow hydrograph <span class="u">m&sup3;/s vs hours</span></h3>
+          <canvas id="ch-hydro" width="560" height="210"></canvas>
+          <p class="cn" id="cn-hydro">&mdash;</p>
+        </div>
+        <div class="ch">
+          <h3>Peak by breach regression <span class="u">m&sup3;/s</span></h3>
+          <canvas id="ch-breach" width="560" height="210"></canvas>
+          <p class="cn" id="cn-breach">&mdash;</p>
+        </div>
+        <div class="ch">
+          <h3>Flooded area vs time <span class="u">km&sup2; vs hours</span></h3>
+          <canvas id="ch-area" width="560" height="210"></canvas>
+          <p class="cn" id="cn-area">&mdash;</p>
+        </div>
+        <div class="ch">
+          <h3>People reached vs warning time <span class="u">cumulative</span></h3>
+          <canvas id="ch-pop" width="560" height="210"></canvas>
+          <p class="cn" id="cn-pop">&mdash;</p>
+        </div>
+        <div class="ch">
+          <h3>Depth distribution <span class="u">% of flooded area</span></h3>
+          <canvas id="ch-depth" width="560" height="210"></canvas>
+          <p class="cn" id="cn-depth">&mdash;</p>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -231,7 +264,7 @@
 
 <script>
 const API = "";
-let RUN = null, META = null, PACKED = null, ENDHR = 12;
+let RUN = null, META = null, PACKED = null, ENDHR = 12, IMPACT = null;
 
 const $ = id => document.getElementById(id);
 const log = m => { const l = $("log"); l.textContent += "\n" + m; l.scrollTop = l.scrollHeight; };
@@ -454,11 +487,14 @@ async function load(runId) {
     <dt>Failure mode</dt><dd>${sc.failure_mode ?? "—"}</dd>
     <dt>Breach source</dt><dd style="font-size:12px">${sc.breach_param_source ?? "—"}</dd>`;
 
+  IMPACT = d.impact || null;
   drawImpact(d.impact);
   drawEvacuation(runId);
   drawUncertainty(runId);
   await drawHydro(runId);
-  await loadPacked(runId);
+  drawBreachSpread(runId);
+  drawPopCurve(IMPACT);
+  await loadPacked(runId);   // the area and depth charts need the packed grid
 }
 
 // ---------------------------------------------------------------- impact
@@ -545,31 +581,263 @@ async function drawUncertainty(runId) {
     `<div style="font-size:11px;margin-top:6px">${u.note || ""}</div>`;
 }
 
-// ---------------------------------------------------------------- hydrograph
-async function drawHydro(runId) {
-  const c = $("hydro"), x = c.getContext("2d");
+// ---------------------------------------------------------------- charts
+/* A small canvas plotting kit. Deliberately not a charting library: the console
+   is one file with no build step and no dependencies (AGENTS.md rule 7).
+
+   Every chart below reads a file the run already wrote. None of them compute
+   new physics, and none of them draw a number the API did not send. Where a
+   chart is a reconstruction rather than solver output, its caption says so. */
+
+const C_TEXT = "#5b6570", C_GRID = "#eef1f4", C_AXIS = "#c3ccd4",
+      C_ACC = "#1256a0", C_BAD = "#a11212";
+
+function niceStep(range, target = 4) {
+  if (!(range > 0)) return 1;
+  const raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / mag;
+  return (n >= 5 ? 10 : n >= 2 ? 5 : n >= 1 ? 2 : 1) * mag;
+}
+const fmt = v => Math.abs(v) >= 1000 ? Math.round(v).toLocaleString()
+  : Math.abs(v) >= 10 ? v.toFixed(0)
+  : Math.abs(v) >= 1 ? v.toFixed(1) : v.toFixed(2);
+
+function noData(id, msg) {
+  const c = $(id); if (!c) return;
+  const x = c.getContext("2d");
   x.clearRect(0, 0, c.width, c.height);
-  let h; try { h = await jget(`/api/runs/${runId}/hydrograph`); } catch { return; }
+  x.fillStyle = C_TEXT; x.font = "12px system-ui"; x.textAlign = "center";
+  x.fillText(msg, c.width / 2, c.height / 2);
+  const cn = $("cn-" + id.replace("ch-", "")); if (cn) cn.textContent = "";
+}
+
+/** Axes, gridlines and labels. Returns mappers from data units to pixels. */
+function frame(id, xmax, ymax, xlab, ylab, left) {
+  const c = $(id); if (!c) return null;
+  const x = c.getContext("2d");
+  x.clearRect(0, 0, c.width, c.height);
+  const L = left || 58, R = 12, T = 12, B = 32;
+  const W = c.width - L - R, H = c.height - T - B;
+  const xs = v => L + (xmax > 0 ? (v / xmax) * W : 0);
+  const ys = v => T + H - (ymax > 0 ? (v / ymax) * H : 0);
+  x.font = "10px system-ui"; x.lineWidth = 1;
+
+  x.strokeStyle = C_GRID; x.fillStyle = C_TEXT; x.textAlign = "right";
+  for (let v = 0, st = niceStep(ymax); v <= ymax * 1.0001; v += st) {
+    const py = Math.round(ys(v)) + .5;
+    x.beginPath(); x.moveTo(L, py); x.lineTo(L + W, py); x.stroke();
+    x.fillText(fmt(v), L - 6, py + 3);
+  }
+  x.textAlign = "center";
+  for (let v = 0, st = niceStep(xmax); v <= xmax * 1.0001; v += st) {
+    const px = Math.round(xs(v)) + .5;
+    x.beginPath(); x.moveTo(px, T); x.lineTo(px, T + H); x.stroke();
+    x.fillText(fmt(v), px, T + H + 14);
+  }
+  x.strokeStyle = C_AXIS; x.beginPath();
+  x.moveTo(L + .5, T); x.lineTo(L + .5, T + H + .5); x.lineTo(L + W + .5, T + H + .5); x.stroke();
+  x.fillStyle = C_TEXT; x.textAlign = "right"; x.fillText(xlab, L + W, T + H + 27);
+  x.save(); x.translate(12, T + H); x.rotate(-Math.PI / 2);
+  x.textAlign = "left"; x.fillText(ylab, 0, 0); x.restore();
+  return { c, x, L, T, W, H, xs, ys };
+}
+
+/** 1 - outflow hydrograph, straight from hydrograph.csv. */
+async function drawHydro(runId) {
+  let h;
+  try { h = await jget(`/api/runs/${runId}/hydrograph`); }
+  catch { noData("ch-hydro", "No hydrograph for this run."); return; }
   const T = h.time_hr || h.t || [], Q = h.discharge_cumecs || h.q || [];
-  if (!T.length) return;
+  if (!T.length) { noData("ch-hydro", "No hydrograph for this run."); return; }
 
-  const pad = 34, W = c.width - pad * 2, H = c.height - pad * 2;
-  const qmax = Math.max(...Q) || 1, tmax = Math.max(...T) || 1;
+  const qmax = Math.max(...Q), tmax = Math.max(...T);
+  const f = frame("ch-hydro", tmax, qmax * 1.1, "hours", "m³/s");
+  if (!f) return;
+  const x = f.x;
 
-  x.strokeStyle = "#d4dae0"; x.beginPath();
-  x.moveTo(pad, pad); x.lineTo(pad, pad + H); x.lineTo(pad + W, pad + H); x.stroke();
+  x.beginPath(); x.moveTo(f.xs(T[0]), f.ys(0));
+  T.forEach((t, i) => x.lineTo(f.xs(t), f.ys(Q[i])));
+  x.lineTo(f.xs(T[T.length - 1]), f.ys(0)); x.closePath();
+  x.fillStyle = "rgba(18,86,160,.10)"; x.fill();
 
-  x.strokeStyle = "#1256a0"; x.lineWidth = 2; x.beginPath();
-  T.forEach((t, i) => {
-    const px = pad + (t / tmax) * W, py = pad + H - (Q[i] / qmax) * H;
-    i ? x.lineTo(px, py) : x.moveTo(px, py);
-  });
+  x.strokeStyle = C_ACC; x.lineWidth = 2; x.beginPath();
+  T.forEach((t, i) => i ? x.lineTo(f.xs(t), f.ys(Q[i])) : x.moveTo(f.xs(t), f.ys(Q[i])));
   x.stroke();
 
-  x.fillStyle = "#5b6570"; x.font = "11px system-ui";
-  x.fillText(Math.round(qmax).toLocaleString() + " m³/s", 2, pad + 4);
-  x.fillText("0", 2, pad + H + 4);
-  x.fillText(tmax.toFixed(1) + " hr", pad + W - 30, pad + H + 14);
+  const pi = Q.indexOf(qmax);
+  x.fillStyle = C_BAD;
+  x.beginPath(); x.arc(f.xs(T[pi]), f.ys(qmax), 3.5, 0, Math.PI * 2); x.fill();
+  x.font = "10px system-ui"; x.textAlign = "left";
+  x.fillText("peak " + Math.round(qmax).toLocaleString() + " at " + T[pi].toFixed(2) + " hr",
+             Math.min(f.xs(T[pi]) + 7, f.L + f.W - 130), f.ys(qmax) - 6);
+
+  const vol = (META.results || {}).released_volume_mcm;
+  $("cn-hydro").textContent = "Breach outflow at the dam, before routing. Shaded area is the "
+    + "released volume" + (vol ? ", " + Number(vol).toFixed(2) + " MCM" : "") + ".";
+}
+
+/** 2 - the honesty chart: how far apart the published breach regressions are. */
+async function drawBreachSpread(runId) {
+  const c = $("ch-breach"); if (!c) return;
+  let u;
+  try { u = await jget(`/api/runs/${runId}/uncertainty`); }
+  catch { noData("ch-breach", "No uncertainty.json for this run."); return; }
+  const by = u.peak_discharge_cumecs_by_regression || {};
+  const keys = Object.keys(by);
+  if (!keys.length) { noData("ch-breach", "No regression spread recorded."); return; }
+
+  const x = c.getContext("2d"); x.clearRect(0, 0, c.width, c.height);
+  const routed = Number(u.routed_peak_cumecs) || 0;
+  const vals = keys.map(k => Number(by[k]));
+  const vmax = Math.max.apply(null, vals.concat([routed])) * 1.2;
+  const L = 106, R = 12, T = 10, B = 32, W = c.width - L - R, H = c.height - T - B;
+  const row = H / keys.length, bh = Math.min(24, row - 10);
+  x.font = "10px system-ui";
+
+  keys.forEach((k, i) => {
+    const y = T + i * row + (row - bh) / 2, w = (Number(by[k]) / vmax) * W;
+    x.fillStyle = "#7aa3cf"; x.fillRect(L, y, w, bh);
+    x.fillStyle = C_TEXT; x.textAlign = "right"; x.fillText(k, L - 8, y + bh / 2 + 3);
+    x.fillStyle = "#14171a"; x.textAlign = "left";
+    x.fillText(Math.round(by[k]).toLocaleString(), L + w + 5, y + bh / 2 + 3);
+  });
+
+  if (routed > 0) {
+    const px = Math.round(L + (routed / vmax) * W) + .5;
+    x.strokeStyle = C_BAD; x.lineWidth = 2; x.setLineDash([4, 3]);
+    x.beginPath(); x.moveTo(px, T); x.lineTo(px, T + H); x.stroke(); x.setLineDash([]);
+    x.fillStyle = C_BAD; x.textAlign = "center";
+    x.fillText("our routed peak", px, T + H + 14);
+  }
+  x.strokeStyle = C_AXIS; x.lineWidth = 1; x.beginPath();
+  x.moveTo(L + .5, T); x.lineTo(L + .5, T + H + .5); x.lineTo(L + W, T + H + .5); x.stroke();
+
+  const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  $("cn-breach").textContent =
+    "Three published regressions, unaveraged: " + Math.round(lo).toLocaleString() + "–"
+    + Math.round(hi).toLocaleString() + " m³/s, a " + (hi / lo).toFixed(1) + "× spread. "
+    + "Our routed peak is one point inside that envelope, not the truth.";
+}
+
+/** 3 - how fast the flood spreads, reconstructed from the arrival-time grid. */
+function drawAreaCurve() {
+  if (!PACKED || !META) { noData("ch-area", "No packed.png for this run."); return; }
+  const d = PACKED.data, n = PACKED.width * PACKED.height;
+  const cs = (META.domain && META.domain.cellsize_m) || 90;
+  const km2 = cs * cs / 1e6;
+  const NB = 80, bins = new Float64Array(NB + 1);
+  let wet = 0;
+  for (let i = 0; i < n; i++) {
+    if (!d[i * 4 + 3]) continue;                       // A = 0 -> never wet
+    wet++;
+    const arr = (d[i * 4] / 255) * ENDHR;              // R = arrival time
+    bins[Math.min(NB, Math.max(0, Math.round(arr / ENDHR * NB)))] += 1;
+  }
+  if (!wet) { noData("ch-area", "No wet cells in this run."); return; }
+
+  let cum = 0; const ts = [], as = [];
+  for (let b = 0; b <= NB; b++) { cum += bins[b]; ts.push(b / NB * ENDHR); as.push(cum * km2); }
+  const total = as[as.length - 1];
+  const f = frame("ch-area", ENDHR, total * 1.1, "hours", "km²");
+  if (!f) return;
+  const x = f.x;
+
+  x.beginPath(); x.moveTo(f.xs(0), f.ys(0));
+  ts.forEach((t, i) => x.lineTo(f.xs(t), f.ys(as[i])));
+  x.lineTo(f.xs(ENDHR), f.ys(0)); x.closePath();
+  x.fillStyle = "rgba(18,86,160,.10)"; x.fill();
+  x.strokeStyle = C_ACC; x.lineWidth = 2; x.beginPath();
+  ts.forEach((t, i) => i ? x.lineTo(f.xs(t), f.ys(as[i])) : x.moveTo(f.xs(t), f.ys(as[i])));
+  x.stroke();
+
+  const hidx = as.findIndex(v => v >= total / 2);
+  const thalf = hidx >= 0 ? ts[hidx] : null;
+  if (thalf !== null) {
+    x.strokeStyle = C_AXIS; x.setLineDash([3, 3]); x.lineWidth = 1;
+    x.beginPath(); x.moveTo(f.xs(thalf), f.ys(0)); x.lineTo(f.xs(thalf), f.ys(total / 2)); x.stroke();
+    x.setLineDash([]);
+  }
+  $("cn-area").textContent = total.toFixed(2) + " km² wet in total"
+    + (thalf !== null ? "; half of it within " + thalf.toFixed(2) + " hr of the breach" : "")
+    + ". Reconstructed from the arrival-time grid, not frame-by-frame solver output.";
+}
+
+/** 4 - the chart a district officer reads: people reached, against warning time. */
+function drawPopCurve(impact) {
+  const ss = ((impact && impact.settlements) || [])
+    .filter(s => s.arrival_hr !== null && s.arrival_hr !== undefined)
+    .sort((a, b) => a.arrival_hr - b.arrival_hr);
+  if (!ss.length) { noData("ch-pop", "No settlement has an arrival time."); return; }
+
+  const tmax = Math.max(ENDHR, ss[ss.length - 1].arrival_hr);
+  let cum = 0;
+  const pts = ss.map(s => { cum += s.population || 0; return [s.arrival_hr, cum]; });
+  const f = frame("ch-pop", tmax, cum * 1.15, "hours of warning", "people");
+  if (!f) return;
+  const x = f.x;
+
+  x.strokeStyle = C_ACC; x.lineWidth = 2; x.beginPath();
+  x.moveTo(f.xs(0), f.ys(0));
+  let prev = 0;
+  pts.forEach(p => { x.lineTo(f.xs(p[0]), f.ys(prev)); x.lineTo(f.xs(p[0]), f.ys(p[1])); prev = p[1]; });
+  x.lineTo(f.xs(tmax), f.ys(prev)); x.stroke();
+
+  x.fillStyle = C_BAD;
+  pts.forEach(p => { x.beginPath(); x.arc(f.xs(p[0]), f.ys(p[1]), 3, 0, Math.PI * 2); x.fill(); });
+
+  const first = ss[0];
+  x.font = "10px system-ui"; x.textAlign = "left"; x.fillStyle = C_TEXT;
+  x.fillText(first.name, Math.min(f.xs(first.arrival_hr) + 6, f.L + f.W - 90), f.ys(pts[0][1]) - 7);
+
+  const est = ss.filter(s => s.population_source
+    && s.population_source !== "worldpop2020" && s.population_source !== "osm:population").length;
+  $("cn-pop").textContent = cum.toLocaleString() + " people across " + ss.length + " settlements. "
+    + first.name + " has the least warning at " + first.arrival_hr.toFixed(2) + " hr."
+    + (est ? " " + est + " of these populations " + (est === 1 ? "is" : "are")
+             + " a class default, not a measurement." : "");
+}
+
+/** 5 - where the water is actually deep, from the packed depth grid. */
+function drawDepthHist() {
+  if (!PACKED || !META) { noData("ch-depth", "No packed.png for this run."); return; }
+  const res = META.results || {};
+  const dmax = res.packed_depth_max_m || res.max_depth_m || 0;
+  if (!(dmax > 0)) { noData("ch-depth", "No depth range recorded."); return; }
+
+  const d = PACKED.data, n = PACKED.width * PACKED.height;
+  const NB = 20, bins = new Float64Array(NB);
+  let wet = 0;
+  for (let i = 0; i < n; i++) {
+    if (!d[i * 4 + 3]) continue;
+    const dep = (d[i * 4 + 2] / 255) * dmax;           // B = max depth
+    bins[Math.min(NB - 1, Math.floor(dep / dmax * NB))] += 1; wet++;
+  }
+  if (!wet) { noData("ch-depth", "No wet cells in this run."); return; }
+
+  const pct = Array.from(bins, v => v / wet * 100);
+  const f = frame("ch-depth", dmax, Math.max.apply(null, pct) * 1.1, "metres", "% of wet area");
+  if (!f) return;
+  const x = f.x, bw = f.W / NB;
+  x.fillStyle = "#7aa3cf";
+  pct.forEach((v, i) => {
+    const h = f.ys(0) - f.ys(v);
+    if (h > 0) x.fillRect(f.L + i * bw + 1, f.ys(v), Math.max(bw - 2, 1), h);
+  });
+
+  // Median depth by cumulative count - the number "max depth" hides.
+  let acc = 0, med = 0;
+  for (let i = 0; i < NB; i++) {
+    acc += bins[i];
+    if (acc >= wet / 2) { med = (i + .5) / NB * dmax; break; }
+  }
+  const px = Math.round(f.xs(med)) + .5;
+  x.strokeStyle = C_BAD; x.lineWidth = 2; x.setLineDash([4, 3]);
+  x.beginPath(); x.moveTo(px, f.T); x.lineTo(px, f.ys(0)); x.stroke(); x.setLineDash([]);
+  x.fillStyle = C_BAD; x.font = "10px system-ui"; x.textAlign = "left";
+  x.fillText("median " + med.toFixed(1) + " m", Math.min(px + 5, f.L + f.W - 74), f.T + 10);
+
+  $("cn-depth").textContent = "Median depth over the " + wet.toLocaleString() + " wet cells is "
+    + med.toFixed(1) + " m against a maximum of " + dmax.toFixed(1) + " m. "
+    + "Wet means at least 0.05 m.";
 }
 
 // ---------------------------------------------------------------- flood map
@@ -582,6 +850,8 @@ async function loadPacked(runId) {
     PACKED = off.getContext("2d").getImageData(0, 0, img.width, img.height);
     $("time").value = 100;
     renderFlood(1.0);
+    drawAreaCurve();
+    drawDepthHist();
   };
   img.onerror = () => {
     const c = $("map"), x = c.getContext("2d");
@@ -589,6 +859,8 @@ async function loadPacked(runId) {
     x.fillStyle = "#5b6570"; x.font = "13px system-ui";
     x.fillText("No packed.png for this run.", 12, 24);
     PACKED = null;
+    noData("ch-area", "No packed.png for this run.");
+    noData("ch-depth", "No packed.png for this run.");
   };
   img.src = `${API}/api/runs/${runId}/file/packed.png`;
 }
