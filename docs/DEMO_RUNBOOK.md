@@ -20,7 +20,7 @@ Expect: `all tier-1 credentials present`. If anything is missing, nothing below 
 ```bash
 .venv\Scripts\python.exe integration\run_all.py
 ```
-Expect: **21/21 passed**, about twenty seconds, and it works with the network unplugged. If this
+Expect: **22/22 passed**, about twenty seconds, and it works with the network unplugged. If this
 does not pass, you do not have a demo — fix it or fall back to a recorded video.
 
 ```bash
@@ -208,7 +208,7 @@ These are strengths, not confessions. Full detail in `docs/QA.md` and `AGENTS.md
 
 ## 7. What must be true before you walk on stage
 
-- [ ] `run_all.py` prints 21/21
+- [ ] `run_all.py` prints 22/22
 - [ ] Backend started and fully warmed
 - [ ] Four or five DEMs pre-cached for likely dams
 - [ ] All seven cached runs validate PASS

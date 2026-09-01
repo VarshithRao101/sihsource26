@@ -12,7 +12,7 @@ printed at the same size as the good ones.
 
 ## 1. Verification — strong
 
-All of these run in `integration/run_all.py` (21/21) and
+All of these run in `integration/run_all.py` (22/22) and
 `modules/04_backend/tests/test_solver_physics.py` (23 tests).
 
 | Test | What it proves | Result | Acceptable? |
@@ -168,7 +168,7 @@ In order of value, and honest about what each requires from outside the project:
 ```bash
 .venv\Scripts\python.exe integration\run_all.py
 ```
-21/21, about twenty seconds, works with the network unplugged.
+22/22, about twenty seconds, works with the network unplugged.
 
 ```bash
 .venv\Scripts\python.exe -m pytest modules\04_backend\tests -q

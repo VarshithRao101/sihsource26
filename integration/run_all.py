@@ -458,6 +458,62 @@ def check_release_uncertainty_block():
     return "release block carries no breach regressions; capacity source named"
 
 
+def check_sfincs_engine():
+    """SFINCS runs end to end, or is honestly reported absent.
+
+    SFINCS is Deltares' open-source flood model. It is NOT Delft3D and nothing
+    here may present it as Delft3D - it is here because it is a genuinely
+    independent third-party solver our contract can drive, which is the claim
+    NTRO's "compare the scenario" actually needs.
+
+    When the binary is present this writes a real case, runs it, and reads the
+    result back onto our grid, checking the bed level SFINCS echoes matches the
+    DEM we sent. That last check is what catches a flipped grid, which would
+    otherwise mirror the flood silently.
+    """
+    import numpy as np
+
+    eng = import_module("modules.09_sfincs.engine")
+    case = import_module("modules.09_sfincs.case")
+
+    st = eng.detect(probe=False)
+    if not st.installed:
+        return "absent and said so - no sfincs executable found"
+
+    ny, nx = 30, 44
+    rows = np.arange(ny)[:, None]
+    cols = np.arange(nx)[None, :]
+    dem = (200.0 - 3.0 * rows + 0.9 * np.abs(cols - nx // 2)).astype(float)
+
+    t = np.linspace(0.0, 1.0, 25)
+    q = 1500.0 * np.exp(-(((t - 0.25) / 0.2) ** 2))
+
+    cdir = SCRATCH / "sfincs"
+    shutil.rmtree(cdir, ignore_errors=True)
+    cs = case.write_case(cdir, dem, dx_m=90.0, src_row=1, src_col=nx // 2,
+                         t_hr=t, q_cumecs=q, end_hr=1.0, dtmapout_s=900)
+    assert cs.active_cells > 0 and cs.outflow_cells > 0, "mask has no active or outflow cells"
+
+    out = case.run_case(cs.case_dir, st.exe, timeout_s=600)
+    assert out["ok"], f"SFINCS failed (rc={out['returncode']}): {out['tail'][-300:]}"
+
+    # read_map raises if the bed level does not match the DEM we sent
+    res = case.read_map(cs.case_dir, dem=dem)
+    assert res["wet_cells"] > 0, "SFINCS wetted nothing"
+    assert res["max_depth_max_m"] > 0.1, f"implausible max depth {res['max_depth_max_m']}"
+
+    deepest_row = int(np.unravel_index(res["max_depth_m"].argmax(), dem.shape)[0])
+    assert deepest_row < ny // 2, (
+        f"deepest water at row {deepest_row}; the source is at row 1, so the grid "
+        "is probably flipped"
+    )
+
+    return (
+        f"{st.version or 'sfincs'} ran: {res['wet_cells']} wet cells, "
+        f"max {res['max_depth_max_m']:.2f} m, grid orientation verified"
+    )
+
+
 def check_delft3d_absence():
     """Delft3D absence is measured, not assumed.
 
@@ -606,6 +662,7 @@ def main() -> int:
     check("02_sph case generation", check_sph_case)
     check("04_backend gated release physics", check_gated_release)
     check("04_backend release uncertainty block", check_release_uncertainty_block)
+    check("09_sfincs engine end to end", check_sfincs_engine)
     check("03_delft3d absence is measured", check_delft3d_absence)
     check("07_ml maths (SCS, routing, MC)", check_ml_layer)
     check("07_ml surrogate", check_surrogate)

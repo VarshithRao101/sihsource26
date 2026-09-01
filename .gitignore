@@ -28,6 +28,7 @@ DualSPHysics_v5.4/
 Delft3D*/
 D-Flow*/
 Deltares*/
+SFINCS*/
 *.msi
 *.exe
 
