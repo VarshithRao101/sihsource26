@@ -100,8 +100,9 @@ Say these out loud if asked. They are strengths, not gaps.
 | **Captain** | everything that computes | `shared/`, `01`, `02`, `04`, `06`, `07`, `integration/` | — |
 | **Frontend A** | map, scene, timeline | `modules/05_frontend/src/map/`, `src/scene/` | `tasks/FRONTEND-A.md` |
 | **Frontend B** | panels, tables, forms | `modules/05_frontend/src/panels/`, `src/views/` | `tasks/FRONTEND-B.md` |
-| **Docs A** | the deck | `docs/` | `tasks/DOCS-A.md` |
-| **Docs B** | the written report | `docs/` | `tasks/DOCS-B.md` |
+| **Docs A** | the deck | `docs/deck/` | `tasks/DOCS-A.md` |
+| **Docs B** | the written report | `docs/report/` | `tasks/DOCS-B.md` |
+| **QA** | breaking it before a juror does | `docs/qa/` | `tasks/QA.md` |
 
 **The absolute rule: never create, edit or delete a file outside your own folder.** Not to fix a
 bug, not "just quickly". Because no two people touch the same file, merges are conflict-free by
