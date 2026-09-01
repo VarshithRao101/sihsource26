@@ -466,6 +466,46 @@ def build_uncertainty(spec: ScenarioSpec, ensemble: dict, q_cumecs: np.ndarray) 
     07's Monte Carlo widens this with a proper parameter sweep; this is the
     zero-cost version that every run carries.
     """
+    if spec.failure_mode == "gated_release":
+        # No dam failed, so breach-failure regressions are not our uncertainty
+        # and must not be published as if they were. Quoting Froehlich's
+        # factor-of-two scatter over a controlled release would be describing
+        # the wrong physics with a real citation attached - the most convincing
+        # possible way to be wrong.
+        return {
+            "note": (
+                "This run is a CONTROLLED RELEASE, not a dam failure. Breach "
+                "regressions do not apply and are deliberately absent. The "
+                "uncertainty here is in the outlet capacity and the storage "
+                "curve, not in how a dam breaks."
+            ),
+            "scenario": "gated_release",
+            "routed_peak_cumecs": round(float(q_cumecs.max()), 1),
+            "release_capacity_cumecs": (
+                round(float(spec.design_spillway_cumecs), 1)
+                if spec.design_spillway_cumecs
+                else None
+            ),
+            "release_capacity_source": (
+                "CWC NRLD design spillway capacity (measured)"
+                if spec.design_spillway_cumecs
+                else "ASSUMED - not published in the register for this dam"
+            ),
+            "gate_opening_frac": spec.gate_opening_frac,
+            "storage_curve_exponent": spec.storage_exponent,
+            "storage_curve_note": (
+                "V(h) = V_full * (h/H)^k with k assumed; no surveyed "
+                "storage-elevation curve exists for an arbitrary Indian dam."
+            ),
+            "dem_vertical_uncertainty_m": {
+                "FABDEM": 1.4,
+                "COP30": 1.7,
+                "SRTM": 3.7,
+                "NASADEM": 3.0,
+                "ALOS": 2.5,
+            },
+        }
+
     peaks = peak_outflow_regressions(spec.water_volume_m3, spec.site.dam_height_m)
     widths = {k: round(v.average_width_m, 1) for k, v in ensemble.items()}
     times = {k: round(v.formation_time_hr, 4) for k, v in ensemble.items()}

@@ -1,0 +1,15 @@
+{
+  "site": "latatapovanntpc",
+  "source": "COP30",
+  "bbox": [
+    79.36177336800819,
+    30.401318248934388,
+    79.68449032577641,
+    30.62104408915249
+  ],
+  "nx": 344,
+  "ny": 271,
+  "cellsize_m": 90.0136543751232,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 375 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

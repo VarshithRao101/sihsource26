@@ -383,11 +383,20 @@ def _check_hydrograph(run_dir: Path, rep: Report, meta: dict | None) -> None:
     rep.fact(f"peak discharge       {float(q.max()):,.0f} m3/s")
     rep.fact(f"released volume      {vol_mcm:.2f} MCM")
 
-    cap = get_dotted(meta or {}, "site.reservoir_capacity_mcm")
+    # What "the reservoir" means depends on the scenario. For a river blockage
+    # the water is behind a landslide dam whose volume was read off the DEM,
+    # and the engineered dam's registered capacity is the wrong yardstick
+    # entirely - a 1.5 MCM barrage can sit under a 6 MCM landslide lake.
+    cap = get_dotted(meta or {}, "blockage.impounded_volume_mcm")
+    cap_label = "impounded landslide lake"
+    if not (isinstance(cap, (int, float)) and cap > 0):
+        cap = get_dotted(meta or {}, "site.reservoir_capacity_mcm")
+        cap_label = "stated reservoir capacity"
+
     if isinstance(cap, (int, float)) and cap > 0 and vol_mcm > 1.5 * cap:
         rep.error(
-            f"released volume {vol_mcm:.1f} MCM exceeds 1.5x the stated reservoir "
-            f"capacity {cap} MCM - the routing is creating water"
+            f"released volume {vol_mcm:.1f} MCM exceeds 1.5x the {cap_label} "
+            f"{cap} MCM - the routing is creating water"
         )
 
     reported_peak = get_dotted(meta or {}, "results.peak_discharge_cumecs")

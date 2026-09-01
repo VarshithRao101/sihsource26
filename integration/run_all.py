@@ -427,6 +427,37 @@ def check_gated_release():
     )
 
 
+def check_release_uncertainty_block():
+    """A controlled release must not publish dam-failure regressions.
+
+    uncertainty.json used to carry Froehlich's factor-of-two breach scatter on
+    every run including gated_release - the wrong physics with a real citation
+    attached, which is the most convincing possible way to be wrong.
+    """
+    import numpy as np
+
+    runner = import_module("modules.04_backend.runner")
+    scen = import_module("modules.04_backend.scenario")
+    build_uncertainty = runner.build_uncertainty
+    ScenarioSpec, SiteSpec = scen.ScenarioSpec, scen.SiteSpec
+
+    site = SiteSpec(name="check", lat=14.21, lon=79.02, dam_height_m=25.0,
+                    reservoir_capacity_mcm=63.16)
+    q = np.array([0.0, 4000.0, 8069.0, 3000.0])
+
+    rel = build_uncertainty(
+        ScenarioSpec(site=site, failure_mode="gated_release",
+                     design_spillway_cumecs=8069.0), {}, q)
+    assert "peak_discharge_cumecs_by_regression" not in rel, (
+        "a controlled release is publishing breach-failure regressions"
+    )
+    assert rel.get("scenario") == "gated_release"
+    assert "CONTROLLED RELEASE" in rel["note"]
+    assert "measured" in rel["release_capacity_source"]
+
+    return "release block carries no breach regressions; capacity source named"
+
+
 def check_delft3d_absence():
     """Delft3D absence is measured, not assumed.
 
@@ -574,6 +605,7 @@ def main() -> int:
     check("04_backend API + console", check_api_imports)
     check("02_sph case generation", check_sph_case)
     check("04_backend gated release physics", check_gated_release)
+    check("04_backend release uncertainty block", check_release_uncertainty_block)
     check("03_delft3d absence is measured", check_delft3d_absence)
     check("07_ml maths (SCS, routing, MC)", check_ml_layer)
     check("07_ml surrogate", check_surrogate)
