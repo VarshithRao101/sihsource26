@@ -103,16 +103,37 @@ person is counted once. Summing a box around each place instead double-counted a
 between two villages — it produced 83,966 people across the refined settlements when the whole tile
 only holds 152,239, a total a juror could break by adding up our own column.
 
-### 2. Delft3D — start today, it has a queue
+### 2. Delft3D — you need the **kernel**, not the licence manager
 
-The one NTRO deliverable we cannot currently claim. Register and request **D-Flow FM**:
+The one NTRO deliverable we cannot currently claim.
 
-- <https://download.deltares.nl/> (manual approval, can take days)
-- fallback: <https://oss.deltares.nl/web/delft3d/download>
+**Deltares ships three separate downloads and only one of them solves anything:**
 
-Unpack next to `DualSPHysics_v5.4/`. Tell me when it lands and I will write `modules/03_delft3d/`
-to feed it `hydrograph.csv` and read its output back into the contract. Until then
-`compare_engines.py` reports it as **absent, never estimated**.
+| Download | What it is | Do we need it |
+|---|---|---|
+| Deltares License Software | FlexNet licence manager (`DS_Flex.exe`, `lmadmin`) | only to license the suite |
+| Delft3D FM Suite 2D3D (HM) | the GUI modelling environment | optional |
+| **D-Flow FM kernel / DIMR** | **the solver we drive from the command line** | **yes — this one** |
+
+`Deltares License Software/` is already downloaded. It is **not** a solver, and the engine check
+says so out loud rather than counting it.
+
+Get the kernel from <https://download.deltares.nl/> (manual approval, can take days), fallback
+<https://oss.deltares.nl/web/delft3d/download>. Unpack it next to `DualSPHysics_v5.4/`, or set
+`DELFT3D_HOME` in `.env` to wherever it lands. Then:
+
+```bash
+.venv\Scripts\python.exe -m modules.03_delft3d.engine
+```
+
+That prints what it found and exits 0 once a real kernel is present. It looks for `dimr` or
+`dflowfm` on PATH, under `$DELFT3D_HOME`, beside the repo, and in the Deltares-named folders of the
+usual install roots.
+
+Until a kernel exists, `compare_engines.py` reports Delft3D as **absent, never estimated** — and
+that absence is now *measured* by `modules/03_delft3d/engine.py` rather than hardcoded. Once it
+lands, tell me and I will write the case builder (`hydrograph.csv` + DEM → D-Flow FM input) and the
+reader that pulls its output back into the contract.
 
 ### 3. Pick the second demo river and confirm the first
 
@@ -166,7 +187,7 @@ shared/            the data contract in code. Captain only.
 modules/
   01_geodata/      river tracing, DEM, exposure, dam catalogue
   02_sph/          DualSPHysics breach
-  03_delft3d/      empty — blocked on Deltares
+  03_delft3d/      engine detection only — no solver installed yet
   04_backend/      solver, API, WebSocket
   05_frontend/     the console
   06_gee_validation/  Sentinel-1 + CSI

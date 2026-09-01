@@ -374,6 +374,34 @@ def check_api_imports():
     return f"{len(paths)} routes, console present"
 
 
+def check_delft3d_absence():
+    """Delft3D absence is measured, not assumed.
+
+    NTRO asked for Delft3D. We do not have it, and the one thing worse than
+    not having it is claiming we do. This asserts the detector actually looks
+    and reports honestly - and that it never mistakes the Deltares licence
+    manager, which is a separate download, for a solver.
+    """
+    d3d = import_module("modules.03_delft3d.engine")
+    st = d3d.status()
+
+    assert isinstance(st["installed"], bool), "installed must be a real boolean"
+    assert st["searched"], "detector reported nothing searched - it did not look"
+
+    if st["installed"]:
+        from pathlib import Path
+
+        assert Path(st["kernel"]).exists(), f"kernel reported but missing: {st['kernel']}"
+        return f"D-Flow FM kernel present at {st['kernel']}"
+
+    # Absent is the expected answer today. It must say so in words.
+    assert "NOT INSTALLED" in st["summary"], f"unclear absence: {st['summary']}"
+    assert st["kernel"] is None, "kernel path set while reporting not installed"
+    if st["licence_tooling_only"]:
+        return "absent and said so - licence manager present, kernel is not"
+    return "absent and said so - no kernel found"
+
+
 def check_sph_case():
     """Module 02 can write a valid DualSPHysics case. Does NOT solve one.
 
@@ -492,6 +520,7 @@ def main() -> int:
     check("06_gee validation metrics", check_sar_metrics)
     check("04_backend API + console", check_api_imports)
     check("02_sph case generation", check_sph_case)
+    check("03_delft3d absence is measured", check_delft3d_absence)
     check("07_ml maths (SCS, routing, MC)", check_ml_layer)
     check("07_ml surrogate", check_surrogate)
     check("credentials", check_credentials)

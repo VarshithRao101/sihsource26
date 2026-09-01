@@ -13,7 +13,7 @@
 # PART 0 — WHAT ACTUALLY EXISTS TODAY
 
 This is not a plan. Everything below is built, running and tested. `python integration/run_all.py`
-passes **18/18** in about twenty seconds with the network unplugged.
+passes **19/19** in about twenty seconds with the network unplugged.
 
 ```
               CWC register (5,686 dams)
@@ -49,7 +49,7 @@ Console at `/`, API docs at `/docs`.
 | `shared/` | the data contract in code — grids, units, validator, fake data | done |
 | `01_geodata` | D8 river tracing, DEM fetch + conditioning, OSM exposure, dam catalogue | done |
 | `02_sph` | DualSPHysics breach near-field on GPU → hydrograph | done |
-| `03_delft3d` | far-field routing | **BLOCKED — Deltares registration** |
+| `03_delft3d` | far-field routing | **absent — engine check reports it, never estimates** |
 | `04_backend` | HLL shallow-water solver, **river blockage**, FastAPI, WebSocket | done |
 | `05_frontend` | plain operator console, zero dependencies | **handover to Frontend A/B** |
 | `06_gee_validation` | Sentinel-1 water detection, CSI/POD/FAR | done |

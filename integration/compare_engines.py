@@ -171,12 +171,19 @@ def compare(
         except Exception:
             pass
 
+    # Absence is measured, not assumed. modules/03_delft3d/engine.py looks for
+    # the D-Flow FM kernel and reports what it actually found - which is not the
+    # same question as whether the Deltares licence manager is installed.
+    from importlib import import_module
+
+    d3d = import_module("modules.03_delft3d.engine").status()
     rows.append(
         {
             "engine": "Delft3D FM",
             "measures": "far-field routing",
             "peak_cumecs": None,
-            "note": "NOT INSTALLED - Deltares registration pending. Reported as absent, not estimated.",
+            "note": d3d["summary"] + " Reported as absent, not estimated.",
+            "engine_check": d3d,
         }
     )
 
