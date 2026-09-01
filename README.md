@@ -172,8 +172,12 @@ look at it.
 `AGENTS.md` Part 4 is the full list of limitations, with numbers. The short version:
 
 - Verification is strong — Ritter RMSE 0.218 m, lake at rest 2.9e-06 m, closed-basin mass 0.000000%
-- Validation against observed floods is **weak and we say so** — the Teesta gorge is too steep and
-  too narrow for Sentinel-1 at 90 m, CSI never exceeds 0.02, and the sensitivity sweep is published
+- Validation against observed floods is **weak on both reaches we tried, and we say so** — the
+  Teesta gorge is too steep and too narrow for Sentinel-1 at 90 m (CSI 0.0075, sweep published), so
+  we re-validated on the real Annamayya earthfill failure of 19 Nov 2021 on an Andhra Pradesh
+  floodplain. Detection improved 17× (POD 0.013 → 0.217), confirming the gorge was a resolution
+  problem — but bias is 7.3, because we compare a full-reservoir worst case at maximum extent
+  against one satellite pass days later. No strong observational validation exists, and we claim none
 - There is **no accuracy percentage** anywhere in this project, because we did not measure one
 - The ML surrogate emulates *our own solver* (CSI 0.909), not reality
 - We declined to build a GNN and an LSTM rather than train them on our own output

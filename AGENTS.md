@@ -86,10 +86,17 @@ Say these out loud if asked. They are strengths, not gaps.
 - **No LSTM for reservoir inflow.** It needs an observed inflow series to learn from. Training it on
   our own runoff model's output would teach it our model and let us call the result learned
   knowledge. Circular. The physics-based nowcast is there instead.
-- **SAR validation in the Teesta gorge is inconclusive, and we say so.** CSI never exceeds 0.02 at
-  any slope threshold, because median terrain slope is 30° and the flood corridor is one to three
-  cells wide at 90 m. The sensitivity sweep is published in `validation.json`. The correct fix is to
-  validate on a low-gradient reach, not to tune the threshold until the number flatters us.
+- **SAR validation is weak on both reaches we tried, and we say so.** In the Teesta gorge CSI never
+  exceeds 0.02 at any slope threshold, because median terrain slope is 30° and the flood corridor is
+  one to three cells wide at 90 m. So we did the correct thing rather than the flattering one and
+  re-validated on a low-gradient reach: the **Annamayya (Cheyyeru) earthfill failure of 19 November
+  2021**, a real dam break on an Andhra Pradesh floodplain, 100 km² wet against the gorge's 10 km².
+  Detection improved seventeenfold — POD 0.013 to 0.217 — which confirms the gorge was a resolution
+  problem. But bias is **7.3**: we simulate 12,416 wet cells against 1,698 observed. We are
+  comparing a full-reservoir worst case, at maximum extent over 24 hours, against one satellite pass
+  days after the event, and we do not know the real breach severity. That is a scenario mismatch, not
+  a tuned number, and we did not tune it. **We have no strong observational validation and we do not
+  claim one.**
 
 ---
 
@@ -170,7 +177,8 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | Populations measured, 4 sites still default | 16 of 22 WorldPop, 2 OSM census, 4 unmapped | `impact.json` `population_source` |
 | WorldPop is blank where no buildings detected | Chungthang, Rongek, Penlong, Golitar | kept as `class_default` |
 | Population assigned to nearest listed settlement | within 2 km, each cell counted once | `refine_population_worldpop` |
-| SAR validation in a gorge | CSI ≤ 0.02 | `validation.json` sensitivity sweep |
+| SAR validation, Teesta gorge | CSI 0.0075, POD 0.013 | `validation.json` sensitivity sweep |
+| SAR validation, Annamayya floodplain | CSI 0.027, POD 0.217, **bias 7.3** | `validation.json`, run `cheyyeruprojectannamayya_overtop_fast_001` |
 | SPH is near-field only | first ~60 s | `sph_meta.json` limitation field |
 | Surrogate is an emulator | CSI 0.909 vs **our solver** | not validated against real floods |
 | Damage replacement values | assumptions | `damage_curve_source` string |

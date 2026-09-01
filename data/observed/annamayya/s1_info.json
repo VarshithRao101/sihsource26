@@ -1,0 +1,17 @@
+{
+  "site": "annamayya",
+  "collection": "COPERNICUS/S1_GRD",
+  "polarisation": "VV",
+  "pre_window": [
+    "2021-09-15",
+    "2021-10-31"
+  ],
+  "post_window": [
+    "2021-11-19",
+    "2021-12-05"
+  ],
+  "n_scenes_pre": 8,
+  "n_scenes_post": 3,
+  "orbit_pass": "DESCENDING",
+  "reducer": "median"
+}
