@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reservoir Level Simulation — y = f(t, V)</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div>
+      <h1>Reservoir Level Simulation</h1>
+      <p class="sub">SIH26161 · dam break inundation modelling · module 04 backend</p>
+    </div>
+  </div>
+  <div class="equations">
+    <code>dV/dt = Q<sub>in</sub>(t) − Q<sub>out</sub>(y)</code>
+    <code>V = V<sub>max</sub>·(y/H)<sup>k</sup></code>
+    <code>y = f(t, V)</code>
+  </div>
+</header>
+
+<div id="status-banner" class="banner">
+  <div class="banner-dot"></div>
+  <div class="banner-text">
+    <strong data-status-label>NORMAL</strong>
+    <span data-status-note></span>
+  </div>
+  <div class="banner-detail" data-status-detail></div>
+</div>
+
+<main class="layout">
+
+  <div class="main-col">
+
+    <section class="panel panel-dam">
+      <div class="panel-head">
+        <h2>Dam cross-section</h2>
+        <span class="panel-note">water height, valley shape and every jet are drawn from the simulation state</span>
+      </div>
+      <canvas id="dam-canvas"></canvas>
+      <div id="transport" class="transport"></div>
+    </section>
+
+    <section id="metrics" class="metrics"></section>
+
+    <section class="charts">
+      <div class="panel panel-chart">
+        <div class="panel-head"><h2>Water level  y(t)</h2><span class="panel-note">metres</span></div>
+        <canvas id="chart-level"></canvas>
+      </div>
+      <div class="panel panel-chart">
+        <div class="panel-head"><h2>Water volume  V(t)</h2><span class="panel-note">million m³</span></div>
+        <canvas id="chart-volume"></canvas>
+      </div>
+    </section>
+
+  </div>
+
+  <aside class="side-col">
+    <div class="panel panel-controls">
+      <div class="panel-head"><h2>Controls</h2><span class="panel-note">↺ restarts the run</span></div>
+      <div id="controls"></div>
+    </div>
+
+    <div class="panel panel-notes">
+      <div class="panel-head"><h2>Model &amp; assumptions</h2></div>
+      <ul>
+        <li>Storage curve <code>V = V_max (y/H)<sup>k</sup></code>, k = 2.7 for a steep valley.
+            Set k = 1 for a prismatic tank, where <code>y = V/A</code> holds exactly.
+            <em>USACE HEC-RAS reservoir storage approximation.</em></li>
+        <li>Outlet is an orifice, <code>Q = C<sub>d</sub> A √(2g·h)</code>, C<sub>d</sub> = 0.6.
+            <em>Fread (1988), BREACH, §3.</em></li>
+        <li>Spillway is a broad-crested weir, <code>Q = 1.7·L·h<sup>1.5</sup></code>.
+            <em>USACE HEC-RAS.</em></li>
+        <li>Inflow is a steady base flow plus an optional <strong>synthetic</strong> Gaussian flood
+            wave. It is not a measured hydrograph.</li>
+        <li>Euler integration at fixed <code>dt</code>, substepped so no step moves more than 1 % of
+            capacity. Speed changes the number of steps per second, never <code>dt</code>.</li>
+      </ul>
+      <div class="ledger">
+        <span>mass balance error</span><strong data-mass-error>—</strong>
+        <span>config from</span><strong data-config-source>…</strong>
+      </div>
+      <p class="foot">Reference implementation and tests:
+        <code>modules/04_backend/reservoir.py</code> ·
+        <code>modules/04_backend/tests/test_reservoir.py</code>.
+        Space = start/pause, R = reset.</p>
+    </div>
+  </aside>
+
+</main>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>

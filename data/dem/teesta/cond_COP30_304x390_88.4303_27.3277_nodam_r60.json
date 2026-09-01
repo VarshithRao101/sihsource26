@@ -1,0 +1,15 @@
+{
+  "site": "teesta",
+  "source": "COP30",
+  "bbox": [
+    88.430293,
+    27.327668,
+    88.707201,
+    27.642835
+  ],
+  "nx": 304,
+  "ny": 390,
+  "cellsize_m": 89.85622059090873,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel bed from hydraulic geometry (Leopold & Maddock 1953), re-filled off-channel after bed cut",
+  "nodata_frac": 0.0
+}

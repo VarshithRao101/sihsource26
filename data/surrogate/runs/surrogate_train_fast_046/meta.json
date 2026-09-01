@@ -1,0 +1,75 @@
+{
+  "schema_version": "2.0",
+  "run_id": "surrogate_train_fast_046",
+  "created_utc": "2026-08-31T04:04:04Z",
+  "engine": "fast",
+  "is_fake": false,
+  "site": {
+    "name": "Surrogate Training Site",
+    "river": "Teesta",
+    "state": "Sikkim",
+    "lat": 27.598679602948245,
+    "lon": 88.65011390179544,
+    "dam_height_m": 37.921590258779084,
+    "reservoir_capacity_mcm": 7.442548934099184,
+    "source": "user"
+  },
+  "scenario": {
+    "failure_mode": "overtopping",
+    "reservoir_level_frac": 0.9582957509409927,
+    "breach_width_m": 61.9,
+    "breach_bottom_width_m": 23.9,
+    "breach_side_slope": 1.0,
+    "formation_time_hr": 0.3808,
+    "breach_param_source": "Froehlich (2008), ASCE J. Hydraul. Eng. 134(12)",
+    "storage_curve": "power law, k = 2.7",
+    "inflow_cumecs": 0.0,
+    "fingerprint": "bc3427c023a4"
+  },
+  "domain": {
+    "bbox": [
+      88.460447,
+      27.393294,
+      88.70813,
+      27.643646
+    ],
+    "crs": "EPSG:4326",
+    "cellsize_m": 149.757,
+    "nx": 163,
+    "ny": 186,
+    "reach_length_km": 30.0
+  },
+  "dem": {
+    "source": "COP30",
+    "native_resolution_m": 30.0,
+    "bathymetry": "estimated",
+    "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 205 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped"
+  },
+  "time": {
+    "start_hr": 0.0,
+    "end_hr": 8.0,
+    "output_step_hr": 0.25
+  },
+  "results": {
+    "peak_discharge_cumecs": 6268.2,
+    "max_depth_m": 45.47,
+    "max_velocity_ms": 4.54,
+    "flood_area_km2": 1.35,
+    "released_volume_mcm": 6.59,
+    "runtime_s": 6.19,
+    "wall_time_s": 6.28,
+    "mass_balance_err_pct": 0.0,
+    "solver_steps": 8562,
+    "min_timestep_s": 0.5,
+    "scheme": "swe",
+    "volume_in_mcm": 6.5631,
+    "volume_out_mcm": 0.0,
+    "volume_stored_mcm": 6.5631,
+    "froude_limited_cells": 0
+  },
+  "provenance": {
+    "module": "04_backend",
+    "code_version": "",
+    "notes": ""
+  }
+}

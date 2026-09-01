@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dam Break Console</title>
+<!--
+  modules/05_frontend/index.html - the plain operator console.
+
+  This is deliberately ugly. It exists so the backend can be driven and checked
+  end to end without waiting for a designed frontend, and so that whoever picks
+  up module 05 inherits something where every endpoint is already wired and
+  working rather than a spec.
+
+  Rules it follows, which the redesign must keep:
+    - NO external libraries, no CDN, no build step. It must run with the
+      network unplugged, because demo day wifi is not a dependency we accept.
+    - The SYNTHETIC banner is not decoration. If meta.is_fake is true it must
+      be impossible to miss.
+    - Never display a number the API did not send. Blank beats invented.
+
+  Owner: captain, until handover to module 05.
+-->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #14171a; --muted: #5b6570; --line: #d4dae0;
+    --panel: #f5f7f9; --accent: #1256a0; --warn: #a8410a; --bad: #a11212;
+    --ok: #14663a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  #banner {
+    display: none; padding: 10px 16px; background: #ffe9b0;
+    border-bottom: 2px solid var(--warn); color: var(--warn); font-weight: 700;
+  }
+  .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 0; align-items: start; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+  .side { border-right: 1px solid var(--line); padding: 14px; }
+  .main { padding: 14px; min-width: 0; }
+  fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 0 0 12px; padding: 10px; }
+  legend { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  label { display: block; margin: 7px 0 2px; font-size: 12px; color: var(--muted); }
+  input, select, button { font: inherit; }
+  input, select {
+    width: 100%; padding: 5px 7px; border: 1px solid var(--line);
+    border-radius: 3px; background: #fff; color: var(--fg);
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  button {
+    padding: 8px 12px; border: 1px solid var(--accent); background: var(--accent);
+    color: #fff; border-radius: 3px; cursor: pointer;
+  }
+  button.sec { background: #fff; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  #run { width: 100%; margin-top: 10px; font-weight: 600; }
+  .panel { border: 1px solid var(--line); border-radius: 4px; padding: 10px; margin-bottom: 12px; background: var(--panel); }
+  .panel h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  pre#log {
+    margin: 0; height: 130px; overflow: auto; background: #10151b; color: #cfe3f5;
+    padding: 8px; border-radius: 3px; font: 11px/1.4 ui-monospace, Consolas, monospace;
+  }
+  canvas { border: 1px solid var(--line); background: #fff; max-width: 100%; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .pill { padding: 1px 7px; border-radius: 9px; font-size: 11px; font-weight: 600; }
+  .pill.extreme { background: #f6d0d0; color: var(--bad); }
+  .pill.significant { background: #fadfc8; color: var(--warn); }
+  .pill.moderate { background: #fdf0c4; color: #7a5a06; }
+  .pill.low { background: #d8ecd8; color: var(--ok); }
+  .err { color: var(--bad); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dam Break Inundation Console</h1>
+  <span class="sub">SIH26161 &middot; NTRO &middot; internal test UI</span>
+  <span class="sub" id="health"></span>
+</header>
+
+<div id="banner">SYNTHETIC DATA — this run is not real and must not be shown as a result</div>
+
+<div class="wrap">
+  <!-- ------------------------------------------------ controls -->
+  <div class="side">
+    <fieldset>
+      <legend>Pick a dam</legend>
+      <div class="muted" style="font-size:11px;margin-bottom:4px">
+        CWC National Register of Large Dams 2019 — <span id="damcount">…</span>
+      </div>
+      <label>State</label>
+      <select id="fstate"><option value="">— all states —</option></select>
+      <label>Nearest city <span class="muted">(NRLD has no district field)</span></label>
+      <select id="fcity"><option value="">— all cities —</option></select>
+      <label>Search name / river</label>
+      <input id="fq" placeholder="e.g. Hirakud, Teesta">
+      <label>Dam</label>
+      <select id="fdam" size="6"></select>
+      <div class="muted" id="daminfo" style="font-size:11px;min-height:15px"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Site</legend>
+      <label>Preset</label>
+      <select id="preset"><option value="">— custom —</option></select>
+      <label>Name</label><input id="name" value="Chungthang Dam">
+      <div class="row2">
+        <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value="27.6003"></div>
+        <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value="88.6428"></div>
+      </div>
+      <div class="row2">
+        <div><label>River</label><input id="river" value="Teesta"></div>
+        <div><label>State</label><input id="state" value="Sikkim"></div>
+      </div>
+      <div class="row2">
+        <div><label>Dam height (m)</label><input id="height" type="number" step="1" value="60"></div>
+        <div><label>Capacity (MCM)</label><input id="cap" type="number" step="0.1" value="5"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Scenario</legend>
+      <label>Failure mode</label>
+      <select id="mode">
+        <option value="overtopping">overtopping</option>
+        <option value="piping">piping</option>
+        <option value="gated_release">gated_release</option>
+        <option value="blockage_breach">blockage_breach</option>
+      </select>
+      <label>Breach regression</label>
+      <select id="regression">
+        <option value="froehlich2008">Froehlich (2008)</option>
+        <option value="vonthun1990">Von Thun &amp; Gillette (1990)</option>
+        <option value="macdonald1984">MacDonald &amp; Langridge-Monopolis (1984)</option>
+      </select>
+      <label>Reservoir level fraction</label>
+      <input id="level" type="number" step="0.05" min="0" max="1" value="1.0">
+      <div class="row2">
+        <div><label>Reach (km)</label><input id="reach" type="number" step="5" value="40"></div>
+        <div><label>Cell size (m)</label><input id="cell" type="number" step="10" value="90"></div>
+      </div>
+      <div class="row2">
+        <div><label>Duration (hr)</label><input id="endhr" type="number" step="1" value="8"></div>
+        <div><label>Scheme</label>
+          <select id="scheme"><option value="swe">swe</option><option value="inertial">inertial</option></select>
+        </div>
+      </div>
+      <label><input type="checkbox" id="real" checked style="width:auto"> Real terrain (COP30)</label>
+    </fieldset>
+
+    <button id="run">Run simulation</button>
+    <button id="loadlast" class="sec" style="width:100%;margin-top:6px">Load most recent run</button>
+  </div>
+
+  <!-- ------------------------------------------------ results -->
+  <div class="main">
+    <div class="panel">
+      <h2>Progress</h2>
+      <pre id="log">idle.</pre>
+    </div>
+
+    <div class="cols">
+      <div class="panel">
+        <h2>Results</h2>
+        <dl class="kv" id="results"><dd class="muted">No run loaded.</dd></dl>
+      </div>
+      <div class="panel">
+        <h2>Provenance</h2>
+        <dl class="kv" id="prov"></dl>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Flood — drag to step through time</h2>
+      <input id="time" type="range" min="0" max="100" value="100" style="width:100%">
+      <div class="muted" id="timelab">t = —</div>
+      <canvas id="map" width="600" height="420"></canvas>
+      <div class="muted" style="font-size:12px;margin-top:6px">
+        Reconstructed from the arrival-time and peak-depth grids (packed.png), not
+        frame-by-frame solver output. Blue = deeper.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Outflow hydrograph</h2>
+      <canvas id="hydro" width="600" height="200"></canvas>
+    </div>
+
+    <div class="panel">
+      <h2>Impact</h2>
+      <div id="totals" class="muted">—</div>
+      <table id="settlements"></table>
+    </div>
+
+    <div class="panel">
+      <h2>Evacuation — time-dependent routing on the OSM road graph</h2>
+      <div id="evacnote" class="muted">—</div>
+      <table id="evac"></table>
+    </div>
+
+    <div class="panel">
+      <h2>Uncertainty — what we do not know</h2>
+      <div id="uncert" class="muted">—</div>
+    </div>
+
+    <div class="panel">
+      <h2>Export</h2>
+      <button class="sec" onclick="dl('kml')">KML</button>
+      <button class="sec" onclick="dl('shp')">Shapefile (zip)</button>
+      <button class="sec" onclick="dl('geojson')">GeoJSON</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "";
+let RUN = null, META = null, PACKED = null, ENDHR = 12;
+
+const $ = id => document.getElementById(id);
+const log = m => { const l = $("log"); l.textContent += "\n" + m; l.scrollTop = l.scrollHeight; };
+const clearLog = m => { $("log").textContent = m; };
+
+async function jget(url) {
+  const r = await fetch(API + url);
+  if (!r.ok) throw new Error(url + " -> " + r.status);
+  return r.json();
+}
+
+// ---------------------------------------------------------------- startup
+(async () => {
+  try {
+    const h = await jget("/health");
+    $("health").textContent = "backend ok" + (h.jit_warmup_s ? " · jit " + h.jit_warmup_s + "s" : "");
+  } catch { $("health").innerHTML = '<span class="err">backend unreachable</span>'; }
+
+  try {
+    const s = await jget("/api/sites");
+    const list = s.sites || s;
+    for (const key in list) {
+      const o = document.createElement("option");
+      o.value = key; o.textContent = list[key].name || key;
+      $("preset").appendChild(o);
+    }
+    $("preset").onchange = () => {
+      const k = $("preset").value; if (!k) return;
+      const s2 = list[k]; if (!s2) return;
+      $("name").value = s2.name ?? ""; $("lat").value = s2.lat ?? "";
+      $("lon").value = s2.lon ?? ""; $("river").value = s2.river ?? "";
+      $("state").value = s2.state ?? ""; $("height").value = s2.dam_height_m ?? 60;
+      $("cap").value = s2.reservoir_capacity_mcm ?? 5;
+    };
+  } catch { /* presets are optional */ }
+})();
+
+// ---------------------------------------------------------------- dam picker
+let DAMS = [];
+
+async function loadStates() {
+  try {
+    const r = await jget("/api/dams/states");
+    for (const st of r.states) {
+      const o = document.createElement("option");
+      o.value = st; o.textContent = st; $("fstate").appendChild(o);
+    }
+  } catch (e) {
+    $("damcount").innerHTML = '<span class="err">catalogue not built — run: python -m modules.01_geodata.dams build</span>';
+  }
+}
+
+async function loadCities() {
+  const st = $("fstate").value;
+  const sel = $("fcity");
+  sel.innerHTML = '<option value="">— all cities —</option>';
+  if (!st) return;
+  try {
+    const r = await jget("/api/dams/cities?state=" + encodeURIComponent(st));
+    for (const c of r.cities) {
+      const o = document.createElement("option");
+      o.value = c; o.textContent = c; sel.appendChild(o);
+    }
+  } catch {}
+}
+
+async function loadDams() {
+  const p = new URLSearchParams();
+  if ($("fstate").value) p.set("state", $("fstate").value);
+  if ($("fcity").value) p.set("city", $("fcity").value);
+  if ($("fq").value.trim()) p.set("q", $("fq").value.trim());
+  p.set("limit", "300");
+  let r;
+  try { r = await jget("/api/dams?" + p.toString()); }
+  catch { return; }
+
+  DAMS = r.dams;
+  $("damcount").textContent = `${r.count} dam${r.count === 1 ? "" : "s"} listed`;
+  const sel = $("fdam");
+  sel.innerHTML = "";
+  for (const d of DAMS) {
+    const o = document.createElement("option");
+    o.value = d.id;
+    const cap = d.gross_storage_mcm != null ? d.gross_storage_mcm.toLocaleString() : "?";
+    o.textContent = `${d.name} — ${d.river || "?"} — ${cap} MCM`;
+    sel.appendChild(o);
+  }
+}
+
+function applyDam() {
+  const d = DAMS.find(x => x.id === $("fdam").value);
+  if (!d) return;
+  $("name").value = d.name;
+  $("lat").value = d.lat;
+  $("lon").value = d.lon;
+  $("river").value = d.river || "";
+  $("state").value = d.state || "";
+  $("height").value = d.height_m ?? 60;
+  $("cap").value = d.gross_storage_mcm ?? 5;
+  $("daminfo").textContent =
+    `${d.state} · ${d.nearest_city || "?"} · ${d.dam_type || "?"}` +
+    (d.year ? ` · built ${d.year}` : "") + ` · ${d.id}`;
+}
+
+$("fstate").onchange = async () => { await loadCities(); loadDams(); };
+$("fcity").onchange = loadDams;
+let qTimer = null;
+$("fq").oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(loadDams, 250); };
+$("fdam").onchange = applyDam;
+loadStates().then(loadDams);
+
+// ---------------------------------------------------------------- run
+$("run").onclick = async () => {
+  const body = {
+    site: {
+      name: $("name").value, lat: +$("lat").value, lon: +$("lon").value,
+      river: $("river").value, state: $("state").value,
+      dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value
+    },
+    failure_mode: $("mode").value,
+    breach_regression: $("regression").value,
+    reservoir_level_frac: +$("level").value,
+    reach_length_km: +$("reach").value,
+    cellsize_m: +$("cell").value,
+    end_hr: +$("endhr").value,
+    scheme: $("scheme").value,
+    real_terrain: $("real").checked
+  };
+  ENDHR = body.end_hr;
+  $("run").disabled = true;
+  clearLog("submitting…");
+
+  try {
+    const r = await fetch(API + "/api/runs", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if (!r.ok) { log("REJECTED: " + JSON.stringify(j)); $("run").disabled = false; return; }
+    RUN = j.run_id;
+    log("run_id " + RUN);
+    follow(RUN);
+  } catch (e) { log("failed: " + e.message); $("run").disabled = false; }
+};
+
+function follow(runId) {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  ws.onmessage = ev => {
+    let d; try { d = JSON.parse(ev.data); } catch { return; }
+    if (d.stage) { log(d.stage + "…"); return; }
+    if (d.status === "done" || d.status === "error") return;
+    if (d.pct !== undefined) {
+      const bits = [`${String(d.pct).padStart(5)}%  t=${d.t_hr}h`];
+      if (d.wet_cells !== undefined) bits.push(`wet=${d.wet_cells}`);
+      if (d.max_depth_m !== undefined) bits.push(`max=${d.max_depth_m}m`);
+      if (d.volume_stored_mcm !== undefined)
+        bits.push(`in=${d.volume_in_mcm} stored=${d.volume_stored_mcm} MCM`);
+      log(bits.join("  "));
+    }
+  };
+  ws.onclose = async () => {
+    try {
+      const st = await jget(`/api/runs/${runId}/status`);
+      if (st.error) log("ERROR: " + st.error);
+      else log("done.");
+    } catch {}
+    $("run").disabled = false;
+    load(runId);
+  };
+  ws.onerror = () => { log("websocket dropped — polling instead"); poll(runId); };
+}
+
+async function poll(runId) {
+  for (;;) {
+    await new Promise(r => setTimeout(r, 1500));
+    let st; try { st = await jget(`/api/runs/${runId}/status`); } catch { continue; }
+    if (st.status === "done") { log("done."); break; }
+    if (st.status === "error") { log("ERROR: " + st.error); break; }
+  }
+  $("run").disabled = false;
+  load(runId);
+}
+
+// ---------------------------------------------------------------- load
+$("loadlast").onclick = async () => {
+  const r = await jget("/api/runs");
+  const runs = r.runs || r;
+  if (!runs.length) { log("no runs on disk"); return; }
+  load(runs[0].run_id || runs[0]);
+};
+
+async function load(runId) {
+  RUN = runId;
+  let d;
+  try { d = await jget(`/api/runs/${runId}`); } catch (e) { log("load failed: " + e.message); return; }
+  META = d.meta || d;
+  ENDHR = (META.time && META.time.end_hr) || ENDHR;
+
+  $("banner").style.display = META.is_fake ? "block" : "none";
+
+  const res = META.results || {};
+  const num = (v, dp = 2) => (v === undefined || v === null) ? "—" : Number(v).toFixed(dp);
+  $("results").innerHTML = `
+    <dt>Run</dt><dd>${META.run_id ?? "—"}</dd>
+    <dt>Peak discharge</dt><dd>${res.peak_discharge_cumecs ? Number(res.peak_discharge_cumecs).toLocaleString() + " m³/s" : "—"}</dd>
+    <dt>Max depth</dt><dd>${num(res.max_depth_m)} m</dd>
+    <dt>Max velocity</dt><dd>${num(res.max_velocity_ms)} m/s</dd>
+    <dt>Flooded area</dt><dd>${num(res.flood_area_km2)} km²</dd>
+    <dt>Released volume</dt><dd>${num(res.released_volume_mcm, 3)} MCM</dd>
+    <dt>Mass balance</dt><dd>${num(res.mass_balance_err_pct, 3)} %</dd>
+    <dt>Runtime</dt><dd>${num(res.runtime_s, 1)} s</dd>`;
+
+  const dem = META.dem || {}, sc = META.scenario || {};
+  $("prov").innerHTML = `
+    <dt>Engine</dt><dd>${META.engine ?? "—"}</dd>
+    <dt>DEM</dt><dd>${dem.source ?? "—"}</dd>
+    <dt>Bathymetry</dt><dd>${dem.bathymetry ?? "—"}</dd>
+    <dt>Conditioning</dt><dd style="font-size:12px">${dem.conditioning ?? "—"}</dd>
+    <dt>Failure mode</dt><dd>${sc.failure_mode ?? "—"}</dd>
+    <dt>Breach source</dt><dd style="font-size:12px">${sc.breach_param_source ?? "—"}</dd>`;
+
+  drawImpact(d.impact);
+  drawEvacuation(runId);
+  drawUncertainty(runId);
+  await drawHydro(runId);
+  await loadPacked(runId);
+}
+
+// ---------------------------------------------------------------- impact
+function drawImpact(impact) {
+  const t = $("settlements");
+  if (!impact || !impact.totals) { $("totals").textContent = "No impact table for this run."; t.innerHTML = ""; return; }
+  const to = impact.totals;
+  const parts = [
+    `<b>${to.settlements_affected ?? 0}</b> settlements`,
+    `<b>${(to.population_affected ?? 0).toLocaleString()}</b> people`
+  ];
+  if (to.roads_cut_km !== undefined) parts.push(`<b>${to.roads_cut_km}</b> km road cut`);
+  if (to.damage_inr_crore !== undefined) parts.push(`<b>₹${to.damage_inr_crore}</b> crore`);
+  $("totals").innerHTML = parts.join(" &middot; ") +
+    (to.damage_curve_source ? `<div class="muted" style="font-size:11px;margin-top:4px">${to.damage_curve_source}</div>` : "");
+
+  const rows = (impact.settlements || []).map(s => `
+    <tr><td>${s.name}</td>
+    <td class="num">${s.arrival_hr ?? "—"}</td>
+    <td class="num">${s.max_depth_m ?? "—"}</td>
+    <td class="num">${(s.population ?? 0).toLocaleString()}</td>
+    <td><span class="pill ${s.hazard_class}">${s.hazard_class ?? ""}</span></td></tr>`).join("");
+  t.innerHTML = `<tr><th>Settlement</th><th class="num">Arrival (hr)</th>
+    <th class="num">Depth (m)</th><th class="num">Population</th><th>Hazard</th></tr>${rows}`;
+}
+
+// ---------------------------------------------------------------- evacuation
+async function drawEvacuation(runId) {
+  const t = $("evac"), note = $("evacnote");
+  t.innerHTML = "";
+  let e;
+  try { e = await jget(`/api/runs/${runId}/evacuation`); }
+  catch { note.textContent = "No evacuation plan for this run (needs road geometry)."; return; }
+
+  const a = e.assumptions || {};
+  note.innerHTML = `${e.graph.nodes.toLocaleString()} road nodes · walking ${a.speed_kmh} km/h ` +
+    `· ${a.safety_margin_hr} hr safety margin · road impassable above ${a.dangerous_depth_m} m` +
+    `<div style="font-size:11px;margin-top:3px">${e.method}</div>`;
+
+  const rows = (e.settlements || []).map(p => {
+    if (p.status === "route_found") {
+      const tight = p.margin_hr < 1.0;
+      return `<tr><td>${p.name}</td>
+        <td class="num">${p.road_floods_at_hr}</td>
+        <td class="num">${p.walk_time_hr}</td>
+        <td class="num" ${tight ? 'style="color:var(--bad);font-weight:600"' : ""}>${p.margin_hr}</td>
+        <td class="num">${p.route_km}</td>
+        <td><span class="pill ${tight ? "significant" : "low"}">route found</span></td></tr>`;
+    }
+    if (p.status === "no_safe_route") {
+      return `<tr><td>${p.name}</td><td class="num">${p.road_floods_at_hr ?? "—"}</td>
+        <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+        <td><span class="pill extreme">assisted evacuation</span></td></tr>`;
+    }
+    return `<tr><td>${p.name}</td><td class="num">—</td><td class="num">—</td>
+      <td class="num">—</td><td class="num">—</td>
+      <td><span class="pill low">access open</span></td></tr>`;
+  }).join("");
+
+  t.innerHTML = `<tr><th>Settlement</th><th class="num">Road floods (hr)</th>
+    <th class="num">Walk (hr)</th><th class="num">Margin (hr)</th>
+    <th class="num">Route (km)</th><th>Status</th></tr>${rows}`;
+}
+
+// ---------------------------------------------------------------- uncertainty
+async function drawUncertainty(runId) {
+  const el = $("uncert");
+  let u;
+  try { u = await jget(`/api/runs/${runId}/uncertainty`); }
+  catch { el.textContent = "—"; return; }
+
+  const byReg = u.peak_discharge_cumecs_by_regression || {};
+  const rows = Object.entries(byReg)
+    .sort((a, b) => a[1] - b[1])
+    .map(([k, v]) => `<tr><td>${k}</td><td class="num">${Number(v).toLocaleString()}</td></tr>`)
+    .join("");
+
+  const env = u.peak_envelope_cumecs || [];
+  el.innerHTML =
+    `<div style="margin-bottom:6px">Our routed peak <b>${Number(u.routed_peak_cumecs).toLocaleString()} m³/s</b> ` +
+    `sits inside an empirical envelope of <b>${Number(env[0]).toLocaleString()}–${Number(env[1]).toLocaleString()}</b> m³/s ` +
+    `— a spread of <b>${u.envelope_ratio}×</b>. That spread is the honest uncertainty, not a defect.</div>` +
+    `<table><tr><th>Peak-outflow regression</th><th class="num">m³/s</th></tr>${rows}</table>` +
+    `<div style="font-size:11px;margin-top:6px">${u.note || ""}</div>`;
+}
+
+// ---------------------------------------------------------------- hydrograph
+async function drawHydro(runId) {
+  const c = $("hydro"), x = c.getContext("2d");
+  x.clearRect(0, 0, c.width, c.height);
+  let h; try { h = await jget(`/api/runs/${runId}/hydrograph`); } catch { return; }
+  const T = h.time_hr || h.t || [], Q = h.discharge_cumecs || h.q || [];
+  if (!T.length) return;
+
+  const pad = 34, W = c.width - pad * 2, H = c.height - pad * 2;
+  const qmax = Math.max(...Q) || 1, tmax = Math.max(...T) || 1;
+
+  x.strokeStyle = "#d4dae0"; x.beginPath();
+  x.moveTo(pad, pad); x.lineTo(pad, pad + H); x.lineTo(pad + W, pad + H); x.stroke();
+
+  x.strokeStyle = "#1256a0"; x.lineWidth = 2; x.beginPath();
+  T.forEach((t, i) => {
+    const px = pad + (t / tmax) * W, py = pad + H - (Q[i] / qmax) * H;
+    i ? x.lineTo(px, py) : x.moveTo(px, py);
+  });
+  x.stroke();
+
+  x.fillStyle = "#5b6570"; x.font = "11px system-ui";
+  x.fillText(Math.round(qmax).toLocaleString() + " m³/s", 2, pad + 4);
+  x.fillText("0", 2, pad + H + 4);
+  x.fillText(tmax.toFixed(1) + " hr", pad + W - 30, pad + H + 14);
+}
+
+// ---------------------------------------------------------------- flood map
+async function loadPacked(runId) {
+  const img = new Image();
+  img.onload = () => {
+    const off = document.createElement("canvas");
+    off.width = img.width; off.height = img.height;
+    off.getContext("2d").drawImage(img, 0, 0);
+    PACKED = off.getContext("2d").getImageData(0, 0, img.width, img.height);
+    $("time").value = 100;
+    renderFlood(1.0);
+  };
+  img.onerror = () => {
+    const c = $("map"), x = c.getContext("2d");
+    x.clearRect(0, 0, c.width, c.height);
+    x.fillStyle = "#5b6570"; x.font = "13px system-ui";
+    x.fillText("No packed.png for this run.", 12, 24);
+    PACKED = null;
+  };
+  img.src = `${API}/api/runs/${runId}/file/packed.png`;
+}
+
+$("time").oninput = () => renderFlood($("time").value / 100);
+
+function renderFlood(frac) {
+  if (!PACKED) return;
+  const c = $("map"), x = c.getContext("2d");
+  const w = PACKED.width, h = PACKED.height;
+
+  // Fit the grid into the canvas, preserving aspect.
+  const scale = Math.min(600 / w, 560 / h);
+  c.width = Math.max(Math.round(w * scale), 1);
+  c.height = Math.max(Math.round(h * scale), 1);
+
+  const out = x.createImageData(w, h);
+  const src = PACKED.data, dst = out.data;
+  const tNow = frac * ENDHR;
+  $("timelab").textContent = `t = ${tNow.toFixed(2)} hr of ${ENDHR}`;
+
+  for (let i = 0; i < w * h; i++) {
+    const o = i * 4;
+    const arrival = (src[o] / 255) * ENDHR;   // R
+    const depth01 = src[o + 2] / 255;         // B
+    const everWet = src[o + 3] > 0;           // A
+
+    let r = 245, g = 246, b = 248;            // dry ground
+    if (everWet && arrival <= tNow && depth01 > 0) {
+      // deeper -> darker blue
+      r = Math.round(190 - 170 * depth01);
+      g = Math.round(215 - 130 * depth01);
+      b = Math.round(245 - 60 * depth01);
+    }
+    dst[o] = r; dst[o + 1] = g; dst[o + 2] = b; dst[o + 3] = 255;
+  }
+
+  const tmp = document.createElement("canvas");
+  tmp.width = w; tmp.height = h;
+  tmp.getContext("2d").putImageData(out, 0, 0);
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, c.width, c.height);
+  x.drawImage(tmp, 0, 0, c.width, c.height);
+}
+
+function dl(fmt) {
+  if (!RUN) { log("load a run first"); return; }
+  window.location = `${API}/api/runs/${RUN}/export?format=${fmt}`;
+}
+</script>
+</body>
+</html>

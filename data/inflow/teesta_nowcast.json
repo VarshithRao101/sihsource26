@@ -1,0 +1,310 @@
+{
+  "site": "teesta",
+  "window": [
+    "2023-08-21",
+    "2023-10-05"
+  ],
+  "catchment": {
+    "area_km2": 2780.28,
+    "cells": 85897,
+    "snapped_lonlat": [
+      88.65192867053179,
+      27.597064064658262
+    ],
+    "scout_cellsize_m": 179.9,
+    "bbox": [
+      88.03391767552948,
+      27.060707781765277,
+      89.25168232447051,
+      28.139892218234724
+    ]
+  },
+  "method": {
+    "rainfall": "UCSB-CHG/CHIRPS/DAILY",
+    "runoff": "SCS curve number (USDA SCS 1972, NEH-4)",
+    "routing": "single linear reservoir (Nash 1957)",
+    "curve_number": 75.0,
+    "k_days": 1.5
+  },
+  "assumptions": "Curve number and the routing constant are assumptions, not calibrated values - no observed inflow series exists for this dam to calibrate against. Treat the magnitude as indicative and the TIMING and RELATIVE changes as the useful signal.",
+  "series": [
+    {
+      "date": "2023-08-21",
+      "rain_mm": 28.69,
+      "runoff_mm": 1.43,
+      "inflow_cumecs": 30.74
+    },
+    {
+      "date": "2023-08-22",
+      "rain_mm": 32.26,
+      "runoff_mm": 2.35,
+      "inflow_cumecs": 60.61
+    },
+    {
+      "date": "2023-08-23",
+      "rain_mm": 27.6,
+      "runoff_mm": 1.19,
+      "inflow_cumecs": 45.81
+    },
+    {
+      "date": "2023-08-24",
+      "rain_mm": 12.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 15.27
+    },
+    {
+      "date": "2023-08-25",
+      "rain_mm": 1.76,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 5.09
+    },
+    {
+      "date": "2023-08-26",
+      "rain_mm": 1.17,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 1.7
+    },
+    {
+      "date": "2023-08-27",
+      "rain_mm": 8.05,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.57
+    },
+    {
+      "date": "2023-08-28",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.19
+    },
+    {
+      "date": "2023-08-29",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.06
+    },
+    {
+      "date": "2023-08-30",
+      "rain_mm": 0.18,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.02
+    },
+    {
+      "date": "2023-08-31",
+      "rain_mm": 0.15,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.01
+    },
+    {
+      "date": "2023-09-01",
+      "rain_mm": 1.42,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-02",
+      "rain_mm": 7.61,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-03",
+      "rain_mm": 7.08,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-04",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-05",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-06",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-07",
+      "rain_mm": 2.95,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-08",
+      "rain_mm": 5.58,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-09",
+      "rain_mm": 1.52,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-10",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-11",
+      "rain_mm": 2.93,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-12",
+      "rain_mm": 2.85,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-13",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-14",
+      "rain_mm": 0.05,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-15",
+      "rain_mm": 0.04,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-16",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-17",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-18",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-19",
+      "rain_mm": 0.06,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-20",
+      "rain_mm": 9.36,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-21",
+      "rain_mm": 4.85,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-22",
+      "rain_mm": 1.16,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-23",
+      "rain_mm": 3.5,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-24",
+      "rain_mm": 0.56,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-25",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-26",
+      "rain_mm": 1.19,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-27",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-28",
+      "rain_mm": 0.0,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-29",
+      "rain_mm": 1.1,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.0
+    },
+    {
+      "date": "2023-09-30",
+      "rain_mm": 25.08,
+      "runoff_mm": 0.72,
+      "inflow_cumecs": 15.35
+    },
+    {
+      "date": "2023-10-01",
+      "rain_mm": 6.87,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 5.12
+    },
+    {
+      "date": "2023-10-02",
+      "rain_mm": 4.96,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 1.71
+    },
+    {
+      "date": "2023-10-03",
+      "rain_mm": 11.25,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.57
+    },
+    {
+      "date": "2023-10-04",
+      "rain_mm": 2.31,
+      "runoff_mm": 0.0,
+      "inflow_cumecs": 0.19
+    }
+  ],
+  "summary": {
+    "days": 45,
+    "total_rain_mm": 216.1,
+    "max_daily_rain_mm": 32.3,
+    "peak_inflow_cumecs": 60.6,
+    "total_inflow_mcm": 15.81,
+    "inflow_as_pct_of_capacity": 316.2
+  }
+}

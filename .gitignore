@@ -1,0 +1,74 @@
+# generated runs - never commit these, they are large and regenerable
+outputs/
+
+# raw downloads - shared via drive, not git
+data/**/*.tif
+data/**/*.tiff
+data/**/*.nc
+data/**/*.zip
+data/**/*.osm.pbf
+data/**/*.hgt
+
+# large public reference downloads - fetch your own, see data/SOURCES.md
+data/**/*.shp
+data/**/*.dbf
+data/**/*.shx
+data/**/*.sbn
+data/**/*.sbx
+data/**/*.prj
+data/**/*.cpg
+data/**/*.pdf
+
+# but keep the folder structure and small vector files
+!data/**/.gitkeep
+!data/**/*.geojson
+
+# downloaded simulation engines - 1.7 GB, everyone installs their own
+DualSPHysics_v5.4/
+Delft3D*/
+D-Flow*/
+
+# simulation engine working directories
+modules/02_sph/cases/**/data/
+modules/02_sph/cases/**/out/
+modules/02_sph/cases/**/run.log
+modules/02_sph/cases/**/*.bi4
+modules/02_sph/cases/**/*.vtk
+modules/03_delft3d/runs/**/*.nc
+modules/03_delft3d/runs/**/DFM_OUTPUT*/
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+.venv/
+venv/
+
+# node
+node_modules/
+dist/
+.vite/
+*.log
+
+# secrets - never commit
+.env
+.env.*
+!.env.example          # the template is the one env file that IS committed
+secrets/
+*.pem
+*credentials*.json
+service-account*.json
+
+# local virtualenv
+.venv/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# credential files
+secrets/

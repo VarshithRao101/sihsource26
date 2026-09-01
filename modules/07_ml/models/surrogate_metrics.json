@@ -1,0 +1,11 @@
+{
+  "n_train": 39,
+  "n_test": 9,
+  "device": "cuda",
+  "depth_mae_m_wet": 1.1104038953781128,
+  "depth_rmse_m_wet": 1.7966567277908325,
+  "arrival_mae_hr_wet": 0.2486780285835266,
+  "extent_csi": 0.9092,
+  "train_seconds": 158.7,
+  "target": "the fast solver's own output, NOT observed floods"
+}

@@ -1,0 +1,75 @@
+{
+  "schema_version": "2.0",
+  "run_id": "surrogate_train_fast_045",
+  "created_utc": "2026-08-31T04:03:57Z",
+  "engine": "fast",
+  "is_fake": false,
+  "site": {
+    "name": "Surrogate Training Site",
+    "river": "Teesta",
+    "state": "Sikkim",
+    "lat": 27.598679602948245,
+    "lon": 88.65011390179544,
+    "dam_height_m": 42.726293551424305,
+    "reservoir_capacity_mcm": 28.2415852709062,
+    "source": "user"
+  },
+  "scenario": {
+    "failure_mode": "overtopping",
+    "reservoir_level_frac": 0.8396525255893018,
+    "breach_width_m": 85.0,
+    "breach_bottom_width_m": 42.2,
+    "breach_side_slope": 1.0,
+    "formation_time_hr": 0.5507,
+    "breach_param_source": "Froehlich (2008), ASCE J. Hydraul. Eng. 134(12)",
+    "storage_curve": "power law, k = 2.7",
+    "inflow_cumecs": 0.0,
+    "fingerprint": "86333a114b81"
+  },
+  "domain": {
+    "bbox": [
+      88.460447,
+      27.393294,
+      88.70813,
+      27.643646
+    ],
+    "crs": "EPSG:4326",
+    "cellsize_m": 149.757,
+    "nx": 163,
+    "ny": 186,
+    "reach_length_km": 30.0
+  },
+  "dem": {
+    "source": "COP30",
+    "native_resolution_m": 30.0,
+    "bathymetry": "estimated",
+    "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 205 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped"
+  },
+  "time": {
+    "start_hr": 0.0,
+    "end_hr": 8.0,
+    "output_step_hr": 0.25
+  },
+  "results": {
+    "peak_discharge_cumecs": 10153.2,
+    "max_depth_m": 48.1,
+    "max_velocity_ms": 7.85,
+    "flood_area_km2": 4.31,
+    "released_volume_mcm": 17.598,
+    "runtime_s": 3.49,
+    "wall_time_s": 3.54,
+    "mass_balance_err_pct": -0.0,
+    "solver_steps": 8668,
+    "min_timestep_s": 0.5,
+    "scheme": "swe",
+    "volume_in_mcm": 17.5699,
+    "volume_out_mcm": 0.0,
+    "volume_stored_mcm": 17.5699,
+    "froude_limited_cells": 0
+  },
+  "provenance": {
+    "module": "04_backend",
+    "code_version": "",
+    "notes": ""
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "note": "Breach parameters carry roughly a factor-of-two uncertainty on peak flow (Froehlich 2008 reports the scatter explicitly). These are the independent estimates, unaveraged. Our routed peak is one point inside this envelope, not the truth.",
+  "routed_peak_cumecs": 16505.2,
+  "breach_width_m_by_regression": {
+    "froehlich2008": 80.6,
+    "vonthun1990": 283.3,
+    "macdonald1984": 45.7
+  },
+  "formation_time_hr_by_regression": {
+    "froehlich2008": 0.2261,
+    "vonthun1990": 0.6643,
+    "macdonald1984": 1.667
+  },
+  "peak_discharge_cumecs_by_regression": {
+    "froehlich1995": 20831.7,
+    "usbr1982": 81003.6,
+    "hagen1982": 19017.2,
+    "costa1985": 6470.6
+  },
+  "peak_envelope_cumecs": [
+    6470.6,
+    81003.6
+  ],
+  "envelope_ratio": 12.52,
+  "dem_vertical_uncertainty_m": {
+    "FABDEM": 1.4,
+    "COP30": 1.7,
+    "SRTM": 6.0,
+    "note": "RMSE figures from Hawker et al. (2022), Environmental Research Letters 17(2), 024016 for FABDEM/COP30, and the SRTM mission specification for SRTM. Bathymetry is not measured at all."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "site": "teesta",
+  "collection": "COPERNICUS/S1_GRD",
+  "polarisation": "VV",
+  "pre_window": [
+    "2023-09-01",
+    "2023-09-28"
+  ],
+  "post_window": [
+    "2023-10-04",
+    "2023-10-22"
+  ],
+  "n_scenes_pre": 2,
+  "n_scenes_post": 1,
+  "orbit_pass": "DESCENDING",
+  "reducer": "median"
+}

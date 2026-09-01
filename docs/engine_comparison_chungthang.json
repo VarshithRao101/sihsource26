@@ -1,0 +1,75 @@
+{
+  "site": {
+    "capacity_mcm": 5.0,
+    "dam_height_m": 60.0,
+    "failure_mode": "overtopping"
+  },
+  "breach": {
+    "source": "Froehlich (2008), ASCE J. Hydraul. Eng. 134(12)",
+    "bottom_width_m": 5.8,
+    "average_width_m": 57.6,
+    "formation_time_hr": 0.209
+  },
+  "rows": [
+    {
+      "engine": "level-pool routing (shared.hydro)",
+      "measures": "reservoir drawdown through a growing breach, over hours",
+      "peak_cumecs": 9765.6,
+      "note": "released 4.88 MCM over 12 h"
+    },
+    {
+      "engine": "weir equation, breach fully open",
+      "measures": "instantaneous discharge through the final breach",
+      "peak_cumecs": 35221.6,
+      "note": "the fair comparison for SPH - no breach growth, no drawdown"
+    },
+    {
+      "engine": "SPH (DualSPHysics v5.4, GPU)",
+      "measures": "near-field particle flow through the open breach",
+      "peak_cumecs": 37046.6,
+      "note": "99,000 particles at dp=2.0 m, 60 s simulated; 5% from the weir equation"
+    },
+    {
+      "engine": "empirical regression: costa1985",
+      "measures": "peak outflow fitted to documented historical failures",
+      "peak_cumecs": 3565.0,
+      "note": "independent of our hydraulics entirely"
+    },
+    {
+      "engine": "empirical regression: froehlich1995",
+      "measures": "peak outflow fitted to documented historical failures",
+      "peak_cumecs": 9210.7,
+      "note": "independent of our hydraulics entirely"
+    },
+    {
+      "engine": "empirical regression: hagen1982",
+      "measures": "peak outflow fitted to documented historical failures",
+      "peak_cumecs": 9353.1,
+      "note": "independent of our hydraulics entirely"
+    },
+    {
+      "engine": "empirical regression: usbr1982",
+      "measures": "peak outflow fitted to documented historical failures",
+      "peak_cumecs": 37206.0,
+      "note": "independent of our hydraulics entirely"
+    },
+    {
+      "engine": "fast solver, 2D shallow water",
+      "measures": "inundation over real terrain; peak is its inflow",
+      "peak_cumecs": 9765.6,
+      "note": "5.42 km2 flooded, mass error -0.4122%, 28.96 s runtime"
+    },
+    {
+      "engine": "Delft3D FM",
+      "measures": "far-field routing",
+      "peak_cumecs": null,
+      "note": "NOT INSTALLED - Deltares registration pending. Reported as absent, not estimated."
+    }
+  ],
+  "spread": {
+    "min_cumecs": 3565.0,
+    "max_cumecs": 37206.0,
+    "ratio": 10.44
+  },
+  "reading": "These rows are NOT four estimates of one quantity. Instantaneous breach discharge is necessarily larger than a routed peak, and an empirical regression predicts a different thing again. Compare like with like: SPH against the weir equation, routed against the regressions."
+}

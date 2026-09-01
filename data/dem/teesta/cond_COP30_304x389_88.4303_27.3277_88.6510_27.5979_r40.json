@@ -1,0 +1,15 @@
+{
+  "site": "teesta",
+  "source": "COP30",
+  "bbox": [
+    88.43029283585277,
+    27.32766819604207,
+    88.70720065278952,
+    27.64283542260859
+  ],
+  "nx": 304,
+  "ny": 389,
+  "cellsize_m": 89.97164536007159,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 435 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

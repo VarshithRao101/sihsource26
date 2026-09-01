@@ -1,0 +1,15 @@
+{
+  "dam_height_m": 60.0,
+  "water_depth_m": 55.0,
+  "breach_bottom_width_m": 57.6,
+  "breach_side_slope": 1.0,
+  "breach_depth_m": 55.0,
+  "reservoir_length_m": 120.0,
+  "channel_width_m": 120.0,
+  "downstream_length_m": 150.0,
+  "wall_thickness_m": 8.0,
+  "dp": 2.0,
+  "time_max_s": 60.0,
+  "time_out_s": 0.5,
+  "gpu": true
+}

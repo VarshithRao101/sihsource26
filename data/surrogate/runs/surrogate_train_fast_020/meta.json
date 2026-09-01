@@ -1,0 +1,75 @@
+{
+  "schema_version": "2.0",
+  "run_id": "surrogate_train_fast_020",
+  "created_utc": "2026-08-31T04:02:33Z",
+  "engine": "fast",
+  "is_fake": false,
+  "site": {
+    "name": "Surrogate Training Site",
+    "river": "Teesta",
+    "state": "Sikkim",
+    "lat": 27.598679602948245,
+    "lon": 88.65011390179544,
+    "dam_height_m": 39.78407584454918,
+    "reservoir_capacity_mcm": 18.60528745265377,
+    "source": "user"
+  },
+  "scenario": {
+    "failure_mode": "overtopping",
+    "reservoir_level_frac": 0.7445380844024828,
+    "breach_width_m": 66.8,
+    "breach_bottom_width_m": 27.0,
+    "breach_side_slope": 1.0,
+    "formation_time_hr": 0.4081,
+    "breach_param_source": "Froehlich (2008), ASCE J. Hydraul. Eng. 134(12)",
+    "storage_curve": "power law, k = 2.7",
+    "inflow_cumecs": 0.0,
+    "fingerprint": "a561a64b2991"
+  },
+  "domain": {
+    "bbox": [
+      88.460447,
+      27.393294,
+      88.70813,
+      27.643646
+    ],
+    "crs": "EPSG:4326",
+    "cellsize_m": 149.757,
+    "nx": 163,
+    "ny": 186,
+    "reach_length_km": 30.0
+  },
+  "dem": {
+    "source": "COP30",
+    "native_resolution_m": 30.0,
+    "bathymetry": "estimated",
+    "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 205 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped"
+  },
+  "time": {
+    "start_hr": 0.0,
+    "end_hr": 8.0,
+    "output_step_hr": 0.25
+  },
+  "results": {
+    "peak_discharge_cumecs": 5879.7,
+    "max_depth_m": 45.85,
+    "max_velocity_ms": 5.2,
+    "flood_area_km2": 2.76,
+    "released_volume_mcm": 8.37,
+    "runtime_s": 3.94,
+    "wall_time_s": 4.0,
+    "mass_balance_err_pct": 0.0,
+    "solver_steps": 8569,
+    "min_timestep_s": 0.5,
+    "scheme": "swe",
+    "volume_in_mcm": 8.3474,
+    "volume_out_mcm": 0.0,
+    "volume_stored_mcm": 8.3474,
+    "froude_limited_cells": 0
+  },
+  "provenance": {
+    "module": "04_backend",
+    "code_version": "",
+    "notes": ""
+  }
+}

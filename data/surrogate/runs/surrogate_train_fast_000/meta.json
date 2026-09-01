@@ -1,0 +1,75 @@
+{
+  "schema_version": "2.0",
+  "run_id": "surrogate_train_fast_000",
+  "created_utc": "2026-08-31T04:01:25Z",
+  "engine": "fast",
+  "is_fake": false,
+  "site": {
+    "name": "Surrogate Training Site",
+    "river": "Teesta",
+    "state": "Sikkim",
+    "lat": 27.598679602948245,
+    "lon": 88.65011390179544,
+    "dam_height_m": 84.03923930490504,
+    "reservoir_capacity_mcm": 53.3498773158524,
+    "source": "user"
+  },
+  "scenario": {
+    "failure_mode": "overtopping",
+    "reservoir_level_frac": 0.7200172017982587,
+    "breach_width_m": 93.7,
+    "breach_bottom_width_m": 9.7,
+    "breach_side_slope": 1.0,
+    "formation_time_hr": 0.3127,
+    "breach_param_source": "Froehlich (2008), ASCE J. Hydraul. Eng. 134(12)",
+    "storage_curve": "power law, k = 2.7",
+    "inflow_cumecs": 0.0,
+    "fingerprint": "8f2c24a338d6"
+  },
+  "domain": {
+    "bbox": [
+      88.460447,
+      27.393294,
+      88.70813,
+      27.643646
+    ],
+    "crs": "EPSG:4326",
+    "cellsize_m": 149.757,
+    "nx": 163,
+    "ny": 186,
+    "reach_length_km": 30.0
+  },
+  "dem": {
+    "source": "COP30",
+    "native_resolution_m": 30.0,
+    "bathymetry": "estimated",
+    "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 205 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped"
+  },
+  "time": {
+    "start_hr": 0.0,
+    "end_hr": 8.0,
+    "output_step_hr": 0.25
+  },
+  "results": {
+    "peak_discharge_cumecs": 17722.3,
+    "max_depth_m": 51.74,
+    "max_velocity_ms": 10.37,
+    "flood_area_km2": 5.29,
+    "released_volume_mcm": 21.88,
+    "runtime_s": 3.37,
+    "wall_time_s": 3.52,
+    "mass_balance_err_pct": 0.0,
+    "solver_steps": 8723,
+    "min_timestep_s": 0.5,
+    "scheme": "swe",
+    "volume_in_mcm": 21.8259,
+    "volume_out_mcm": 0.0,
+    "volume_stored_mcm": 21.8259,
+    "froude_limited_cells": 0
+  },
+  "provenance": {
+    "module": "04_backend",
+    "code_version": "",
+    "notes": ""
+  }
+}

@@ -1,0 +1,434 @@
+[
+ {
+  "i": 0,
+  "reservoir_level_frac": 0.7200172017982587,
+  "capacity_mcm": 53.3498773158524,
+  "dam_height_m": 84.03923930490504,
+  "peak_cumecs": 17722.3,
+  "flood_area_km2": 5.29,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 1,
+  "reservoir_level_frac": 0.9094657734445527,
+  "capacity_mcm": 30.87032229873448,
+  "dam_height_m": 98.40180843519884,
+  "peak_cumecs": 30803.4,
+  "flood_area_km2": 5.49,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 2,
+  "reservoir_level_frac": 0.606312388016374,
+  "capacity_mcm": 26.008262134816466,
+  "dam_height_m": 45.166075199613296,
+  "peak_cumecs": 4789.2,
+  "flood_area_km2": 1.44,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 3,
+  "reservoir_level_frac": 0.7952255080932155,
+  "capacity_mcm": 4.303676222639481,
+  "dam_height_m": 69.51801996515731,
+  "peak_cumecs": 7729.6,
+  "flood_area_km2": 0.25,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 4,
+  "reservoir_level_frac": 0.6233786684611768,
+  "capacity_mcm": 43.819600869111305,
+  "dam_height_m": 110.08932727245269,
+  "peak_cumecs": 19629.2,
+  "flood_area_km2": 3.05,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 5,
+  "reservoir_level_frac": 0.6469305060421742,
+  "capacity_mcm": 21.744782400588488,
+  "dam_height_m": 26.13861183883654,
+  "peak_cumecs": 3043.1,
+  "flood_area_km2": 1.41,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 6,
+  "reservoir_level_frac": 0.749371367674266,
+  "capacity_mcm": 24.874452070685972,
+  "dam_height_m": 107.34817645000962,
+  "peak_cumecs": 22991.0,
+  "flood_area_km2": 3.03,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 7,
+  "reservoir_level_frac": 0.6047923579122775,
+  "capacity_mcm": 15.103987714044559,
+  "dam_height_m": 54.452890019329644,
+  "peak_cumecs": 4310.9,
+  "flood_area_km2": 0.34,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 8,
+  "reservoir_level_frac": 0.7843621341101057,
+  "capacity_mcm": 40.55214934587106,
+  "dam_height_m": 114.93227772798245,
+  "peak_cumecs": 31565.5,
+  "flood_area_km2": 5.34,
+  "mass_err_pct": -0.0203
+ },
+ {
+  "i": 9,
+  "reservoir_level_frac": 0.936265101896361,
+  "capacity_mcm": 29.515260753958366,
+  "dam_height_m": 102.83729708160469,
+  "peak_cumecs": 33986.6,
+  "flood_area_km2": 5.52,
+  "mass_err_pct": -0.0146
+ },
+ {
+  "i": 10,
+  "reservoir_level_frac": 0.9687874985407929,
+  "capacity_mcm": 45.558647185296124,
+  "dam_height_m": 30.1264641617958,
+  "peak_cumecs": 11528.0,
+  "flood_area_km2": 8.03,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 11,
+  "reservoir_level_frac": 0.9251003602342965,
+  "capacity_mcm": 50.9293120763769,
+  "dam_height_m": 57.83808669762203,
+  "peak_cumecs": 22950.7,
+  "flood_area_km2": 8.3,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 12,
+  "reservoir_level_frac": 0.8414852478618405,
+  "capacity_mcm": 58.07792183805082,
+  "dam_height_m": 78.01888966369599,
+  "peak_cumecs": 26387.1,
+  "flood_area_km2": 8.25,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 13,
+  "reservoir_level_frac": 0.5629263626263147,
+  "capacity_mcm": 6.809080217764284,
+  "dam_height_m": 117.02070543792699,
+  "peak_cumecs": 3374.8,
+  "flood_area_km2": 0.16,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 14,
+  "reservoir_level_frac": 0.6320639153669423,
+  "capacity_mcm": 48.346326815280655,
+  "dam_height_m": 79.50974196427654,
+  "peak_cumecs": 12262.9,
+  "flood_area_km2": 3.09,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 15,
+  "reservoir_level_frac": 0.6745275191402547,
+  "capacity_mcm": 39.301812447168956,
+  "dam_height_m": 91.36820400274992,
+  "peak_cumecs": 16505.2,
+  "flood_area_km2": 3.09,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 16,
+  "reservoir_level_frac": 0.826002082876774,
+  "capacity_mcm": 2.600866716058112,
+  "dam_height_m": 85.39651553216622,
+  "peak_cumecs": 5281.1,
+  "flood_area_km2": 0.16,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 17,
+  "reservoir_level_frac": 0.8214209242177095,
+  "capacity_mcm": 56.281088861817345,
+  "dam_height_m": 51.760254714566344,
+  "peak_cumecs": 16513.5,
+  "flood_area_km2": 7.96,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 18,
+  "reservoir_level_frac": 0.9472680062120145,
+  "capacity_mcm": 57.40383386231061,
+  "dam_height_m": 65.4603783307902,
+  "peak_cumecs": 29301.3,
+  "flood_area_km2": 8.66,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 19,
+  "reservoir_level_frac": 0.7162015250235021,
+  "capacity_mcm": 9.601283749166406,
+  "dam_height_m": 105.9989483178913,
+  "peak_cumecs": 15905.1,
+  "flood_area_km2": 0.27,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 20,
+  "reservoir_level_frac": 0.7445380844024828,
+  "capacity_mcm": 18.60528745265377,
+  "dam_height_m": 39.78407584454918,
+  "peak_cumecs": 5879.7,
+  "flood_area_km2": 2.76,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 21,
+  "reservoir_level_frac": 0.6693485269207334,
+  "capacity_mcm": 1.2824129680159628,
+  "dam_height_m": 35.492315130147425,
+  "peak_cumecs": 1249.9,
+  "flood_area_km2": 0.16,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 22,
+  "reservoir_level_frac": 0.7678050414948179,
+  "capacity_mcm": 11.411491727875074,
+  "dam_height_m": 88.02331177095697,
+  "peak_cumecs": 12544.0,
+  "flood_area_km2": 0.81,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 23,
+  "reservoir_level_frac": 0.7318218025428742,
+  "capacity_mcm": 27.200331759082164,
+  "dam_height_m": 74.059948690485,
+  "peak_cumecs": 12094.0,
+  "flood_area_km2": 3.03,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 24,
+  "reservoir_level_frac": 0.8509777381180524,
+  "capacity_mcm": 49.44273868203538,
+  "dam_height_m": 50.60836114110142,
+  "peak_cumecs": 16389.5,
+  "flood_area_km2": 7.89,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 25,
+  "reservoir_level_frac": 0.5915467420089007,
+  "capacity_mcm": 51.68959537735222,
+  "dam_height_m": 34.66220282851699,
+  "peak_cumecs": 5131.5,
+  "flood_area_km2": 2.92,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 26,
+  "reservoir_level_frac": 0.9996501564583812,
+  "capacity_mcm": 38.62736507162102,
+  "dam_height_m": 72.47042164716446,
+  "peak_cumecs": 30264.0,
+  "flood_area_km2": 8.37,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 27,
+  "reservoir_level_frac": 0.9895861179308707,
+  "capacity_mcm": 54.300696897199295,
+  "dam_height_m": 63.05983731763603,
+  "peak_cumecs": 30115.2,
+  "flood_area_km2": 8.72,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 28,
+  "reservoir_level_frac": 0.8792849033035692,
+  "capacity_mcm": 23.230686793896517,
+  "dam_height_m": 56.22242430487101,
+  "peak_cumecs": 13511.2,
+  "flood_area_km2": 4.17,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 29,
+  "reservoir_level_frac": 0.6371129349191113,
+  "capacity_mcm": 34.83377774487216,
+  "dam_height_m": 110.19915055283253,
+  "peak_cumecs": 19536.4,
+  "flood_area_km2": 2.98,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 30,
+  "reservoir_level_frac": 0.5591502345286123,
+  "capacity_mcm": 37.68587926690119,
+  "dam_height_m": 119.26837754129599,
+  "peak_cumecs": 16873.2,
+  "flood_area_km2": 2.22,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 31,
+  "reservoir_level_frac": 0.8890980321277356,
+  "capacity_mcm": 14.13856985519245,
+  "dam_height_m": 93.26026386636958,
+  "peak_cumecs": 21308.3,
+  "flood_area_km2": 2.98,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 32,
+  "reservoir_level_frac": 0.9785262381137065,
+  "capacity_mcm": 59.55284144878824,
+  "dam_height_m": 44.72226617934821,
+  "peak_cumecs": 20972.6,
+  "flood_area_km2": 8.59,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 33,
+  "reservoir_level_frac": 0.7903600394773469,
+  "capacity_mcm": 16.77865670353607,
+  "dam_height_m": 27.889838278102783,
+  "peak_cumecs": 4417.1,
+  "flood_area_km2": 2.78,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 34,
+  "reservoir_level_frac": 0.6883652176735745,
+  "capacity_mcm": 22.51314955838855,
+  "dam_height_m": 113.75512612210233,
+  "peak_cumecs": 19090.2,
+  "flood_area_km2": 2.27,
+  "mass_err_pct": -0.0228
+ },
+ {
+  "i": 35,
+  "reservoir_level_frac": 0.6572814550378112,
+  "capacity_mcm": 36.61701514912874,
+  "dam_height_m": 75.35789247262373,
+  "peak_cumecs": 11218.6,
+  "flood_area_km2": 3.03,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 36,
+  "reservoir_level_frac": 0.80692259303638,
+  "capacity_mcm": 19.47257614220157,
+  "dam_height_m": 48.18101079339457,
+  "peak_cumecs": 8694.3,
+  "flood_area_km2": 3.03,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 37,
+  "reservoir_level_frac": 0.5750035540859196,
+  "capacity_mcm": 32.87344764412364,
+  "dam_height_m": 62.36975746604723,
+  "peak_cumecs": 6110.5,
+  "flood_area_km2": 2.11,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 38,
+  "reservoir_level_frac": 0.8983093002108119,
+  "capacity_mcm": 33.94216442642341,
+  "dam_height_m": 66.68527559596411,
+  "peak_cumecs": 20337.5,
+  "flood_area_km2": 5.4,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 39,
+  "reservoir_level_frac": 0.8625073242322474,
+  "capacity_mcm": 12.531135940403384,
+  "dam_height_m": 32.286614419946545,
+  "peak_cumecs": 5412.9,
+  "flood_area_km2": 2.76,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 40,
+  "reservoir_level_frac": 0.6970249346890168,
+  "capacity_mcm": 4.983846774393055,
+  "dam_height_m": 94.75193617638959,
+  "peak_cumecs": 7968.1,
+  "flood_area_km2": 0.16,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 41,
+  "reservoir_level_frac": 0.8774896691788912,
+  "capacity_mcm": 10.378133918583202,
+  "dam_height_m": 97.01807747327565,
+  "peak_cumecs": 19818.4,
+  "flood_area_km2": 1.55,
+  "mass_err_pct": -0.047
+ },
+ {
+  "i": 42,
+  "reservoir_level_frac": 0.702706107676475,
+  "capacity_mcm": 47.128965965273814,
+  "dam_height_m": 82.01334511988694,
+  "peak_cumecs": 15643.4,
+  "flood_area_km2": 4.33,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 43,
+  "reservoir_level_frac": 0.5848580044164826,
+  "capacity_mcm": 41.628009637612,
+  "dam_height_m": 60.37504615890648,
+  "peak_cumecs": 6970.9,
+  "flood_area_km2": 2.85,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 44,
+  "reservoir_level_frac": 0.9208122288383901,
+  "capacity_mcm": 17.685413665305077,
+  "dam_height_m": 100.82667037065752,
+  "peak_cumecs": 28055.9,
+  "flood_area_km2": 3.16,
+  "mass_err_pct": -0.0518
+ },
+ {
+  "i": 45,
+  "reservoir_level_frac": 0.8396525255893018,
+  "capacity_mcm": 28.2415852709062,
+  "dam_height_m": 42.726293551424305,
+  "peak_cumecs": 10153.2,
+  "flood_area_km2": 4.31,
+  "mass_err_pct": -0.0
+ },
+ {
+  "i": 46,
+  "reservoir_level_frac": 0.9582957509409927,
+  "capacity_mcm": 7.442548934099184,
+  "dam_height_m": 37.921590258779084,
+  "peak_cumecs": 6268.2,
+  "flood_area_km2": 1.35,
+  "mass_err_pct": 0.0
+ },
+ {
+  "i": 47,
+  "reservoir_level_frac": 0.7581746693621708,
+  "capacity_mcm": 44.58925587064564,
+  "dam_height_m": 89.446974935373,
+  "peak_cumecs": 20599.0,
+  "flood_area_km2": 5.23,
+  "mass_err_pct": -0.0
+ }
+]

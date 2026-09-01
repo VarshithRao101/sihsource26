@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<case>
+    <casedef>
+        <constantsdef>
+            <gravity x="0" y="0" z="-9.81" comment="Gravitational acceleration" units_comment="m/s^2" />
+            <rhop0 value="1000" comment="Reference density of the fluid" units_comment="kg/m^3" />
+            <rhopgradient value="2" comment="Initial density gradient 1:Rhop0, 2:Water column, 3:Max. water height" />
+            <hswl value="0" auto="true" comment="Maximum still water level to calculate speedofsound" units_comment="metres (m)" />
+            <gamma value="7" comment="Polytropic constant for water used in the state equation" />
+            <speedsystem value="0" auto="true" comment="Maximum system speed" />
+            <coefsound value="20" comment="Coefficient to multiply speedsystem" />
+            <speedsound value="0" auto="true" comment="Speed of sound" />
+            <coefh value="1.0" comment="Coefficient to calculate the smoothing length" />
+            <cflnumber value="0.2" comment="Coefficient to multiply dt" />
+        </constantsdef>
+        <mkconfig boundcount="240" fluidcount="9" />
+        <geometry>
+            <definition dp="3.0" units_comment="metres (m)">
+                <pointmin x="-6.00" y="-6.00" z="-6.00" />
+                <pointmax x="284.00" y="126.00" z="50.00" />
+            </definition>
+            <commands>
+                <mainlist>
+                    <setshapemode>dp | bound</setshapemode>
+                    <setdrawmode mode="full" />
+
+                    <!-- valley floor and side walls, the whole length -->
+                    <setmkbound mk="0" />
+                    <drawbox>
+                        <boxfill>bottom | front | back</boxfill>
+                        <point x="0" y="0" z="0" />
+                        <size x="278.000" y="120.000" z="48.000" />
+                    </drawbox>
+
+                    <!-- upstream wall, so the modelled reservoir block is closed -->
+                    <setmkbound mk="1" />
+                    <drawbox>
+                        <boxfill>left</boxfill>
+                        <point x="0" y="0" z="0" />
+                        <size x="3.000" y="120.000" z="48.000" />
+                    </drawbox>
+
+                    <!-- the dam -->
+                    <setmkbound mk="2" />
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="120.000" y="0" z="0" />
+                        <size x="8.000" y="120.000" z="40.000" />
+                    </drawbox>
+
+                    <!-- the breach: a stack of void boxes, widening with height -->
+                    <setmkvoid />
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="45.000" z="5.000" />
+                        <size x="8.200" y="30.000" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="42.083" z="7.917" />
+                        <size x="8.200" y="35.833" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="39.167" z="10.833" />
+                        <size x="8.200" y="41.667" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="36.250" z="13.750" />
+                        <size x="8.200" y="47.500" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="33.333" z="16.667" />
+                        <size x="8.200" y="53.333" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="30.417" z="19.583" />
+                        <size x="8.200" y="59.167" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="27.500" z="22.500" />
+                        <size x="8.200" y="65.000" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="24.583" z="25.417" />
+                        <size x="8.200" y="70.833" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="21.667" z="28.333" />
+                        <size x="8.200" y="76.667" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="18.750" z="31.250" />
+                        <size x="8.200" y="82.500" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="15.833" z="34.167" />
+                        <size x="8.200" y="88.333" z="2.917" />
+                    </drawbox>
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="119.900" y="12.917" z="37.083" />
+                        <size x="8.200" y="94.167" z="2.917" />
+                    </drawbox>
+
+                    <!-- the impounded water -->
+                    <setmkfluid mk="0" />
+                    <drawbox>
+                        <boxfill>solid</boxfill>
+                        <point x="3.000" y="3.000" z="3.000" />
+                        <size x="117.000" y="114.000" z="35.000" />
+                    </drawbox>
+
+                    <shapeout file="" />
+                </mainlist>
+            </commands>
+        </geometry>
+    </casedef>
+    <execution>
+        <parameters>
+            <parameter key="SavePosDouble" value="0" />
+            <parameter key="StepAlgorithm" value="2" comment="1:Verlet, 2:Symplectic" />
+            <parameter key="Kernel" value="2" comment="1:Cubic Spline, 2:Wendland" />
+            <parameter key="ViscoTreatment" value="1" comment="1:Artificial, 2:Laminar+SPS" />
+            <parameter key="Visco" value="0.01" comment="Artificial viscosity. 0.01 is the standard dam-break value" />
+            <parameter key="DensityDT" value="2" comment="Density Diffusion Term 2:Fourtakas full" />
+            <parameter key="DensityDTvalue" value="0.1" />
+            <parameter key="CoefDtMin" value="0.05" />
+            <parameter key="#DtIni" value="0.0001" />
+            <parameter key="TimeMax" value="12.0" comment="Physical time to simulate" units_comment="seconds" />
+            <parameter key="TimeOut" value="0.5" comment="Output interval" units_comment="seconds" />
+            <parameter key="PartsOutMax" value="20" comment="%% of allowed particles to be excluded" />
+            <parameter key="RhopOutMin" value="700" units_comment="kg/m^3" />
+            <parameter key="RhopOutMax" value="1300" units_comment="kg/m^3" />
+        </parameters>
+    </execution>
+</case>
