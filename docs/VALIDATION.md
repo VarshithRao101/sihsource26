@@ -103,6 +103,7 @@ Useful, and honestly labelled as something less than validation.
 
 | Cross-check | Result | What it does and does not prove |
 |---|---|---|
+| **Our solver vs SFINCS** | **CSI 0.9607** extent agreement; 10.39 vs 10.57 km²; 40.22 vs 37.58 m max depth | Two INDEPENDENT 2D engines, identical terrain, grid, forcing and wet threshold. The closest thing to external corroboration this project has. Still not validation against reality - both could be wrong the same way |
 | SPH vs weir equation | within **5%** | Two independent methods agree on breach discharge. Does not prove either matches reality |
 | Surrogate vs solver | CSI **0.909**, depth MAE 1.11 m, ~20 ms | The U-Net faithfully emulates **our solver**. Says nothing about reality |
 | Hirakud vs empirical envelope | 265,799 m³/s inside 38,315–380,296 | Plausible, but near the top. **Not reviewed by a practising engineer** |

@@ -184,6 +184,7 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | Damage replacement values | assumptions | `damage_curve_source` string |
 | Breach parameter spread | up to 10× | `uncertainty.json` |
 | Delft3D | absent | reported as absent, never estimated |
+| SFINCS cross-check | CSI 0.9607 vs our solver | `compare_routing.py`; SFINCS is **not** Delft3D |
 
 Populations are now measured from WorldPop 2020 (constrained, 100 m). Every mapped cell goes to
 its nearest settlement within 2 km, so nobody is counted twice. A settlement with a real OSM
