@@ -3,11 +3,15 @@
 Point it at any of 5,686 Indian dams and it tells you which villages flood, how deep, and **how
 long they have**.
 
+Double-click **`start_console.bat`**, or from a terminal:
+
 ```bash
 .venv\Scripts\python.exe -m uvicorn modules.04_backend.api:app --port 8000
 ```
 
-Console at <http://localhost:8000>, API docs at `/docs`.
+Console at <http://localhost:8000>, API docs at `/docs`. Give it about twenty
+seconds — it warms the solver JIT and loads the ML surrogate at boot so nobody
+watches it happen mid-demo. **Keep the window open; closing it stops the server.**
 
 Read **`AGENTS.md`** before changing anything. If you are on the team, read your file in `tasks/`.
 
