@@ -34,6 +34,7 @@ passes **22/22** in about twenty seconds with the network unplugged.
   06_gee:      Sentinel-1 observed extent  ->  CSI
                         |
   05_frontend: the console at http://localhost:8000
+               the pipeline itself at /workflow - PLAY runs this whole diagram
 ```
 
 **Start it:**
@@ -50,8 +51,8 @@ Console at `/`, API docs at `/docs`.
 | `01_geodata` | D8 river tracing, DEM fetch + conditioning, OSM exposure, dam catalogue | done |
 | `02_sph` | DualSPHysics breach near-field on GPU → hydrograph | done |
 | `03_delft3d` | far-field routing | **absent — engine check reports it, never estimates** |
-| `04_backend` | HLL shallow-water solver, **river blockage**, FastAPI, WebSocket | done |
-| `05_frontend` | plain operator console, zero dependencies | **handover to Frontend A/B** |
+| `04_backend` | HLL shallow-water solver, **river blockage**, FastAPI, WebSocket, `pipeline.py` (the stage graph the workflow page draws) | done |
+| `05_frontend` | operator console + the node **workflow** page and its 3D scene; zero runtime dependencies, Babylon vendored | done; styling still open to Frontend A/B |
 | `06_gee_validation` | Sentinel-1 water detection, CSI/POD/FAR | done |
 | `07_ml` | damage, Monte Carlo, U-Net surrogate, evacuation routing, inflow nowcast | done |
 
@@ -179,7 +180,8 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | Population assigned to nearest listed settlement | within 2 km, each cell counted once | `refine_population_worldpop` |
 | SAR validation, Teesta gorge | CSI 0.0075, POD 0.013 | `validation.json` sensitivity sweep |
 | SAR validation, Annamayya floodplain | CSI 0.027, POD 0.217, **bias 7.3** | `validation.json`, run `cheyyeruprojectannamayya_overtop_fast_001` |
-| SPH is near-field only | first ~60 s | `sph_meta.json` limitation field |
+| SPH is near-field only | first ~60 s | `sph_meta.json` limitation field; `engine='sphcoupled'` uses it only before the handover |
+| Largest grid load-tested | 542,970 cells, 128 MB peak, validates clean | `docs/LOAD_TEST.md` |
 | Surrogate is an emulator | CSI 0.909 vs **our solver** | not validated against real floods |
 | Damage replacement values | assumptions | `damage_curve_source` string |
 | Breach parameter spread | up to 10× | `uncertainty.json` |

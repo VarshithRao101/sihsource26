@@ -1,0 +1,15 @@
+{
+  "site": "lowermanairdam",
+  "source": "COP30",
+  "bbox": [
+    79.08050585347682,
+    18.350068969331794,
+    79.42309859625277,
+    18.53738686851478
+  ],
+  "nx": 402,
+  "ny": 231,
+  "cellsize_m": 90.03156688254084,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 348 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

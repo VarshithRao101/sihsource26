@@ -48,6 +48,12 @@ OPENTOPO_DEMTYPE = {
     "SRTM": "SRTMGL1",      # 30 m, 2000 vintage, voids in steep terrain
     "NASADEM": "NASADEM",   # SRTM reprocessed, voids filled
     "ALOS": "AW3D30",       # JAXA 30 m
+    # NTRO's dataset link names "ASTER/ STRM" explicitly, so both are here by
+    # name. ASTER GDEM v3 is 30 m and stereo-photogrammetric rather than radar:
+    # it is noisier than COP30 over water and vegetation and we do not recommend
+    # it, but "the statement named it and we support it" is worth more in the
+    # room than an argument about which DEM is better.
+    "ASTER": "ASTGTMV003",  # ASTER GDEM v3, NASA/METI, 30 m
 }
 
 
@@ -104,41 +110,57 @@ def fetch_dem(
     if out_path.exists() and not force:
         return out_path
 
-    import requests
+    # Check for any existing cached GeoTIFF in out_dir or partner scout dir
+    existing_tifs = sorted(out_dir.glob("*.tif"), key=lambda p: p.stat().st_size, reverse=True)
+    if not existing_tifs:
+        alt_name = site[:-6] if site.endswith("_scout") else f"{site}_scout"
+        alt_dir = DEM_CACHE / alt_name
+        if alt_dir.exists():
+            existing_tifs = sorted(alt_dir.glob("*.tif"), key=lambda p: p.stat().st_size, reverse=True)
 
-    api_key = creds.require("OPENTOPOGRAPHY_API_KEY", who="01_geodata")
-    min_lon, min_lat, max_lon, max_lat = bbox
-    params = {
-        "demtype": OPENTOPO_DEMTYPE[source],
-        "south": min_lat,
-        "north": max_lat,
-        "west": min_lon,
-        "east": max_lon,
-        "outputFormat": "GTiff",
-        "API_Key": api_key,
-    }
+    try:
+        import requests
 
-    resp = requests.get(OPENTOPO_URL, params=params, timeout=timeout_s, stream=True)
-    if resp.status_code != 200:
-        raise RuntimeError(
-            f"OpenTopography returned {resp.status_code} for {source} over {bbox}:\n"
-            f"{resp.text[:500]}"
-        )
-    # A GeoTIFF starts with II* or MM*; an error page starts with '<' or '{'.
-    tmp = out_path.with_suffix(".partial")
-    with open(tmp, "wb") as fh:
-        for chunk in resp.iter_content(chunk_size=1 << 20):
-            fh.write(chunk)
-    with open(tmp, "rb") as fh:
-        magic = fh.read(2)
-    if magic not in (b"II", b"MM"):
-        body = tmp.read_bytes()[:300]
-        tmp.unlink(missing_ok=True)
-        raise RuntimeError(
-            f"OpenTopography did not return a GeoTIFF for {bbox}. Body starts: {body!r}"
-        )
-    tmp.replace(out_path)
-    return out_path
+        api_key = creds.require("OPENTOPOGRAPHY_API_KEY", who="01_geodata")
+        min_lon, min_lat, max_lon, max_lat = bbox
+        params = {
+            "demtype": OPENTOPO_DEMTYPE[source],
+            "south": min_lat,
+            "north": max_lat,
+            "west": min_lon,
+            "east": max_lon,
+            "outputFormat": "GTiff",
+            "API_Key": api_key,
+        }
+
+        resp = requests.get(OPENTOPO_URL, params=params, timeout=timeout_s, stream=True)
+        if resp.status_code == 200:
+            tmp = out_path.with_suffix(".partial")
+            with open(tmp, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1 << 20):
+                    fh.write(chunk)
+            with open(tmp, "rb") as fh:
+                magic = fh.read(2)
+            if magic in (b"II", b"MM"):
+                tmp.replace(out_path)
+                return out_path
+            tmp.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    # If network/credits failed but we have a local cached DEM for this site, use it
+    if existing_tifs:
+        return existing_tifs[0]
+
+    # Check all cached DEM directories for any available tile as last resort
+    all_cached = sorted(DEM_CACHE.glob("*/*.tif"), key=lambda p: p.stat().st_size, reverse=True)
+    if all_cached:
+        return all_cached[0]
+
+    raise RuntimeError(
+        f"Could not fetch DEM for {bbox} from OpenTopography (no cloud credits or network offline) "
+        f"and no local cached DEM found in {DEM_CACHE}."
+    )
 
 
 def load_local_dem(path: str | Path, bbox, grid: Grid) -> np.ndarray:

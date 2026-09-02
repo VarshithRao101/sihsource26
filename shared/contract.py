@@ -75,7 +75,12 @@ labels it as such."""
 
 FAILURE_MODES = ("overtopping", "piping", "gated_release", "blockage_breach")
 
-DEM_SOURCES = ("FABDEM", "COP30", "SRTM", "NASADEM", "CartoDEM", "ALOS", "SYNTHETIC")
+# ASTER is here because NTRO's dataset link names it. Adding a source is
+# additive - an old run's meta.json still validates, because nothing that was
+# legal before became illegal.
+DEM_SOURCES = (
+    "FABDEM", "COP30", "SRTM", "NASADEM", "CartoDEM", "ALOS", "ASTER", "SYNTHETIC",
+)
 
 BATHYMETRY = ("none", "estimated", "surveyed")
 

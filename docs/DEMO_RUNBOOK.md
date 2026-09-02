@@ -92,18 +92,54 @@ Check any of them:
 
 Rehearse until it is boring. Eight minutes.
 
-**0:00 — "Name any dam in India."**
-Open with the question nobody else in the room can take. Use the dam picker: State → nearest city →
-dam, from the CWC National Register of Large Dams, 5,686 entries.
+**0:00 — Open on the Workflow page, not the console.**
+<http://localhost:8000/workflow>. Seventeen boxes, arrows between them, every one a real stage in
+this repository. Take fifteen seconds to say what the shape is — dam register, trace the river,
+condition the terrain, find who lives downstream, size the breach, solve the water, write the
+grids, cost the damage, plan the evacuation, publish the uncertainty, validate. Then point at the
+grey dashed box at the bottom.
+
+> **"Delft3D is named in the problem statement. We do not have the kernel, the licence was not
+> granted, and that box is a filesystem probe. It lists the paths it searched and it never turns
+> green. The Deltares model above it is SFINCS, which is a different model, and we label it as
+> one."**
+>
+> Say this in the first minute, before anyone asks. It buys you the rest of the room.
+
+Click one box — the solver — so they see it expand into what that stage takes in, puts out, which
+file does it, and the papers behind it. Do not click more than two; the point is that the detail
+is there, not to read it out.
+
+**0:45 — "Name any dam in India." Then press PLAY.**
+Open with the question nobody else in the room can take. Use the dam picker: State → dam, from the
+CWC National Register of Large Dams, 5,686 entries. PLAY runs the real pipeline: each box turns
+amber then green as its stage actually finishes, carrying the backend's own words — *"breach 268 m
+wide in 5.45 hr, peak 33,865 m³/s"*, *"58 settlements, 363 road segments"*. The solver box streams
+simulated time, wet cells and the volume ledger while it works.
+
+If someone asks whether the animation is real, press **PAUSE**. The percentage stops moving,
+because the solver thread is blocked between timesteps. Press it again and it carries on.
+
+Then switch to the console for the map. Or stay here and let the 3D scene replay the flood over the
+conditioned DEM — but say what it is: *"the ground is the real DEM; the water surface is
+reconstructed from the arrival-time, peak-time, depth and duration grids, coloured by velocity.
+It is a rendering of solver output, not frame-by-frame solver output."* That sentence is printed on
+the page too, so you cannot forget it.
 
 > Say "nearest city", never "district". NRLD has no district column, and a wrong district in front
 > of a district administrator is worse than no district.
 
-**0:30 — Run it live.**
+**2:00 — On the console, point at the water.**
+Hover anywhere on the flood: depth, speed and hazard class for that cell, read out of that run's
+GeoTIFFs by the API — the hazard class is computed server side from `shared/contract.py`, so the
+browser is not carrying a second copy of the thresholds. The drifting streaks are the arrival-time
+gradient, which is the direction the front actually travelled, at the speed `max_velocity.tif`
+recorded there. Nothing on that map is decorative.
+
 Point at the mass-balance figure while it solves. A hydrologist looks for that number first, and
 watching it hold at zero while water moves is worth more than any animation.
 
-**2:00 — The impact table and evacuation routes.**
+**3:00 — The impact table and evacuation routes.**
 This is the Humanitarian Assistance and Disaster Relief answer, and it is what NTRO's problem
 statement is actually about. Named villages, arrival times, roads cut, walking routes with margins.
 Red routes mean **no safe route on foot — those people need helicopters.**
@@ -111,21 +147,21 @@ Red routes mean **no safe route on foot — those people need helicopters.**
 Say the population source out loud. Some are WorldPop measurements, some are class defaults, and the
 table says which.
 
-**3:30 — Drag the what-if slider.**
+**4:00 — Drag the what-if slider.**
 The U-Net surrogate answers in about 20 ms, roughly 900× faster than the solver.
 
 > Say this every single time, without being asked: **"this is a neural network emulating our own
 > solver, not a simulation, and it has never been validated against a real flood."** The response
 > carries `is_emulated: true` and a warning string, and both are on screen.
 
-**4:30 — Switch to the Chamoli blockage.**
+**5:00 — Switch to the Chamoli blockage.**
 `latatapovanntpc_blockage_fast_001`. A landslide dam on the Dhauliganga, the reach destroyed in
 February 2021 — the first event named in NTRO's own background. The lake impounds 6.32 MCM behind
 debris, breaches 280 m wide in 8.5 minutes, and reaches the first village in **half a minute**.
 
 Four of the five failures NTRO names are natural dams, not engineered ones. Say so.
 
-**5:30 — The same dam, three ways.**
+**6:00 — The same dam, three ways.**
 Annamayya: dam break 11,325 m³/s · gates fully open 8,069 m³/s · gates at 25% 2,609 m³/s. Same
 water, a quarter of the peak. That is what a controlled release buys an operator, and it is the
 "dam break **or water release**" clause of the problem statement.

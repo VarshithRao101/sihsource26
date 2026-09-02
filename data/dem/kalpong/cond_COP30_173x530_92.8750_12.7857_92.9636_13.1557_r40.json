@@ -1,0 +1,15 @@
+{
+  "site": "kalpong",
+  "source": "COP30",
+  "bbox": [
+    92.87495911010386,
+    12.785734360454734,
+    93.01899825458749,
+    13.21449142034935
+  ],
+  "nx": 173,
+  "ny": 530,
+  "cellsize_m": 90.08082656283932,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 268 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

@@ -123,6 +123,23 @@ class ScenarioSpec:
     Leave None to fall back to the straight-corridor estimate - which is fine
     for a synthetic valley and wrong for any river that bends."""
 
+    # --- SPH coupling, engine = 'sphcoupled' ---------------------------
+    sph_run: str | None = None
+    """Path to a finished module 02 SPH run folder whose hydrograph.csv becomes
+    the near-field boundary of this simulation.
+
+    The problem statement asks for the flood to be modelled THROUGH Smoothed
+    Particle Hydrodynamics, and this is the join. SPH resolves the first minute
+    or so of water tearing through the opening, which is exactly the part a
+    level-pool reservoir model cannot see; level-pool resolves the hours of
+    drawdown, which is exactly the part SPH cannot afford. Neither covers the
+    other, so the coupled hydrograph uses each where it is valid.
+
+    The two are spliced, never blended: SPH discharge up to the last second it
+    simulated, the level-pool curve after that, and the step between them
+    published in meta.json as a measured disagreement. Averaging them would
+    produce a smooth curve that neither engine computed."""
+
     notes: str = ""
     tags: list[str] = field(default_factory=list)
 
@@ -149,6 +166,21 @@ class ScenarioSpec:
             errs.append("reach_length_km must be positive")
         if self.breach_width_m is not None and self.breach_width_m <= 0:
             errs.append("breach_width_m override must be positive")
+        if self.engine == "sphcoupled":
+            # Fail here rather than forty seconds into a solve that was never
+            # going to be an SPH-coupled run.
+            if not self.sph_run:
+                errs.append(
+                    "engine 'sphcoupled' needs sph_run pointing at a finished "
+                    "module 02 SPH run folder"
+                )
+            else:
+                from pathlib import Path as _P
+
+                if not (_P(self.sph_run) / "hydrograph.csv").is_file():
+                    errs.append(f"no hydrograph.csv in sph_run {self.sph_run!r}")
+        if self.sph_run and self.engine != "sphcoupled":
+            errs.append("sph_run is set but engine is not 'sphcoupled'")
         return errs
 
     def require_valid(self) -> None:

@@ -1,0 +1,12 @@
+{
+  "name": "sih26161-e2e",
+  "private": true,
+  "description": "End-to-end walkthrough of the simulation console. Dev-only: the shipped frontend still has zero dependencies.",
+  "scripts": {
+    "test": "playwright test",
+    "demo": "playwright test --headed --project=demo"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

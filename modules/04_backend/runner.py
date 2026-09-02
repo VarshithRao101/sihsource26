@@ -42,8 +42,26 @@ from shared.io import (
 
 # Module folders start with a digit, so a plain `import` statement cannot name
 # them. importlib can, and so can a relative import from inside the package.
+from .pipeline import COMPLETE, RUNNING, SKIPPED
 from .scenario import ScenarioSpec
 from .solver import SolverConfig, SolverResult, run_solver
+
+
+def _node(
+    progress: Callable[[dict], None] | None,
+    node_id: str,
+    status: str = RUNNING,
+    detail: str = "",
+) -> None:
+    """Announce a workflow node to whoever is listening.
+
+    The API turns these into the boxes on the workflow page. Everything else
+    that calls run_scenario - the CLI, the tests, the ML training loop - passes
+    progress=None and never notices they exist.
+    """
+    if progress is None:
+        return
+    progress({"node": node_id, "node_status": status, "node_detail": detail})
 
 
 # ==========================================================================
@@ -116,6 +134,84 @@ def _dem_meta(terrain, grid: Grid) -> dict:
         "bathymetry": "none",
         "conditioning": "none",
     }
+
+
+def splice_sph_hydrograph(
+    sph_run: str | Path,
+    t_hr: np.ndarray,
+    q_cumecs: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Put module 02's SPH near field on the front of the level-pool curve.
+
+    The problem statement asks for the flood to be simulated through Smoothed
+    Particle Hydrodynamics. SPH can only afford the first minute - a few hundred
+    metres of reservoir either side of the opening - and level-pool routing
+    cannot see that minute at all, because it assumes the reservoir surface
+    stays horizontal while water leaves. So each is used exactly where it is
+    valid: SPH out to the last second it actually simulated, level-pool after.
+
+    They are SPLICED, NOT BLENDED. A cross-fade would produce a smooth curve
+    that neither engine computed and that nobody could defend; the step at the
+    handover is a real disagreement between two independent methods, and it is
+    returned so meta.json can publish it.
+
+    Args:
+        sph_run: a finished module 02 run folder containing hydrograph.csv.
+        t_hr, q_cumecs: the level-pool hydrograph this replaces the front of.
+
+    Returns:
+        (t_hr, q_cumecs, sph_block) with the coupled series and the provenance
+        block, including the measured ratio between the two engines at handover.
+
+    Raises:
+        FileNotFoundError: if the SPH run has no hydrograph.
+        ValueError: if the SPH hydrograph is empty or non-monotonic in time.
+    """
+    from shared.io import read_hydrograph
+
+    sph_dir = Path(sph_run)
+    t_sph, q_sph = read_hydrograph(sph_dir)
+    if t_sph.size == 0:
+        raise ValueError(f"SPH hydrograph in {sph_dir} is empty")
+    if np.any(np.diff(t_sph) < 0):
+        raise ValueError(f"SPH hydrograph in {sph_dir} goes backwards in time")
+
+    handover_hr = float(t_sph[-1])
+    # Level-pool discharge at the moment SPH stops. This is the comparison: two
+    # engines, same instant, same structure, and whatever they disagree by is
+    # what we report.
+    q_levelpool_at_handover = float(np.interp(handover_hr, t_hr, q_cumecs))
+    q_sph_at_handover = float(q_sph[-1])
+    ratio = q_sph_at_handover / max(q_levelpool_at_handover, 1e-9)
+
+    tail = t_hr > handover_hr
+    t_out = np.concatenate([t_sph, t_hr[tail]])
+    q_out = np.concatenate([q_sph, q_cumecs[tail]])
+
+    block = {
+        "sph_run": sph_dir.name,
+        "sph_run_path": str(sph_dir),
+        "handover_hr": round(handover_hr, 6),
+        "handover_s": round(handover_hr * 3600.0, 2),
+        "sph_samples": int(t_sph.size),
+        "sph_peak_cumecs": round(float(q_sph.max()), 1),
+        "sph_at_handover_cumecs": round(q_sph_at_handover, 1),
+        "levelpool_at_handover_cumecs": round(q_levelpool_at_handover, 1),
+        "handover_ratio": round(ratio, 4),
+        "method": (
+            "spliced, not blended: SPH discharge up to the last second it "
+            "simulated, level-pool routing after it. The step at the handover is "
+            "a measured disagreement between two independent engines and is not "
+            "smoothed away."
+        ),
+        "limitation": (
+            "The SPH block models a few hundred metres of reservoir, not the "
+            "whole impoundment, so it describes the initial rush and not "
+            "reservoir drawdown. That is why it is only used before the "
+            "handover."
+        ),
+    }
+    return t_out, q_out, block
 
 
 def resolve_breach(spec: ScenarioSpec) -> tuple[BreachParams, dict[str, BreachParams]]:
@@ -238,6 +334,7 @@ def run_scenario(
     dem, manning, grid = terrain.get_terrain(bbox, spec.cellsize_m)
 
     # ---- 2. breach and hydrograph --------------------------------------
+    _node(progress, "breach", RUNNING)
     breach, ensemble = resolve_breach(spec)
 
     # ---- river blockage: a natural dam, not an engineered one ----------
@@ -314,7 +411,40 @@ def run_scenario(
             storage_exponent=spec.storage_exponent,
         )
 
+    # Splice module 02's measured near-field discharge onto the front of the
+    # level-pool curve. This is the join the problem statement asks for, and it
+    # is a splice rather than a blend on purpose - see splice_sph_hydrograph.
+    sph_block = None
+    if spec.engine == "sphcoupled" and spec.sph_run:
+        t_hr, q_cumecs, sph_block = splice_sph_hydrograph(
+            spec.sph_run, t_hr, q_cumecs
+        )
+        _node(
+            progress,
+            "sph",
+            COMPLETE,
+            f"near field from {sph_block['sph_run']}: "
+            f"{sph_block['handover_hr'] * 3600:.0f} s of SPH, peak "
+            f"{sph_block['sph_peak_cumecs']:,.0f} m3/s, "
+            f"{sph_block['handover_ratio']:.2f}x the level-pool value at handover",
+        )
+
+    _node(
+        progress,
+        "breach",
+        COMPLETE,
+        (
+            f"gates {spec.gate_opening_frac:.0%} open, peak "
+            f"{float(q_cumecs.max()):,.0f} m3/s, no breach regression used"
+            if spec.failure_mode == "gated_release"
+            else f"breach {breach.average_width_m:.0f} m wide in "
+            f"{breach.formation_time_hr:.2f} hr, peak "
+            f"{float(q_cumecs.max()):,.0f} m3/s"
+        ),
+    )
+
     # ---- 3. solve ------------------------------------------------------
+    _node(progress, "solve", RUNNING)
     inflow_cells = find_inflow_cells(
         grid, dem, spec.site.lat, spec.site.lon, release_width_m
     )
@@ -335,7 +465,17 @@ def run_scenario(
         progress=progress,
     )
 
+    _node(
+        progress,
+        "solve",
+        COMPLETE,
+        f"{result.n_steps:,} steps, mass balance "
+        f"{result.mass_balance_err_pct:+.4f}%, max depth "
+        f"{float(result.max_depth.max()):.2f} m",
+    )
+
     # ---- 4. write the contract files -----------------------------------
+    _node(progress, "grids", RUNNING)
     write_grid(run_dir, "max_depth", result.max_depth, grid, "maximum water depth")
     write_grid(run_dir, "arrival_time", result.arrival_time, grid, "first wetting")
     write_grid(run_dir, "time_of_peak", result.time_of_peak, grid, "time of max depth")
@@ -374,23 +514,72 @@ def run_scenario(
             },
         )
 
+    _node(
+        progress,
+        "grids",
+        COMPLETE,
+        f"{grid.nx}x{grid.ny} cells at {grid.cellsize_m():.0f} m, "
+        f"5 GeoTIFFs + extent.geojson + packed.png",
+    )
+
     if exposure:
-        write_json(run_dir, "impact.json", build_impact(run_id, grid, result, exposure))
+        _node(progress, "impact", RUNNING)
+        impact = build_impact(run_id, grid, result, exposure)
+        write_json(run_dir, "impact.json", impact)
+        totals = impact.get("totals", {})
+        _node(
+            progress,
+            "impact",
+            COMPLETE,
+            f"{totals.get('settlements_affected')} settlements, "
+            f"{totals.get('population_affected')} people, "
+            f"Rs {totals.get('damage_inr_crore')} crore",
+        )
 
         # Evacuation routing, when module 01 gave us road geometry. Soft import
         # for the same reason as the damage model: a missing route plan is a
         # gap in the output, a crash here would be a lost run.
         if exposure.get("roads"):
+            _node(progress, "evacuation", RUNNING)
             try:
                 from importlib import import_module
 
                 _ev = import_module("modules.07_ml.evacuation")
                 _ev.plan_evacuation(run_dir, exposure)
-            except Exception:
-                pass
+                _node(
+                    progress,
+                    "evacuation",
+                    COMPLETE,
+                    "routes planned on the OSM road graph",
+                )
+            except Exception as exc:  # noqa: BLE001
+                _node(
+                    progress,
+                    "evacuation",
+                    SKIPPED,
+                    f"no route plan: {type(exc).__name__}: {exc}",
+                )
+        else:
+            _node(
+                progress, "evacuation", SKIPPED, "no road geometry in the exposure set"
+            )
+    else:
+        _node(progress, "impact", SKIPPED, "no exposure data, so nobody to count")
+        _node(progress, "evacuation", SKIPPED, "no exposure data, so nowhere to route")
 
     # ---- 5. the uncertainty block (schema 2.0) --------------------------
-    write_json(run_dir, "uncertainty.json", build_uncertainty(spec, ensemble, q_cumecs))
+    _node(progress, "uncertainty", RUNNING)
+    uncertainty = build_uncertainty(spec, ensemble, q_cumecs)
+    write_json(run_dir, "uncertainty.json", uncertainty)
+    _spread = uncertainty.get("envelope_ratio")
+    _node(
+        progress,
+        "uncertainty",
+        COMPLETE,
+        f"breach regressions disagree by {_spread:.1f}x on peak discharge"
+        if isinstance(_spread, (int, float))
+        else "outlet capacity and storage curve, not breach - controlled release",
+    )
 
     # ---- 6. meta.json --------------------------------------------------
     wet = result.max_depth >= WET_THRESHOLD_M
@@ -447,6 +636,10 @@ def run_scenario(
         meta["blockage"] = blockage_block
     if release_block is not None:
         meta["gated_release"] = release_block
+    if sph_block is not None:
+        # The engine coupling, on the record: which SPH run, where the handover
+        # is, and how far the two engines disagreed at it.
+        meta["sph_coupling"] = sph_block
     meta["domain"]["reach_length_km"] = spec.reach_length_km
     write_meta(run_dir, meta)
 

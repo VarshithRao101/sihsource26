@@ -76,3 +76,22 @@ Thumbs.db
 
 # credential files
 secrets/
+
+# playwright e2e — dev only, the shipped frontend still has zero dependencies
+tests/e2e/node_modules/
+tests/e2e/report/
+tests/e2e/test-results/
+tests/e2e/package-lock.json
+
+# conditioned DEM caches and aborted downloads - regenerable from the source
+# DEM, and the rule in data/SOURCES.md is that nothing large is committed.
+data/**/*.npz
+data/**/*.partial
+
+# cached OSM exposure pulls - regenerable from Overpass, and some are megabytes
+data/exposure/**/exposure.json
+
+# Babylon.js was vendored for the 3D scene, which has since been removed from
+# the workflow page. The file is left on disk rather than deleted so the scene
+# can be restored, but 8 MB of unused library does not belong in the history.
+modules/05_frontend/vendor/

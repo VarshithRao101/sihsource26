@@ -9,11 +9,46 @@ Double-click **`start_console.bat`**, or from a terminal:
 .venv\Scripts\python.exe -m uvicorn modules.04_backend.api:app --port 8000
 ```
 
-Console at <http://localhost:8000>, API docs at `/docs`. Give it about twenty
-seconds — it warms the solver JIT and loads the ML surrogate at boot so nobody
-watches it happen mid-demo. **Keep the window open; closing it stops the server.**
+Give it about twenty seconds — it warms the solver JIT and loads the ML surrogate at boot so
+nobody watches it happen mid-demo. **Keep the window open; closing it stops the server.**
+
+| | |
+|---|---|
+| <http://localhost:8000> | **Console** — pick a dam, run it, read the flood. Point at any cell on the map for depth, speed and hazard. |
+| <http://localhost:8000/workflow> | **Workflow** — the whole pipeline as boxes and arrows. Press PLAY and watch each stage light up as it actually executes, with a live 3D flood beside it. |
+| <http://localhost:8000/docs> | **API** |
 
 Read **`AGENTS.md`** before changing anything. If you are on the team, read your file in `tasks/`.
+
+---
+
+## The Workflow page
+
+This is the one to open in front of somebody who has not seen the project. It draws all
+seventeen processing stages — dam register, river trace, DEM conditioning, exposure, breach,
+SPH, the 2D solver, the contract writer, damage, evacuation, uncertainty, the validator — with
+the data flow between them, and it is generated from `modules/04_backend/pipeline.py` rather
+than drawn by hand, so the picture cannot drift from the code.
+
+- **PLAY** starts the real pipeline. Every box goes WAITING to RUNNING to COMPLETE or FAILED off
+  the same WebSocket the console uses, carrying the backend's own words: *"breach 268 m wide in
+  5.45 hr, peak 33,865 m3/s"*, *"58 settlements, 363 road segments"*.
+- **PAUSE** blocks the solver thread between timesteps. It is a real pause, not a frozen
+  picture of one - `pct` stops moving.
+- **RESET** cancels the solve and puts every box back to WAITING.
+- **Click any box** for what that stage genuinely takes in, puts out, which file does it, and
+  the papers behind it.
+- The **3D scene** is Babylon.js on the conditioned DEM, with the water surface reconstructed
+  from the arrival-time, peak-time, depth and duration grids and coloured by velocity.
+  Simulation time, depth, velocity, flooded area, people reached and discharge update as it
+  plays. It says on screen that it is a rendering of output grids and not frame-by-frame
+  solver output, because that is what it is.
+- **Delft3D never turns green.** The kernel is not installed, the node is a filesystem probe,
+  and it lists the paths it searched. SFINCS next to it is a different Deltares model and is
+  labelled as one.
+
+Babylon.js is vendored at `modules/05_frontend/vendor/` and served by our own backend. There is
+still no CDN and no build step: the console renders with the network unplugged.
 
 ---
 
@@ -57,6 +92,9 @@ copy .env.example .env          # then fill it in
 
 # solver physics tests
 .venv\Scripts\python.exe -m pytest modules\04_backend\tests -q
+
+# the whole user journey, in a browser: open Workflow -> PLAY -> nodes -> 3D -> result
+cd tests/e2e && npm install && npm test
 ```
 
 ---

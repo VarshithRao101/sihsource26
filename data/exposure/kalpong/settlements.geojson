@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [92.9014454, 12.9100152]}, "properties": {"name": "Mayabunder", "population": 20000, "place_class": "town", "population_source": "class_default", "osm_id": "954292641"}}]}

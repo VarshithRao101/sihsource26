@@ -100,13 +100,39 @@
   .muted { color: var(--muted); }
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+  .nav { display: flex; gap: 2px; }
+  .nav a { padding: 3px 10px; border-radius: 4px; text-decoration: none; font-size: 12px;
+           color: var(--muted); border: 1px solid transparent; }
+  .nav a.on { background: var(--panel); color: var(--fg); border-color: var(--line); }
+  .nav a:hover { color: var(--accent); }
+
+  /* the flood map, its animated flow overlay and the hover readout */
+  #mapwrap { position: relative; display: inline-block; line-height: 0; }
+  /* The global canvas rule paints a white background; the overlay must not,
+     or it hides the map underneath it. */
+  #flow { position: absolute; left: 0; top: 0; pointer-events: none;
+          background: transparent; border: 1px solid transparent; }
+  #maptip {
+    position: absolute; z-index: 5; min-width: 148px; padding: 7px 9px; line-height: 1.45;
+    background: #10151bf2; color: #e7edf5; border: 1px solid #2a3342; border-radius: 5px;
+    font-size: 12px; pointer-events: none; display: none; box-shadow: 0 4px 16px #0006;
+  }
+  #maptip .r { display: flex; justify-content: space-between; gap: 14px; }
+  #maptip .r span:first-child { color: #8b98a9; }
+  #maptip .r b { font-variant-numeric: tabular-nums; }
+  #maptip .hz { margin-top: 4px; padding-top: 4px; border-top: 1px solid #2a3342;
+                text-transform: uppercase; letter-spacing: .05em; font-size: 10.5px; font-weight: 700; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Dam Break Inundation Console</h1>
-  <span class="sub">SIH26161 &middot; NTRO &middot; internal test UI</span>
+  <nav class="nav">
+    <a href="/" class="on">Console</a>
+    <a href="/workflow">Workflow</a>
+  </nav>
+  <span class="sub">SIH26161 &middot; NTRO</span>
   <span class="sub" id="health"></span>
 </header>
 
@@ -128,9 +154,7 @@
       <input id="fq" placeholder="e.g. Hirakud, Teesta">
       <label>Dam</label>
       <select id="fdam" size="6"></select>
-      <div id="damcard" class="damcard muted">No dam selected — pick one above, or use a demo site.</div>
-      <label>Demo site <span class="muted">(already cached, runs offline)</span></label>
-      <select id="preset"><option value="">— none —</option></select>
+      <div id="damcard" class="damcard muted">No dam selected — pick one above.</div>
     </fieldset>
 
     <fieldset>
@@ -172,27 +196,11 @@
       </div>
     </fieldset>
 
-    <details id="adv">
-      <summary>Advanced — physics and numerics</summary>
-      <div class="muted" style="font-size:11px;margin:6px 0">
-        Defaults are the ones we validate against. Change them only if you know why.
-      </div>
-      <label>Breach regression</label>
-      <select id="regression">
-        <option value="froehlich2008">Froehlich (2008) — default</option>
-        <option value="vonthun1990">Von Thun &amp; Gillette (1990)</option>
-        <option value="macdonald1984">MacDonald &amp; Langridge-Monopolis (1984)</option>
-      </select>
-      <div class="row2">
-        <div><label>Cell size (m)</label><input id="cell" type="number" step="10" value="90"></div>
-        <div><label>Scheme</label>
-          <select id="scheme"><option value="swe">swe</option><option value="inertial">inertial</option></select>
-        </div>
-      </div>
-      <label><input type="checkbox" id="real" checked style="width:auto"> Real terrain (COP30)</label>
-
-      <div class="muted" style="font-size:11px;margin:10px 0 4px">
-        Override the site manually — only if the dam is not in the register.
+    <fieldset>
+      <legend>4 · A site the register does not list</legend>
+      <div class="muted" style="font-size:11px;margin-bottom:2px">
+        NTRO asks for <b>any</b> river. Tick this only when the structure is not in the
+        CWC register — a landslide dam, or a barrage the register missed.
       </div>
       <label><input type="checkbox" id="manual" style="width:auto"> Enter a site by hand</label>
       <div id="grp-manual" style="display:none">
@@ -210,7 +218,7 @@
           <div><label>Capacity (MCM)</label><input id="cap" type="number" step="0.1" value="5"></div>
         </div>
       </div>
-    </details>
+    </fieldset>
 
     <button id="run">Run simulation</button>
     <button id="loadlast" class="sec" style="width:100%;margin-top:6px">Load most recent run</button>
@@ -238,11 +246,20 @@
       <h2>Flood — drag to step through time</h2>
       <input id="time" type="range" min="0" max="100" value="100" style="width:100%">
       <div class="muted" id="timelab">t = —</div>
-      <canvas id="map" width="600" height="420"></canvas>
+      <div id="mapwrap">
+        <canvas id="map" width="600" height="420"></canvas>
+        <canvas id="flow" width="600" height="420"></canvas>
+        <div id="maptip"></div>
+      </div>
       <div class="muted" style="font-size:12px;margin-top:6px">
-        OpenStreetMap basemap, flood reprojected onto it cell by cell. Deeper water is
-        darker. Markers turn red as the water reaches each village. Reconstructed from the
-        arrival-time and peak-depth grids, not frame-by-frame solver output.
+        <b>Hover anywhere on the water</b> for the depth, speed and hazard at that cell, read
+        straight out of this run's GeoTIFFs. The drifting streaks follow the arrival-time
+        gradient — the direction the water actually travelled — at the speed
+        <code>max_velocity.tif</code> recorded there.
+        OpenStreetMap basemap, flood reprojected cell by cell; deeper water is darker and
+        markers turn red as the water reaches each village. The time slider replays a
+        reconstruction from the arrival-time and peak-depth grids, not frame-by-frame
+        solver output.
       </div>
     </div>
 
@@ -306,6 +323,7 @@
 <script>
 const API = "";
 let RUN = null, META = null, PACKED = null, ENDHR = 12, IMPACT = null, DAM = null;
+let FIELDS = null, FIELDSMETA = null, VIEW = null, TNOW = 0;
 
 const $ = id => document.getElementById(id);
 const log = m => { const l = $("log"); l.textContent += "\n" + m; l.scrollTop = l.scrollHeight; };
@@ -324,28 +342,6 @@ async function jget(url) {
     $("health").textContent = "backend ok" + (h.jit_warmup_s ? " · jit " + h.jit_warmup_s + "s" : "");
   } catch { $("health").innerHTML = '<span class="err">backend unreachable</span>'; }
 
-  try {
-    const s = await jget("/api/sites");
-    const list = s.sites || s;
-    for (const key in list) {
-      const o = document.createElement("option");
-      o.value = key; o.textContent = list[key].name || key;
-      $("preset").appendChild(o);
-    }
-    $("preset").onchange = () => {
-      const k = $("preset").value;
-      if (!k) { DAM = null; return; }
-      const s2 = list[k]; if (!s2) return;
-      DAM = null;                     // a demo site is sent as site_key, not dam_id
-      $("fdam").value = "";
-      $("damcard").classList.remove("muted");
-      $("damcard").innerHTML =
-        `<b>${s2.name ?? k}</b> <span class="muted">(demo site)</span><br>` +
-        `${s2.river ?? "?"} · ${s2.state ?? "?"}<br>` +
-        `${s2.dam_height_m ?? "?"} m high · ${s2.reservoir_capacity_mcm ?? "?"} MCM` +
-        `<br><span class="muted">cached locally — runs with the network unplugged</span>`;
-    };
-  } catch { /* presets are optional */ }
 })();
 
 // ---------------------------------------------------------------- dam picker
@@ -398,6 +394,10 @@ async function loadDams() {
     o.textContent = `${d.name} — ${d.river || "?"} — ${cap} MCM`;
     sel.appendChild(o);
   }
+  if (DAMS.length > 0) {
+    sel.value = DAMS[0].id;
+    applyDam();
+  }
 }
 
 /* The operator picks a dam; every physical number comes from the register.
@@ -407,7 +407,6 @@ function applyDam() {
   const d = DAMS.find(x => x.id === $("fdam").value);
   if (!d) return;
   DAM = d;
-  $("preset").value = "";
   const cap = d.gross_storage_mcm != null ? d.gross_storage_mcm.toLocaleString() : "?";
   $("damcard").classList.remove("muted");
   $("damcard").innerHTML =
@@ -423,7 +422,7 @@ const MODE_HELP = {
   overtopping: "The reservoir overtops the crest and cuts a breach. The usual worst case.",
   piping: "Internal erosion opens a pipe through the embankment, which then collapses.",
   gated_release: "The operator opens the outlet gates. The dam does NOT fail — no breach is modelled.",
-  blockage_breach: "A landslide dams the river, water ponds behind the debris, then the debris fails."
+  blockage_breach: "A landslide dams the river, water pond behind the debris, then the debris fails."
 };
 
 function applyMode() {
@@ -434,11 +433,6 @@ function applyMode() {
   // A blockage has no engineered reservoir to be "full"; the lake is whatever
   // the terrain holds behind the debris.
   $("grp-level").style.display    = m === "blockage_breach" ? "none" : "";
-  // Breach regressions describe a FAILING embankment. A controlled release is
-  // not a failure, so the choice is meaningless there.
-  $("regression").closest("details") && ($("regression").previousElementSibling.style.display =
-    m === "gated_release" ? "none" : "");
-  $("regression").style.display = m === "gated_release" ? "none" : "";
 }
 
 $("fstate").onchange = async () => { await loadCities(); loadDams(); };
@@ -446,6 +440,7 @@ $("fcity").onchange = loadDams;
 let qTimer = null;
 $("fq").oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(loadDams, 250); };
 $("fdam").onchange = applyDam;
+$("fdam").onclick = applyDam;
 $("mode").onchange = applyMode;
 $("level").oninput = () => { $("levellab").textContent = $("level").value + "%"; };
 $("gate").oninput  = () => { $("gatelab").textContent  = $("gate").value + "%"; };
@@ -460,15 +455,16 @@ loadStates().then(loadDams);
 // ---------------------------------------------------------------- run
 $("run").onclick = async () => {
   const mode = $("mode").value;
+  /* Only what the operator actually chose. Breach regression, cell size,
+     numerical scheme and roughness are not operator decisions - they are the
+     values we validate against, and they live in the API defaults so there is
+     one place they can be wrong. */
   const body = {
     failure_mode: mode,
-    breach_regression: $("regression").value,
     reservoir_level_frac: +$("level").value / 100,
     reach_length_km: +$("reach").value,
-    cellsize_m: +$("cell").value,
     end_hr: +$("endhr").value,
-    scheme: $("scheme").value,
-    real_terrain: $("real").checked
+    real_terrain: true
   };
 
   /* Send the dam_id when the operator picked from the register: the backend
@@ -476,8 +472,6 @@ $("run").onclick = async () => {
      capacity straight from CWC rather than trusting anything retyped here. */
   if (DAM && !$("manual").checked) {
     body.dam_id = DAM.id;
-  } else if ($("preset").value) {
-    body.site_key = $("preset").value;
   } else if ($("manual").checked && $("lat").value !== "") {
     body.site = {
       name: $("name").value || "manual site", lat: +$("lat").value, lon: +$("lon").value,
@@ -592,6 +586,7 @@ async function load(runId) {
   await drawHydro(runId);
   drawBreachSpread(runId);
   drawPopCurve(IMPACT);
+  await loadFields(runId);   // velocity, for the hover readout and the streaks
   await loadPacked(runId);   // the area and depth charts need the packed grid
 }
 
@@ -985,6 +980,26 @@ const TILE_CACHE = new Map();     // url -> Image | "failed"
 let BASE_TILES_OK = null;         // null = untried, true/false once known
 let redrawTimer = null;
 
+/* ---------------------------------------------------------------- caches
+
+   Dragging the time slider used to redo two expensive things on every frame
+   that do not depend on time at all: compositing every OSM tile, and running
+   exp/atan per canvas pixel to find which grid cell it lands in. On a 600x500
+   canvas that is 300,000 trig pairs and a full tile repaint, sixty times a
+   second, for a picture whose geometry never moved.
+
+   Both are now built once per view and reused until the view actually changes:
+
+     BASE_CANVAS  the composited basemap, blitted in one drawImage
+     CELL_LUT     pixel index -> packed.png cell index, or -1 off the grid
+
+   A view is identified by canvas size plus bbox. Tiles arriving late mark the
+   basemap dirty so it recomposites once more, not once per frame.            */
+let BASE_CANVAS = null;           // offscreen composited basemap
+let BASE_DIRTY = true;
+let CELL_LUT = null;              // Int32Array, one entry per canvas pixel
+let VIEW_KEY = "";                // identity of the view both caches were built for
+
 const lon2mx = lon => (lon + 180) / 360;
 const lat2my = lat => {
   const r = lat * Math.PI / 180;
@@ -1010,6 +1025,7 @@ function getTile(z, x, y) {
   img.crossOrigin = "anonymous";
   img.onload = () => {
     BASE_TILES_OK = true;
+    BASE_DIRTY = true;            // a new tile changes the composite, once
     clearTimeout(redrawTimer);
     redrawTimer = setTimeout(() => renderFlood($("time").value / 100), 60);
   };
@@ -1045,77 +1061,119 @@ function renderFlood(frac) {
     const aspect = (mx1 - mx0) / (my1 - my0);
     let W = 600, H = Math.round(W / aspect);
     if (H > 560) { H = 560; W = Math.round(H * aspect); }
-    c.width = W; c.height = H;
+    // Writing canvas.width clears the canvas even when the value is identical,
+    // so only write it when the size genuinely changed.
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     v = { mx0, mx1, my0, my1, W, H, bbox };
   } else {
     const scale = Math.min(600 / w, 560 / h);
-    c.width = Math.max(Math.round(w * scale), 1);
-    c.height = Math.max(Math.round(h * scale), 1);
+    const W = Math.max(Math.round(w * scale), 1);
+    const H = Math.max(Math.round(h * scale), 1);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     v = null;
   }
 
   const tNow = frac * ENDHR;
+  TNOW = tNow;
   $("timelab").textContent = `t = ${tNow.toFixed(2)} hr of ${ENDHR}`;
 
-  // ---- 1. basemap -------------------------------------------------
-  x.fillStyle = "#eceff1";
-  x.fillRect(0, 0, c.width, c.height);
+  // The flow overlay rides on its own canvas at exactly the map's size, so a
+  // resize of one never leaves the other pointing at the wrong pixels.
+  const fc = $("flow");
+  if (fc.width !== c.width || fc.height !== c.height) {
+    fc.width = c.width; fc.height = c.height;
+  }
+  VIEW = v;
 
-  if (v) {
-    const z = Math.max(0, Math.min(16,
-      Math.round(Math.log2(v.W / ((v.mx1 - v.mx0) * TILE_PX)))));
-    const n = Math.pow(2, z);
-    const tx0 = Math.floor(v.mx0 * n), tx1 = Math.floor(v.mx1 * n);
-    const ty0 = Math.floor(v.my0 * n), ty1 = Math.floor(v.my1 * n);
-    for (let tx = tx0; tx <= tx1; tx++) {
-      for (let ty = ty0; ty <= ty1; ty++) {
-        if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue;
-        const img = getTile(z, tx, ty);
-        if (!img) continue;
-        const px = ((tx / n - v.mx0) / (v.mx1 - v.mx0)) * v.W;
-        const py = ((ty / n - v.my0) / (v.my1 - v.my0)) * v.H;
-        const pw = (1 / n / (v.mx1 - v.mx0)) * v.W;
-        const ph = (1 / n / (v.my1 - v.my0)) * v.H;
-        try { x.drawImage(img, px, py, pw + 1, ph + 1); } catch { /* tainted */ }
+  // ---- 1. basemap, composited once per view -----------------------
+  const key = `${c.width}x${c.height}|${v ? v.bbox.join(",") : "nogeo"}`;
+  if (key !== VIEW_KEY) { VIEW_KEY = key; CELL_LUT = null; BASE_DIRTY = true; }
+
+  if (BASE_DIRTY || !BASE_CANVAS ||
+      BASE_CANVAS.width !== c.width || BASE_CANVAS.height !== c.height) {
+    if (!BASE_CANVAS) BASE_CANVAS = document.createElement("canvas");
+    BASE_CANVAS.width = c.width; BASE_CANVAS.height = c.height;
+    const bx = BASE_CANVAS.getContext("2d");
+    bx.fillStyle = "#eceff1";
+    bx.fillRect(0, 0, c.width, c.height);
+    if (v) {
+      const z = Math.max(0, Math.min(16,
+        Math.round(Math.log2(v.W / ((v.mx1 - v.mx0) * TILE_PX)))));
+      const n = Math.pow(2, z);
+      const tx0 = Math.floor(v.mx0 * n), tx1 = Math.floor(v.mx1 * n);
+      const ty0 = Math.floor(v.my0 * n), ty1 = Math.floor(v.my1 * n);
+      for (let tx = tx0; tx <= tx1; tx++) {
+        for (let ty = ty0; ty <= ty1; ty++) {
+          if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue;
+          const img = getTile(z, tx, ty);
+          if (!img) continue;
+          const px = ((tx / n - v.mx0) / (v.mx1 - v.mx0)) * v.W;
+          const py = ((ty / n - v.my0) / (v.my1 - v.my0)) * v.H;
+          const pw = (1 / n / (v.mx1 - v.mx0)) * v.W;
+          const ph = (1 / n / (v.my1 - v.my0)) * v.H;
+          try { bx.drawImage(img, px, py, pw + 1, ph + 1); } catch { /* tainted */ }
+        }
+      }
+    }
+    BASE_DIRTY = false;
+  }
+  x.drawImage(BASE_CANVAS, 0, 0);
+
+  // ---- 2. pixel -> cell, resolved once per view --------------------
+  if (!CELL_LUT) {
+    CELL_LUT = new Int32Array(c.width * c.height);
+    for (let py = 0; py < c.height; py++) {
+      // lat depends only on the row, so the expensive inverse Mercator runs
+      // once per row instead of once per pixel.
+      let row;
+      if (v) {
+        const lat = my2lat(v.my0 + (py + 0.5) / v.H * (v.my1 - v.my0));
+        const [, S_, , N_] = v.bbox;
+        row = Math.floor((N_ - lat) / (N_ - S_) * h);
+      } else {
+        row = Math.floor(py / c.height * h);
+      }
+      const base = py * c.width;
+      const rowOff = row * w;
+      const inRow = row >= 0 && row < h;
+      for (let px = 0; px < c.width; px++) {
+        if (!inRow) { CELL_LUT[base + px] = -1; continue; }
+        let col;
+        if (v) {
+          const lon = mx2lon(v.mx0 + (px + 0.5) / v.W * (v.mx1 - v.mx0));
+          const [W_, , E_] = v.bbox;
+          col = Math.floor((lon - W_) / (E_ - W_) * w);
+        } else {
+          col = Math.floor(px / c.width * w);
+        }
+        CELL_LUT[base + px] = (col >= 0 && col < w) ? (rowOff + col) : -1;
       }
     }
   }
 
-  // ---- 2. flood, reprojected pixel by pixel -----------------------
+  // ---- 3. flood, straight off the lookup table --------------------
   const img = x.getImageData(0, 0, c.width, c.height);
   const dst = img.data, src = PACKED.data;
-  const dmax = (META.results || {}).packed_depth_max_m || 1;
+  const nPix = c.width * c.height;
+  const invEnd = 1 / Math.max(ENDHR, 1e-9);
 
-  for (let py = 0; py < c.height; py++) {
-    for (let px = 0; px < c.width; px++) {
-      let col, row;
-      if (v) {
-        const lon = mx2lon(v.mx0 + (px + 0.5) / v.W * (v.mx1 - v.mx0));
-        const lat = my2lat(v.my0 + (py + 0.5) / v.H * (v.my1 - v.my0));
-        const [W_, S_, E_, N_] = v.bbox;
-        col = Math.floor((lon - W_) / (E_ - W_) * w);
-        row = Math.floor((N_ - lat) / (N_ - S_) * h);
-      } else {
-        col = Math.floor(px / c.width * w);
-        row = Math.floor(py / c.height * h);
-      }
-      if (col < 0 || row < 0 || col >= w || row >= h) continue;
+  for (let i = 0; i < nPix; i++) {
+    const cell = CELL_LUT[i];
+    if (cell < 0) continue;
+    const s = cell * 4;
+    if (!src[s + 3]) continue;                       // never wet
+    if ((src[s] / 255) > tNow * invEnd) continue;    // arrival still ahead
+    const d01 = src[s + 2] / 255;
+    if (d01 <= 0) continue;
 
-      const s = (row * w + col) * 4;
-      if (!src[s + 3]) continue;                       // never wet
-      const arrival = (src[s] / 255) * ENDHR;          // R
-      if (arrival > tNow) continue;                    // not yet
-      const d01 = src[s + 2] / 255;                    // B
-      if (d01 <= 0) continue;
-
-      const o = (py * c.width + px) * 4;
-      const a = 0.40 + 0.55 * d01;                     // deeper -> more opaque
-      const r = 30 + 90 * (1 - d01), g = 110 + 90 * (1 - d01), b = 200 + 40 * (1 - d01);
-      dst[o]     = Math.round(dst[o]     * (1 - a) + r * a);
-      dst[o + 1] = Math.round(dst[o + 1] * (1 - a) + g * a);
-      dst[o + 2] = Math.round(dst[o + 2] * (1 - a) + b * a);
-      dst[o + 3] = 255;
-    }
+    const o = i * 4;
+    const a = 0.40 + 0.55 * d01;                     // deeper -> more opaque
+    const inv = 1 - a;
+    const r = 30 + 90 * (1 - d01), g = 110 + 90 * (1 - d01), b = 200 + 40 * (1 - d01);
+    dst[o]     = dst[o]     * inv + r * a;
+    dst[o + 1] = dst[o + 1] * inv + g * a;
+    dst[o + 2] = dst[o + 2] * inv + b * a;
+    dst[o + 3] = 255;
   }
   x.putImageData(img, 0, 0);
 
@@ -1166,6 +1224,223 @@ function renderFlood(frac) {
     x.fillText("basemap offline - flood and markers are unaffected", v.W - 8, 14);
   }
 }
+
+/* ---------------------------------------------------------------- hover
+
+   Point at the water and the map answers three questions: how deep, how fast,
+   how dangerous. Every one of them is read off this run's own GeoTIFFs by
+   /api/runs/{id}/probe - the hazard class in particular comes from
+   shared.contract.hazard_class on the server, so the browser is not carrying a
+   second copy of the thresholds that could drift from the contract.
+
+   Answers are cached per grid cell, so sweeping the pointer across a valley
+   costs one request per new cell and nothing at all on the way back.        */
+
+const PROBE_CACHE = new Map();
+let probeTimer = null, lastCell = null;
+
+function canvasToLonLat(px, py) {
+  if (!VIEW) return null;
+  const v = VIEW;
+  return [
+    mx2lon(v.mx0 + (px / v.W) * (v.mx1 - v.mx0)),
+    my2lat(v.my0 + (py / v.H) * (v.my1 - v.my0))
+  ];
+}
+
+const HAZ_COLOUR = {
+  extreme: "#fca5a5", significant: "#fdba74", moderate: "#fde68a",
+  low: "#86efac", none: "#8b98a9"
+};
+
+function showProbe(p, px, py) {
+  const tip = $("maptip");
+  if (!p || !p.inside_domain) { tip.style.display = "none"; return; }
+
+  const dry = !p.wet;
+  tip.innerHTML =
+    `<div class="r"><span>Water depth</span><b>${dry ? "dry" : p.max_depth_m.toFixed(2) + " m"}</b></div>` +
+    `<div class="r"><span>Water speed</span><b>${dry ? "—" : p.max_velocity_ms.toFixed(2) + " m/s"}</b></div>` +
+    `<div class="hz" style="color:${HAZ_COLOUR[p.hazard_class] || "#8b98a9"}">` +
+    `Risk area: ${p.hazard_class}</div>`;
+  tip.style.display = "block";
+  const w = tip.offsetWidth, h = tip.offsetHeight, c = $("map");
+  tip.style.left = Math.min(px + 14, c.width - w - 4) + "px";
+  tip.style.top = Math.max(4, Math.min(py + 14, c.height - h - 4)) + "px";
+}
+
+async function probeAt(px, py) {
+  if (!RUN || !VIEW) return;
+  const ll = canvasToLonLat(px, py);
+  if (!ll) return;
+  // Round to the grid so a wobbling pointer inside one cell asks once.
+  const bbox = VIEW.bbox, w = PACKED ? PACKED.width : 1, h = PACKED ? PACKED.height : 1;
+  const col = Math.floor((ll[0] - bbox[0]) / (bbox[2] - bbox[0]) * w);
+  const row = Math.floor((bbox[3] - ll[1]) / (bbox[3] - bbox[1]) * h);
+  const key = row + ":" + col;
+
+  if (PROBE_CACHE.has(key)) { showProbe(PROBE_CACHE.get(key), px, py); return; }
+  if (key === lastCell) return;
+  lastCell = key;
+  try {
+    const p = await jget(`/api/runs/${RUN}/probe?lat=${ll[1]}&lon=${ll[0]}`);
+    PROBE_CACHE.set(key, p);
+    showProbe(p, px, py);
+  } catch { /* off the domain, or the run has no grids */ }
+}
+
+(() => {
+  const wrap = $("mapwrap");
+  wrap.addEventListener("mousemove", ev => {
+    const r = $("map").getBoundingClientRect();
+    const px = ev.clientX - r.left, py = ev.clientY - r.top;
+    clearTimeout(probeTimer);
+    probeTimer = setTimeout(() => probeAt(px, py), 40);
+  });
+  wrap.addEventListener("mouseleave", () => {
+    clearTimeout(probeTimer);
+    $("maptip").style.display = "none";
+    lastCell = null;
+  });
+})();
+
+/* ------------------------------------------------------------ flow streaks
+
+   Drifting streaks over the flood, so the map shows water MOVING rather than a
+   blue stain. Both the direction and the speed are measured, not decorative:
+
+     direction  the downhill gradient of arrival_time. Water reaches a cell
+                later than the cell it came from, so -grad(arrival) points the
+                way the front actually travelled.
+     speed      max_velocity.tif at that cell, through fields.png.
+
+   Particles only exist on cells the water has already reached at the current
+   scrubber time, so the animation stops where the flood has stopped.        */
+
+let PARTICLES = [], flowRAF = null;
+
+async function loadFields(runId) {
+  FIELDS = null; FIELDSMETA = null; PARTICLES = [];
+  PROBE_CACHE.clear(); lastCell = null;
+  try { FIELDSMETA = await jget(`/api/runs/${runId}/fields`); } catch { return; }
+  await new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const off = document.createElement("canvas");
+      off.width = img.width; off.height = img.height;
+      const cx = off.getContext("2d");
+      cx.drawImage(img, 0, 0);
+      FIELDS = cx.getImageData(0, 0, img.width, img.height);
+      res();
+    };
+    img.onerror = () => res();
+    img.src = `${API}/api/runs/${runId}/fields.png`;
+  });
+}
+
+/** Arrival hours at a grid cell, or null where the water never arrives.
+    Positions are carried as floats, so the index has to be floored - a
+    fractional offset into the pixel array reads a different colour channel of
+    a different cell. */
+function arrivalAt(col, row) {
+  if (!PACKED) return null;
+  const w = PACKED.width, h = PACKED.height;
+  const c = Math.floor(col), r = Math.floor(row);
+  if (c < 0 || r < 0 || c >= w || r >= h) return null;
+  const s = (r * w + c) * 4;
+  if (!PACKED.data[s + 3]) return null;
+  return (PACKED.data[s] / 255) * ENDHR;
+}
+
+function velocityAt(col, row) {
+  if (!FIELDS || !FIELDSMETA) return 0;
+  const w = FIELDS.width, h = FIELDS.height;
+  const c = Math.floor(col), r = Math.floor(row);
+  if (c < 0 || r < 0 || c >= w || r >= h) return 0;
+  return (FIELDS.data[(r * w + c) * 4] / 255) * (FIELDSMETA.velocity_max_ms || 1);
+}
+
+/** Where the front was heading at this cell: the direction in which arrival
+    time increases fastest among the cells that are already wet at time t. */
+function flowDir(col, row, t) {
+  const a = arrivalAt(col, row);
+  if (a === null) return null;
+  let bx = 0, by = 0, best = a;
+  for (let dr = -2; dr <= 2; dr++) {
+    for (let dc = -2; dc <= 2; dc++) {
+      if (!dc && !dr) continue;
+      const n = arrivalAt(col + dc, row + dr);
+      if (n !== null && n > best && n <= t) { best = n; bx = dc; by = dr; }
+    }
+  }
+  if (!bx && !by) return null;
+  const len = Math.hypot(bx, by);
+  return [bx / len, by / len];
+}
+
+function seedParticles(n) {
+  PARTICLES = [];
+  if (!PACKED) return;
+  const w = PACKED.width, h = PACKED.height;
+  let guard = 0;
+  while (PARTICLES.length < n && guard++ < n * 60) {
+    const col = Math.floor(Math.random() * w), row = Math.floor(Math.random() * h);
+    if (arrivalAt(col, row) === null) continue;
+    PARTICLES.push({ col, row, life: Math.random() * 90 + 30, trail: [] });
+  }
+}
+
+function flowStep() {
+  const fc = $("flow");
+  const cx = fc.getContext("2d");
+  cx.clearRect(0, 0, fc.width, fc.height);
+
+  if (!PACKED || !VIEW || !FIELDSMETA) { flowRAF = requestAnimationFrame(flowStep); return; }
+  if (!PARTICLES.length) seedParticles(520);
+
+  const bbox = VIEW.bbox, w = PACKED.width, h = PACKED.height;
+  const vmax = Math.max(FIELDSMETA.velocity_max_ms || 1, 1e-6);
+
+  cx.lineCap = "round";
+  for (const p of PARTICLES) {
+    const a = arrivalAt(p.col, p.row);
+    // Respawn a particle that has left the water, aged out, or sits on ground
+    // the flood has not reached yet at the scrubber's time.
+    if (a === null || a > TNOW || p.life-- <= 0) {
+      let tries = 0;
+      do {
+        p.col = Math.floor(Math.random() * w); p.row = Math.floor(Math.random() * h);
+      } while (++tries < 40 && (arrivalAt(p.col, p.row) === null || arrivalAt(p.col, p.row) > TNOW));
+      p.life = Math.random() * 90 + 30; p.trail = [];
+      continue;
+    }
+
+    const dir = flowDir(p.col, p.row, TNOW);
+    if (!dir) { p.life = 0; continue; }               // at the front, respawn
+
+    const v = velocityAt(p.col, p.row);
+    const speed = 0.25 + 1.1 * (v / vmax);            // cells per frame
+    p.col += dir[0] * speed; p.row += dir[1] * speed;
+
+    const lon = bbox[0] + (p.col / w) * (bbox[2] - bbox[0]);
+    const lat = bbox[3] - (p.row / h) * (bbox[3] - bbox[1]);
+    const [sx, sy] = project(lon, lat, VIEW);
+    p.trail.push([sx, sy]);
+    if (p.trail.length > 9) p.trail.shift();
+
+    if (p.trail.length > 1) {
+      const f = Math.min(1, v / vmax);
+      cx.strokeStyle = `rgba(${Math.round(200 + 55 * f)},${Math.round(245 - 45 * f)},255,${0.35 + 0.5 * f})`;
+      cx.lineWidth = 1.1 + 1.9 * f;
+      cx.beginPath();
+      cx.moveTo(p.trail[0][0], p.trail[0][1]);
+      for (let i = 1; i < p.trail.length; i++) cx.lineTo(p.trail[i][0], p.trail[i][1]);
+      cx.stroke();
+    }
+  }
+  flowRAF = requestAnimationFrame(flowStep);
+}
+if (!flowRAF) flowRAF = requestAnimationFrame(flowStep);
 
 function dl(fmt) {
   if (!RUN) { log("load a run first"); return; }
