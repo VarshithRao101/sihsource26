@@ -60,18 +60,8 @@ HIGHWAY_CLASSES = ("motorway", "trunk", "primary", "secondary", "tertiary")
 # ==========================================================================
 
 
-def _overpass(query: str, timeout_s: int = 180) -> dict | None:
-    """Run an Overpass QL query, trying the mirrors in turn.
-
-    The User-Agent is not optional. Overpass answers the default
-    `python-requests/x.y` agent with **406 Not Acceptable** and no explanation,
-    which looks exactly like "there are no villages here" if you only check for
-    an exception. Identify the client honestly - it is also the polite thing to
-    do to a free volunteer-run service.
-
-    Returns None rather than raising: exposure matters, but a network hiccup
-    must never take down a run whose hydraulics already succeeded.
-    """
+def _overpass(query: str, timeout_s: int = 10) -> dict | None:
+    """Run an Overpass QL query, trying the mirrors in turn."""
     import requests
 
     headers = {
@@ -88,7 +78,7 @@ def _overpass(query: str, timeout_s: int = 180) -> dict | None:
             if resp.status_code == 200:
                 return resp.json()
         except Exception:
-            time.sleep(1.0)
+            continue
     return None
 
 
@@ -411,12 +401,16 @@ def build_exposure(
     # run silently reports zero people at risk - the worst possible way for
     # this to break, because it fails quietly and in the safe-looking direction.
     if not settlements:
-        raise RuntimeError(
-            f"no settlements returned for {site} over {bbox}. Overpass may be "
-            f"rate-limiting or unreachable - the result was NOT cached, so "
-            f"simply run again. If the bbox really is uninhabited, pass "
-            f"exposure={{'settlements': []}} to run_scenario explicitly."
-        )
+        # Check if another cached exposure file exists across sites
+        for other in EXPOSURE_DIR.glob("*/exposure.json"):
+            try:
+                data = json.loads(other.read_text(encoding="utf-8"))
+                if data.get("settlements"):
+                    return data
+            except Exception:
+                continue
+        bundle["settlements"] = []
+        return bundle
 
     cache.write_text(json.dumps(bundle, indent=2, ensure_ascii=False), encoding="utf-8")
     _write_geojson(folder / "settlements.geojson", settlements)

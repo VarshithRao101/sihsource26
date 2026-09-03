@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Processing Graph — Dam Break Simulation</title>
+<!--
+  modules/05_frontend/workflow.html - the processing graph.
+
+  What this page is FOR: standing in front of a teammate or a juror and
+  answering "what does this thing actually do?" in one screen. Boxes are the
+  stages, arrows are the data between them, and pressing PLAY runs the real
+  pipeline behind them - POST /api/runs, then the WebSocket drives every box
+  from WAITING to RUNNING to COMPLETE with the backend's own words in it.
+
+  It also shows the half nobody can see: each box carries the libraries,
+  datasets, services and external engines that stage genuinely depends on,
+  read off the imports and endpoints in the code it names.
+
+  Rules it keeps, from AGENTS.md:
+    - No CDN, no build step, no runtime dependency of any kind.
+    - No number appears here that the API did not send.
+    - Delft3D is drawn from a filesystem probe. It never turns green and its
+      numbers are never borrowed from another engine.
+
+  The graph itself is defined in modules/04_backend/pipeline.py and served by
+  /api/pipeline, so this picture cannot drift away from the code.
+-->
+<style>
+  :root {
+    --bg:#0a0d12; --bg2:#10141b; --panel:#161c25; --panel2:#1b222d;
+    --line:#252e3b; --line2:#334155;
+    --fg:#e8eef7; --muted:#93a1b5; --dim:#61708a;
+    --accent:#4c8dff;
+    --wait:#4a5568; --run:#f0b429; --ok:#2fbf71; --bad:#f0566d;
+    --skip:#8b6cf0; --absent:#5a6675;
+
+    --k-input:#64748b;   --k-data:#6366f1;    --k-geodata:#14b8a6;
+    --k-physics:#f59e0b; --k-solver:#3b82f6;  --k-output:#0ea5e9;
+    --k-ml:#a855f7;      --k-engine:#94a3b8;  --k-validation:#06b6d4;
+    --k-gate:#22c55e;    --k-result:#eab308;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg); overflow:hidden;
+    height:100vh; display:flex; flex-direction:column;
+    font:13px/1.5 system-ui,-apple-system,"Segoe UI",Inter,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header,#banner,.toolbar,#strip { flex:none; }
+  a { color:var(--accent); }
+
+  /* ---------------------------------------------------------- chrome */
+  header {
+    display:flex; align-items:center; gap:16px; padding:11px 18px;
+    background:linear-gradient(180deg,#141a23,#10141b);
+    border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  header h1 {
+    font-size:14.5px; margin:0; font-weight:650; letter-spacing:-.01em;
+    display:flex; align-items:center; gap:9px;
+  }
+  header h1 .mark {
+    width:9px; height:9px; border-radius:3px;
+    background:linear-gradient(135deg,var(--accent),#22d3ee);
+    box-shadow:0 0 12px #4c8dff88;
+  }
+  .nav { display:flex; gap:3px; margin-left:4px; }
+  .nav a {
+    padding:5px 13px; border-radius:7px; text-decoration:none; font-size:12.5px;
+    color:var(--muted); border:1px solid transparent; transition:.15s;
+  }
+  .nav a:hover { color:var(--fg); background:#ffffff08; }
+  .nav a.on { background:var(--panel2); color:var(--fg); border-color:var(--line2); }
+  .grow { flex:1; }
+  .chip {
+    font-size:11px; padding:3px 10px; border-radius:20px; border:1px solid var(--line);
+    color:var(--muted); background:var(--panel); white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .chip.live { border-color:var(--run); color:var(--run); background:#f0b4290f; }
+  .chip.done { border-color:var(--ok); color:var(--ok); background:#2fbf710f; }
+  .chip.bad  { border-color:var(--bad); color:var(--bad); background:#f0566d0f; }
+
+  /* -------------------------------------------------------- toolbar */
+  .toolbar {
+    display:flex; align-items:flex-end; gap:11px; padding:11px 18px;
+    background:var(--bg2); border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .fld { display:flex; flex-direction:column; gap:4px; }
+  .fld label { font-size:9.5px; text-transform:uppercase; letter-spacing:.09em;
+               color:var(--dim); font-weight:600; }
+  select,input,button { font:inherit; }
+  select,input {
+    background:var(--panel); color:var(--fg); border:1px solid var(--line);
+    border-radius:7px; padding:7px 10px; min-width:110px; transition:.15s;
+  }
+  select:hover,input:hover { border-color:var(--line2); }
+  select:focus,input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px #4c8dff22; }
+  .btn {
+    display:inline-flex; align-items:center; gap:7px; padding:8px 17px;
+    border-radius:8px; border:1px solid var(--line2); background:var(--panel2);
+    color:var(--fg); cursor:pointer; font-weight:600; font-size:13px; transition:.15s;
+  }
+  .btn:hover:not(:disabled) { border-color:var(--accent); background:#1f2836; }
+  .btn:disabled { opacity:.32; cursor:not-allowed; }
+  .btn.play {
+    background:linear-gradient(180deg,#1a7f47,#15693a); border-color:#2fbf71; color:#eafff2;
+    box-shadow:0 2px 12px #2fbf7133;
+  }
+  .btn.play:hover:not(:disabled) { background:linear-gradient(180deg,#1f9455,#1a7f47); }
+  .btn.pause { background:linear-gradient(180deg,#7a5410,#5f410b); border-color:#f0b429; color:#fff5da; }
+  .btn.reset { background:linear-gradient(180deg,#7a2230,#5e1a25); border-color:#f0566d; color:#ffe9ec; }
+
+  /* ------------------------------------------------- live metrics */
+  #strip {
+    display:none; gap:9px; padding:9px 18px; background:var(--bg2);
+    border-bottom:1px solid var(--line); overflow-x:auto;
+  }
+  #strip.on { display:flex; }
+  .metric {
+    background:var(--panel); border:1px solid var(--line); border-radius:9px;
+    padding:7px 13px; min-width:104px; flex:none;
+  }
+  .metric .k { font-size:9px; text-transform:uppercase; letter-spacing:.09em; color:var(--dim);
+               font-weight:650; }
+  .metric .v { font-size:17px; font-weight:650; font-variant-numeric:tabular-nums;
+               letter-spacing:-.02em; margin-top:1px; }
+  .metric .u { font-size:10.5px; color:var(--muted); font-weight:400; }
+  .metric.hi { border-color:var(--accent); background:#4c8dff0d; }
+
+  /* ---------------------------------------------------------- graph */
+  .stage { position:relative; flex:1; min-height:0; }
+  .stageHead {
+    position:absolute; top:0; left:0; right:0; z-index:6; display:flex; gap:14px;
+    align-items:center; padding:9px 16px;
+    background:linear-gradient(#0a0d12f2,#0a0d1200); pointer-events:none;
+  }
+  .stageHead .t { font-size:10.5px; text-transform:uppercase; letter-spacing:.1em;
+                  color:var(--muted); font-weight:650; white-space:nowrap; }
+  .legend { display:flex; gap:13px; flex-wrap:wrap; font-size:10.5px; color:var(--dim); }
+  .legend b { color:var(--muted); font-weight:500; }
+  .legend i { display:inline-block; width:8px; height:8px; border-radius:2.5px; margin-right:5px; }
+  .stageHead .tools { pointer-events:auto; margin-left:auto; display:flex; gap:6px; }
+  .mini {
+    background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    border-radius:7px; padding:4px 10px; cursor:pointer; font-size:11.5px;
+    text-transform:none; letter-spacing:0; transition:.15s;
+  }
+  .mini:hover { color:var(--fg); border-color:var(--accent); }
+
+  #canvasWrap {
+    position:absolute; inset:0; overflow:hidden; cursor:grab;
+    background:
+      radial-gradient(circle at 1px 1px,#1c2432 1.1px,transparent 0) 0 0/30px 30px,
+      radial-gradient(ellipse 70% 55% at 50% 42%,#131a26,transparent),
+      var(--bg);
+  }
+  #canvasWrap.drag { cursor:grabbing; }
+  #world { position:absolute; top:0; left:0; transform-origin:0 0; }
+  #wires { position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
+
+  /* Fixed height on purpose: the wires are drawn to the middle of a box, so a
+     card that grew with its text would leave its arrows pointing at nothing. */
+  .node {
+    position:absolute; width:214px; height:112px; overflow:hidden;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    color:var(--fg); border:1px solid var(--line); border-radius:11px;
+    /* The bottom padding reserves the dependency row, which is absolutely
+       positioned down there and must never be covered by the detail text. */
+    padding:11px 13px 24px; cursor:pointer;
+    box-shadow:0 3px 14px #00000066, inset 0 1px 0 #ffffff08;
+    transition:border-color .18s, box-shadow .18s, transform .18s;
+  }
+  .node::before {
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:var(--kc,var(--wait)); border-radius:11px 0 0 11px;
+  }
+  .node:hover { transform:translateY(-3px); box-shadow:0 10px 28px #000000aa; border-color:var(--line2); }
+  .node .nt { font-size:14px; font-weight:650; line-height:1.25; letter-spacing:-.01em; }
+  .node .ns { font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .node .nstat {
+    margin-top:8px; display:flex; align-items:center; gap:6px;
+    font-size:10px; text-transform:uppercase; letter-spacing:.09em; font-weight:700;
+  }
+  .node .dot { width:7px; height:7px; border-radius:50%; background:var(--wait); flex:none; }
+  .node .ndet { font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.35;
+                display:none; word-break:break-word; }
+  .node.has-det .ndet { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical;
+                        overflow:hidden; }
+  /* Dependency counts. The point of the page is that these are not hidden. */
+  .node .deps {
+    position:absolute; left:13px; right:11px; bottom:9px; display:flex; gap:5px;
+    font-size:9.5px; color:var(--dim); letter-spacing:.02em;
+  }
+  .node .deps span {
+    background:#ffffff0a; border:1px solid var(--line); border-radius:5px;
+    padding:1px 6px; white-space:nowrap;
+  }
+  .node .deps span.eng { border-color:#f0566d55; color:#f0566d; }
+
+  .node[data-s=waiting]  { opacity:.86; }
+  .node[data-s=waiting] .nstat { color:var(--dim); }
+  .node[data-s=running]  {
+    border-color:var(--run); box-shadow:0 0 0 1px #f0b42944, 0 0 28px #f0b42933, 0 6px 20px #000a;
+  }
+  .node[data-s=running] .dot { background:var(--run); animation:pulse 1s infinite; }
+  .node[data-s=running] .nstat { color:var(--run); }
+  .node[data-s=complete] { border-color:#2fbf7140; }
+  .node[data-s=complete] .dot { background:var(--ok); }
+  .node[data-s=complete] .nstat { color:var(--ok); }
+  .node[data-s=failed]   { border-color:var(--bad); box-shadow:0 0 0 1px #f0566d44, 0 4px 18px #000a; }
+  .node[data-s=failed] .dot { background:var(--bad); }
+  .node[data-s=failed] .nstat { color:var(--bad); }
+  .node[data-s=skipped] .dot { background:var(--skip); }
+  .node[data-s=skipped] .nstat { color:var(--skip); }
+  .node[data-s=absent]   { border-style:dashed; opacity:.66; }
+  .node[data-s=absent] .dot { background:var(--absent); }
+  .node[data-s=absent] .nstat { color:var(--absent); }
+  .node.sel { border-color:var(--accent); box-shadow:0 0 0 2px #4c8dff55, 0 10px 30px #000b; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  .node .bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:#00000055;
+               overflow:hidden; display:none; }
+  .node.showbar .bar { display:block; }
+  .node .bar i { display:block; height:100%; width:0; transition:width .25s;
+                 background:linear-gradient(90deg,#f0b429,#fbbf24); }
+
+  .wire { fill:none; stroke:#2b3646; stroke-width:1.9; }
+  .wire.dashed { stroke-dasharray:5 6; stroke:#28313e; }
+  .wire.hot { stroke:var(--run); stroke-width:2.6; stroke-dasharray:8 7;
+              animation:flow .6s linear infinite; }
+  .wire.done { stroke:#2b6b4a; }
+  @keyframes flow { to { stroke-dashoffset:-30; } }
+  .wlab { fill:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.07em;
+          font-weight:600; }
+  .warrow { fill:#2b3646; }
+  .warrow.done { fill:#2b6b4a; }
+  .warrow.hot { fill:var(--run); }
+
+  /* -------------------------------------------------------- inspector */
+  #drawer {
+    position:fixed; right:0; top:0; bottom:0; width:440px; max-width:94vw; z-index:40;
+    background:linear-gradient(180deg,#141a23,var(--bg2));
+    border-left:1px solid var(--line2); overflow:auto;
+    transform:translateX(102%); transition:transform .24s cubic-bezier(.4,0,.2,1);
+    padding:18px 22px 48px;
+  }
+  #drawer.open { transform:none; box-shadow:-20px 0 60px #000c; }
+  #drawer h2 { margin:0 0 3px; font-size:19px; letter-spacing:-.02em; }
+  #drawer .sub { color:var(--muted); font-size:12.5px; margin-bottom:13px; }
+  #drawer h3 { font-size:9.5px; text-transform:uppercase; letter-spacing:.11em;
+               color:var(--dim); margin:19px 0 7px; font-weight:700; }
+  #drawer p { margin:0; font-size:13px; line-height:1.65; color:#c4d1e2; }
+  #drawer ul { margin:0; padding-left:18px; font-size:12.5px; line-height:1.65; color:#c4d1e2; }
+  #drawer ul.plain { list-style:none; padding-left:0; }
+  #drawer ul.plain li {
+    padding:5px 9px; margin-bottom:4px; background:#ffffff07; border:1px solid var(--line);
+    border-left:2px solid var(--dl,var(--line2)); border-radius:6px; font-size:12px;
+  }
+  #drawer code { background:var(--panel); padding:2px 6px; border-radius:5px; font-size:11.5px;
+                 color:#8fc0ff; word-break:break-all; }
+  .close { position:absolute; right:14px; top:14px; }
+  .badge { display:inline-block; font-size:10px; font-weight:700; letter-spacing:.08em;
+           text-transform:uppercase; padding:3px 10px; border-radius:20px; }
+  .b-waiting{background:#2c3442;color:#b6c2d3} .b-running{background:#6b4a0d;color:#ffd97a}
+  .b-complete{background:#12502f;color:#a9f0c8} .b-failed{background:#6b1c28;color:#ffb9c3}
+  .b-skipped{background:#3a2a72;color:#d6c9ff} .b-absent{background:#2c3442;color:#8a97a8}
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:12.5px; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; font-variant-numeric:tabular-nums; }
+  table { border-collapse:collapse; width:100%; font-size:12px; }
+  th,td { text-align:left; padding:5px 7px; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-size:9.5px; text-transform:uppercase; font-weight:700;
+       letter-spacing:.08em; }
+  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+
+  /* ------------------------------------------------------------ misc */
+  #tip {
+    position:fixed; z-index:60; max-width:340px;
+    background:#080b10f5; color:var(--fg); border:1px solid var(--line2);
+    border-radius:9px; padding:11px 13px; font-size:12px; line-height:1.55;
+    pointer-events:none; display:none; box-shadow:0 12px 34px #000c;
+  }
+  #tip b { display:block; margin-bottom:4px; font-size:13px; }
+  #tip .t2 { color:var(--muted); }
+  #tip .t3 { margin-top:7px; color:#8fc0ff; }
+  #tip .t4 { margin-top:7px; color:var(--dim); font-size:11px; }
+  #banner {
+    display:none; padding:9px 18px; background:linear-gradient(90deg,#6b4a0d,#5a3f0b);
+    color:#ffd97a; font-weight:700; font-size:12px; border-bottom:1px solid #f0b429;
+  }
+  #log {
+    position:absolute; left:16px; bottom:16px; width:min(480px,44%); max-height:150px;
+    overflow:auto; background:#080b10e8; border:1px solid var(--line); border-radius:9px;
+    padding:9px 11px; font:11px/1.6 ui-monospace,Consolas,monospace; color:#93c5ea;
+    z-index:6; box-shadow:0 8px 24px #0009;
+  }
+  #log .t { color:var(--dim); }
+  #log .ok { color:#86efac; } #log .warn { color:#fcd34d; } #log .err { color:#fda4af; }
+  #log::-webkit-scrollbar { width:7px; }
+  #log::-webkit-scrollbar-thumb { background:#2b3646; border-radius:4px; }
+  #drawer::-webkit-scrollbar { width:9px; }
+  #drawer::-webkit-scrollbar-thumb { background:#2b3646; border-radius:5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="mark"></span>Dam Break Inundation — Processing Graph</h1>
+  <nav class="nav">
+    <a href="/">Console</a>
+    <a href="/workflow" class="on">Workflow</a>
+  </nav>
+  <span class="grow"></span>
+  <span class="chip" id="cHealth">connecting…</span>
+  <span class="chip" id="cRun">no run</span>
+  <span class="chip" id="cStatus">idle</span>
+</header>
+
+<div id="banner">SYNTHETIC DATA — this run is not real and must not be shown as a result</div>
+
+<div class="toolbar">
+  <div class="fld">
+    <label for="fstate">State</label>
+    <select id="fstate"><option value="">— any —</option></select>
+  </div>
+  <div class="fld">
+    <label for="fdam">Dam <span id="damcount" style="text-transform:none;letter-spacing:0"></span></label>
+    <select id="fdam" style="min-width:300px"><option value="">— pick a dam —</option></select>
+  </div>
+  <div class="fld">
+    <label for="mode">Scenario</label>
+    <select id="mode">
+      <option value="overtopping">Dam break — overtopping</option>
+      <option value="piping">Dam break — piping</option>
+      <option value="gated_release">Controlled release — gates</option>
+      <option value="blockage_breach">River blockage — landslide dam</option>
+    </select>
+  </div>
+  <div class="fld" id="fldLevel">
+    <label for="level">Reservoir full</label>
+    <select id="level">
+      <option value="100">100 %</option><option value="75">75 %</option>
+      <option value="50">50 %</option><option value="25">25 %</option>
+    </select>
+  </div>
+  <div class="fld" id="fldGate" style="display:none">
+    <label for="gate">Gates open</label>
+    <select id="gate">
+      <option value="100">100 %</option><option value="50">50 %</option>
+      <option value="25">25 %</option>
+    </select>
+  </div>
+  <div class="fld" id="fldBlock" style="display:none">
+    <label for="blockh">Debris height (m)</label>
+    <input id="blockh" type="number" value="40" min="5" max="200" step="5" style="min-width:100px">
+  </div>
+  <div class="fld">
+    <label for="reach">Downstream (km)</label>
+    <input id="reach" type="number" value="40" min="5" max="300" step="5" style="min-width:96px">
+  </div>
+  <div class="fld">
+    <label for="endhr">Simulate (hr)</label>
+    <input id="endhr" type="number" value="8" min="1" max="72" step="1" style="min-width:88px">
+  </div>
+  <span class="grow"></span>
+  <button class="btn play"  id="bPlay">&#9654;&nbsp; PLAY</button>
+  <button class="btn pause" id="bPause" disabled>&#10073;&#10073;&nbsp; PAUSE</button>
+  <button class="btn reset" id="bReset">&#8635;&nbsp; RESET</button>
+  <button class="btn"       id="bLast">Replay last run</button>
+</div>
+
+<div id="strip"></div>
+
+<div class="stage">
+  <div class="stageHead">
+    <span class="t">Processing graph</span>
+    <span class="legend" id="legend"></span>
+    <span class="tools">
+      <button class="mini" id="bFit">Fit</button>
+      <button class="mini" id="bZin">Zoom +</button>
+      <button class="mini" id="bZout">Zoom &minus;</button>
+      <button class="mini" id="bOne">100 %</button>
+    </span>
+  </div>
+  <div id="canvasWrap">
+    <div id="world"><svg id="wires"></svg></div>
+  </div>
+  <div id="log"></div>
+</div>
+
+<div id="drawer"><button class="mini close" id="bClose">close</button><div id="dbody"></div></div>
+<div id="tip"></div>
+
+<script>
+"use strict";
+
+/* ======================================================================
+   State
+   ====================================================================== */
+
+const S = {
+  manifest: null,
+  nodeById: {},
+  nodeEl: {},
+  states: {},           // node id -> {status, detail, note}
+  runId: null,
+  ws: null,
+  mode: "idle",         // idle | running | paused | done | failed
+  meta: null,
+  impact: null,
+  evac: null,
+  live: {},             // last streamed solver frame
+  dams: [],
+  lastStage: null,
+  selected: null,
+  t0: 0,
+};
+
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) =>
+  (v === null || v === undefined || Number.isNaN(v))
+    ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+
+function log(msg, cls) {
+  const el = $("log");
+  const now = new Date().toLocaleTimeString();
+  el.innerHTML +=
+    `<div><span class="t">${now}</span>  <span class="${cls || ""}">${escapeHtml(String(msg))}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+}
+async function jget(u) {
+  const r = await fetch(u);
+  if (!r.ok) throw new Error(u + " -> " + r.status);
+  return r.json();
+}
+function chip(id, text, cls) {
+  const el = $(id);
+  el.textContent = text;
+  el.className = "chip" + (cls ? " " + cls : "");
+}
+
+/* ======================================================================
+   Graph — layout, wires, node cards
+   ====================================================================== */
+
+const COL = 268, ROW = 148, NW = 214, NH = 112;
+const view = { x: 30, y: 46, k: 0.8 };
+
+const KIND_COLOUR = {
+  input:"--k-input", data:"--k-data", geodata:"--k-geodata", physics:"--k-physics",
+  solver:"--k-solver", output:"--k-output", ml:"--k-ml", engine:"--k-engine",
+  validation:"--k-validation", gate:"--k-gate", result:"--k-result",
+};
+
+function nodePos(n) { return { x: n.x * COL, y: n.y * ROW }; }
+
+/** The dependency counts printed on a card. The full list is in the drawer. */
+function depChips(n) {
+  const d = n.deps || {};
+  const bits = [];
+  if ((d.code || []).length) bits.push(`<span>${d.code.length} lib</span>`);
+  if ((d.data || []).length) bits.push(`<span>${d.data.length} data</span>`);
+  if ((d.services || []).length) bits.push(`<span>${d.services.length} svc</span>`);
+  if ((d.engines || []).length) bits.push(`<span class="eng">${d.engines.length} engine</span>`);
+  return bits.join("");
+}
+
+function buildGraph() {
+  const world = $("world"), svg = $("wires");
+  [...world.querySelectorAll(".node")].forEach(e => e.remove());
+  svg.innerHTML = "";
+  S.nodeEl = {};
+
+  let maxX = 0, maxY = 0;
+  for (const n of S.manifest.nodes) {
+    const p = nodePos(n);
+    maxX = Math.max(maxX, p.x + NW); maxY = Math.max(maxY, p.y + NH);
+
+    const el = document.createElement("div");
+    el.className = "node";
+    el.dataset.s = "waiting";
+    el.dataset.id = n.id;
+    el.style.left = p.x + "px";
+    el.style.top = p.y + "px";
+    el.style.setProperty("--kc", `var(${KIND_COLOUR[n.kind] || "--k-input"})`);
+    el.innerHTML =
+      `<div class="nt"></div><div class="ns"></div>` +
+      `<div class="nstat"><span class="dot"></span><span class="lbl">waiting</span></div>` +
+      `<div class="ndet"></div>` +
+      `<div class="deps">${depChips(n)}</div>` +
+      `<div class="bar"><i></i></div>`;
+    el.querySelector(".nt").textContent = n.title;
+    el.querySelector(".ns").textContent = n.subtitle;
+
+    el.addEventListener("click", ev => { ev.stopPropagation(); openNode(n.id); });
+    el.addEventListener("mouseenter", ev => showTip(ev, n));
+    el.addEventListener("mousemove", moveTip);
+    el.addEventListener("mouseleave", hideTip);
+
+    world.appendChild(el);
+    S.nodeEl[n.id] = el;
+    S.nodeById[n.id] = n;
+  }
+
+  svg.setAttribute("width", maxX + 80);
+  svg.setAttribute("height", maxY + 80);
+  for (const e of S.manifest.edges) drawWire(svg, e);
+  applyView();
+}
+
+function drawWire(svg, e) {
+  const a = S.nodeById[e.from], b = S.nodeById[e.to];
+  if (!a || !b) return;
+  const pa = nodePos(a), pb = nodePos(b);
+  const x1 = pa.x + NW, y1 = pa.y + NH / 2;
+  const x2 = pb.x,      y2 = pb.y + NH / 2;
+  const dx = Math.max(52, (x2 - x1) * 0.55);
+  const NS = "http://www.w3.org/2000/svg";
+
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+  path.setAttribute("class", "wire" + (e.style === "dashed" ? " dashed" : ""));
+  path.dataset.from = e.from; path.dataset.to = e.to;
+  svg.appendChild(path);
+
+  const head = document.createElementNS(NS, "polygon");
+  head.setAttribute("points", `${x2 - 10},${y2 - 5} ${x2 - 10},${y2 + 5} ${x2 - 1},${y2}`);
+  head.setAttribute("class", "warrow");
+  head.dataset.from = e.from; head.dataset.to = e.to;
+  svg.appendChild(head);
+
+  if (e.label) {
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", (x1 + x2) / 2); t.setAttribute("y", (y1 + y2) / 2 - 8);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "wlab");
+    t.textContent = e.label;
+    svg.appendChild(t);
+  }
+}
+
+function applyView() {
+  $("world").style.transform = `translate(${view.x}px,${view.y}px) scale(${view.k})`;
+}
+
+/* pan + zoom, the way every node editor works */
+(() => {
+  const wrap = $("canvasWrap");
+  let drag = null;
+  wrap.addEventListener("mousedown", e => {
+    if (e.target.closest(".node")) return;
+    drag = { x: e.clientX - view.x, y: e.clientY - view.y };
+    wrap.classList.add("drag");
+  });
+  addEventListener("mousemove", e => {
+    if (!drag) return;
+    view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; applyView();
+  });
+  addEventListener("mouseup", () => { drag = null; wrap.classList.remove("drag"); });
+  wrap.addEventListener("wheel", e => {
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const k2 = Math.min(2.2, Math.max(0.26, view.k * (e.deltaY < 0 ? 1.12 : 0.89)));
+    view.x = mx - (mx - view.x) * (k2 / view.k);
+    view.y = my - (my - view.y) * (k2 / view.k);
+    view.k = k2; applyView();
+  }, { passive: false });
+
+  const zoomTo = k2 => {
+    const r = wrap.getBoundingClientRect();
+    const mx = r.width / 2, my = r.height / 2;
+    view.x = mx - (mx - view.x) * (k2 / view.k);
+    view.y = my - (my - view.y) * (k2 / view.k);
+    view.k = k2; applyView();
+  };
+  $("bZin").onclick  = () => zoomTo(Math.min(2.2, view.k * 1.18));
+  $("bZout").onclick = () => zoomTo(Math.max(0.26, view.k / 1.18));
+  $("bOne").onclick  = () => zoomTo(1);
+  $("bFit").onclick  = fitGraph;
+})();
+
+function graphExtent() {
+  let maxX = 0, maxY = 0;
+  for (const n of S.manifest.nodes) {
+    const p = nodePos(n);
+    maxX = Math.max(maxX, p.x + NW); maxY = Math.max(maxY, p.y + NH);
+  }
+  return { maxX, maxY };
+}
+
+function fitGraph() {
+  if (!S.manifest) return;
+  const wrap = $("canvasWrap").getBoundingClientRect();
+  const { maxX, maxY } = graphExtent();
+  // Guard the degenerate case: before layout these ratios go to zero or
+  // negative and the whole graph collapses to a dot.
+  const kx = (wrap.width - 56) / maxX, ky = (wrap.height - 110) / maxY;
+  view.k = Math.max(0.3, Math.min(kx > 0 ? kx : 1, ky > 0 ? ky : 1, 1.15));
+  view.x = Math.max(24, (wrap.width - maxX * view.k) / 2);
+  view.y = Math.max(48, (wrap.height - maxY * view.k) / 2);
+  applyView();
+}
+
+/* ---------------------------------------------------------- tooltips */
+function showTip(ev, n) {
+  const st = S.states[n.id] || {};
+  const d = n.deps || {};
+  const dep = []
+    .concat((d.engines || []).map(x => "engine: " + x))
+    .concat((d.services || []).slice(0, 2))
+    .concat((d.code || []).slice(0, 2));
+  $("tip").innerHTML =
+    `<b>${escapeHtml(n.title)}</b>` +
+    `<div class="t2">${escapeHtml(n.does.slice(0, 200))}${n.does.length > 200 ? "…" : ""}</div>` +
+    (st.detail ? `<div class="t3">${escapeHtml(st.detail)}</div>` : "") +
+    (dep.length ? `<div class="t4">needs ${escapeHtml(dep.join(" · "))}</div>` : "") +
+    `<div class="t4">click to expand</div>`;
+  $("tip").style.display = "block";
+  moveTip(ev);
+}
+function moveTip(ev) {
+  const t = $("tip");
+  t.style.left = Math.min(ev.clientX + 18, innerWidth - 360) + "px";
+  t.style.top = Math.min(ev.clientY + 18, innerHeight - t.offsetHeight - 16) + "px";
+}
+function hideTip() { $("tip").style.display = "none"; }
+
+/* ======================================================================
+   Node states
+   ====================================================================== */
+
+function resetStates() {
+  S.states = {};
+  for (const n of S.manifest.nodes) {
+    const eng = n.engine ? (S.manifest.engines || {})[n.engine] : null;
+    S.states[n.id] = eng
+      ? { status: eng.installed ? "skipped" : "absent",
+          detail: eng.summary || "", note: n.optional_note || "" }
+      : { status: "waiting", detail: "", note: "" };
+  }
+  paintStates();
+}
+
+function paintStates() {
+  for (const id in S.nodeEl) {
+    const el = S.nodeEl[id];
+    const st = S.states[id] || { status: "waiting" };
+    el.dataset.s = st.status;
+    el.querySelector(".lbl").textContent = st.status;
+    el.querySelector(".ndet").textContent = st.detail || "";
+    el.classList.toggle("has-det", !!st.detail);
+    el.classList.toggle("showbar", id === "solve" && st.status === "running");
+    if (id === "solve") {
+      const pct = Number(S.live.pct || 0);
+      el.querySelector(".bar i").style.width = Math.max(0, Math.min(100, pct)) + "%";
+    }
+  }
+  paintWires();
+  if (S.selected) openNode(S.selected, true);
+}
+
+function paintWires() {
+  for (const p of $("wires").querySelectorAll("[data-from]")) {
+    const from = S.states[p.dataset.from] || {}, to = S.states[p.dataset.to] || {};
+    const arrow = p.tagName === "polygon";
+    const base = arrow ? "warrow" : ("wire" + (p.classList.contains("dashed") ? " dashed" : ""));
+    let cls = base;
+    if (from.status === "complete" && to.status === "running") cls += " hot";
+    else if (from.status === "complete" && to.status === "complete") cls += " done";
+    p.setAttribute("class", cls);
+  }
+}
+
+function applyNodeMap(nodes) {
+  if (!nodes) return;
+  for (const id in nodes) S.states[id] = Object.assign({}, S.states[id], nodes[id]);
+  paintStates();
+}
+
+/* ======================================================================
+   Inspector drawer
+   ====================================================================== */
+
+const DEP_SECTIONS = [
+  ["engines", "External engines", "#f0566d"],
+  ["services", "Network services and credentials", "#f59e0b"],
+  ["data", "Datasets and files", "#14b8a6"],
+  ["code", "Python packages", "#4c8dff"],
+];
+
+function depBlock(n) {
+  const d = n.deps || {};
+  let h = "";
+  for (const [key, title, colour] of DEP_SECTIONS) {
+    const list = d[key] || [];
+    if (!list.length) continue;
+    h += `<h3>${title}</h3><ul class="plain">` +
+      list.map(x => `<li style="--dl:${colour}">${escapeHtml(x)}</li>`).join("") + `</ul>`;
+  }
+  return h || `<h3>Dependencies</h3><p style="color:var(--dim)">The standard library and this
+    repository only — this stage pulls in nothing external.</p>`;
+}
+
+function openNode(id, keepScroll) {
+  const n = S.nodeById[id];
+  if (!n) return;
+  S.selected = id;
+  for (const k in S.nodeEl) S.nodeEl[k].classList.toggle("sel", k === id);
+
+  const st = S.states[id] || { status: "waiting" };
+  const scroll = keepScroll ? $("drawer").scrollTop : 0;
+
+  let html =
+    `<h2>${escapeHtml(n.title)}</h2>` +
+    `<div class="sub">${escapeHtml(n.subtitle)}</div>` +
+    `<span class="badge b-${st.status}">${st.status}</span>` +
+    (st.detail ? `<p style="margin-top:11px;color:#8fc0ff">${escapeHtml(st.detail)}</p>` : "") +
+    (st.note ? `<p style="margin-top:9px;color:var(--muted)">${escapeHtml(st.note)}</p>` : "") +
+    `<h3>What this stage does</h3><p>${escapeHtml(n.does)}</p>`;
+
+  if ((n.inputs || []).length)
+    html += `<h3>Takes in</h3><ul>${n.inputs.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`;
+  if ((n.outputs || []).length)
+    html += `<h3>Puts out</h3><ul>${n.outputs.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`;
+
+  html += depBlock(n);
+  html += `<h3>Code</h3><p><code>${escapeHtml(n.module)}</code></p>`;
+  if ((n.sources || []).length)
+    html += `<h3>Sources</h3><ul>${n.sources.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`;
+
+  if (id === "validate" && S.runId)
+    html += `<h3>Verdict</h3><p id="valv" style="color:var(--muted)">checking…</p>`;
+  if (id === "solve" && S.mode === "running") html += liveSolveBlock();
+  if (id === "result") html += resultBlock();
+  if (id === "delft3d") html += delftBlock();
+
+  $("dbody").innerHTML = html;
+  $("drawer").classList.add("open");
+  if (keepScroll) $("drawer").scrollTop = scroll;
+
+  if (id === "validate" && S.runId) {
+    jget(`/api/runs/${S.runId}/validate`).then(rep => {
+      const el = $("valv");
+      if (!el) return;
+      el.style.color = rep.ok ? "#a9f0c8" : "#ffb9c3";
+      el.innerHTML =
+        (rep.ok ? "PASS — contract clean." : "FAIL — " + escapeHtml(rep.errors.join("; "))) +
+        (rep.warnings.length
+          ? `<br><span style="color:var(--muted)">${escapeHtml(rep.warnings.join("; "))}</span>` : "");
+    }).catch(() => {});
+  }
+}
+$("bClose").onclick = () => { $("drawer").classList.remove("open"); S.selected = null; paintStates(); };
+
+function liveSolveBlock() {
+  const L = S.live;
+  return `<h3>Live from the solver</h3><dl class="kv">
+    <dt>progress</dt><dd>${fmt(L.pct, 1)} %</dd>
+    <dt>simulated time</dt><dd>${fmt(L.t_hr, 3)} hr</dd>
+    <dt>wet cells</dt><dd>${fmt(L.wet_cells, 0)}</dd>
+    <dt>max depth</dt><dd>${fmt(L.max_depth_m, 2)} m</dd>
+    <dt>timestep</dt><dd>${fmt(L.dt_s, 3)} s</dd>
+    <dt>volume in</dt><dd>${fmt(L.volume_in_mcm, 3)} MCM</dd>
+    <dt>volume out</dt><dd>${fmt(L.volume_out_mcm, 3)} MCM</dd>
+    <dt>volume stored</dt><dd>${fmt(L.volume_stored_mcm, 3)} MCM</dd>
+  </dl>`;
+}
+
+function delftBlock() {
+  const e = (S.manifest.engines || {}).delft3d || {};
+  const d = e.detail || {};
+  let h = `<h3>Engine probe</h3><p>${escapeHtml(e.summary || "not probed")}</p>`;
+  if ((d.searched || []).length)
+    h += `<h3>Paths searched</h3><ul class="plain">` +
+      d.searched.map(x => `<li><code>${escapeHtml(x)}</code></li>`).join("") + `</ul>`;
+  if ((d.licence_tooling || []).length)
+    h += `<h3>Found, but not a solver</h3><ul class="plain">` +
+      d.licence_tooling.map(x => `<li><code>${escapeHtml(x)}</code></li>`).join("") + `</ul>`;
+  h += `<p style="margin-top:12px;color:#ffb9c3">This node cannot turn green while the kernel is
+        missing, and no other engine's numbers are shown in its place.</p>`;
+  return h;
+}
+
+/* The final node carries the answer, read back off the validated run. */
+function resultBlock() {
+  if (!S.meta) return `<h3>Result</h3><p style="color:var(--muted)">No finished run loaded yet.</p>`;
+  const r = S.meta.results || {}, site = S.meta.site || {};
+  let h = `<h3>Flood — ${escapeHtml(site.name || "")}</h3><dl class="kv">
+    <dt>flooded area</dt><dd>${fmt(r.flood_area_km2)} km²</dd>
+    <dt>max depth</dt><dd>${fmt(r.max_depth_m)} m</dd>
+    <dt>max velocity</dt><dd>${fmt(r.max_velocity_ms)} m/s</dd>
+    <dt>peak discharge</dt><dd>${fmt(r.peak_discharge_cumecs, 0)} m³/s</dd>
+    <dt>released volume</dt><dd>${fmt(r.released_volume_mcm, 2)} MCM</dd>
+    <dt>mass balance</dt><dd>${fmt(r.mass_balance_err_pct, 4)} %</dd>
+    <dt>solver runtime</dt><dd>${fmt(r.runtime_s, 1)} s</dd>
+  </dl>`;
+
+  if (S.impact && S.impact.totals) {
+    const t = S.impact.totals;
+    h += `<h3>Damage and loss</h3><dl class="kv">
+      <dt>settlements hit</dt><dd>${fmt(t.settlements_affected, 0)}</dd>
+      <dt>people affected</dt><dd>${fmt(t.population_affected, 0)}</dd>
+      <dt>houses affected</dt><dd>${fmt(t.houses_affected, 0)}</dd>
+      <dt>roads cut</dt><dd>${fmt(t.roads_cut_km)} km</dd>
+      <dt>damage</dt><dd>₹ ${fmt(t.damage_inr_crore)} crore</dd>
+    </dl>`;
+    const ss = (S.impact.settlements || []).slice(0, 12);
+    if (ss.length) {
+      h += `<h3>Warning time by settlement</h3><table><tr><th>Place</th>
+            <th class="num">Arrives</th><th class="num">Depth</th><th>Hazard</th></tr>` +
+        ss.map(s => `<tr><td>${escapeHtml(s.name)}</td>
+          <td class="num">${fmt(s.arrival_hr)} hr</td>
+          <td class="num">${fmt(s.max_depth_m)} m</td>
+          <td>${escapeHtml(s.hazard_class || "")}</td></tr>`).join("") + `</table>`;
+    }
+    if (t.damage_curve_source)
+      h += `<p style="margin-top:9px;font-size:11px;color:var(--muted)">${escapeHtml(t.damage_curve_source)}</p>`;
+  } else {
+    h += `<h3>Damage and loss</h3><p style="color:var(--muted)">No impact.json for this run — it
+          needs settlements from OpenStreetMap, so it needs a run on real terrain.</p>`;
+  }
+
+  if (S.evac && (S.evac.routes || []).length) {
+    h += `<h3>Evacuation</h3><table><tr><th>From</th><th class="num">Walk</th>
+          <th class="num">Margin</th></tr>` +
+      S.evac.routes.slice(0, 12).map(r2 => `<tr>
+        <td>${escapeHtml(r2.settlement || r2.name || "")}</td>
+        <td class="num">${fmt(r2.walk_time_hr ?? r2.travel_time_hr)} hr</td>
+        <td class="num" style="color:${(r2.margin_hr ?? 1) < 0 ? "#ffb9c3" : "#a9f0c8"}">
+          ${fmt(r2.margin_hr)} hr</td></tr>`).join("") + `</table>`;
+  } else {
+    h += `<h3>Evacuation</h3><p style="color:var(--muted)">No evacuation plan for this run — it
+          needs OSM road geometry.</p>`;
+  }
+
+  h += `<h3>Export</h3><p>
+    <a href="/api/runs/${S.runId}/export?format=kml">KML</a> ·
+    <a href="/api/runs/${S.runId}/export?format=shp">Shapefile</a> ·
+    <a href="/api/runs/${S.runId}/export?format=geojson">GeoJSON</a></p>
+    <p style="margin-top:10px"><a href="/">Open this run on the map &rarr;</a></p>`;
+  return h;
+}
+
+/* ======================================================================
+   Metric strip — where the solver's own numbers live
+   ====================================================================== */
+
+function metric(k, v, u, hi) {
+  return `<div class="metric${hi ? " hi" : ""}"><div class="k">${k}</div>
+          <div class="v">${v}<span class="u"> ${u || ""}</span></div></div>`;
+}
+
+function stripLive(d) {
+  $("strip").className = "on";
+  $("strip").innerHTML =
+    metric("solver", fmt(d.pct, 1), "%", true) +
+    metric("simulated time", fmt(d.t_hr, 2), "hr") +
+    metric("max depth", fmt(d.max_depth_m, 2), "m") +
+    metric("wet cells", fmt(d.wet_cells, 0), "") +
+    metric("timestep", fmt(d.dt_s, 3), "s") +
+    metric("volume in", fmt(d.volume_in_mcm, 2), "MCM") +
+    metric("out", fmt(d.volume_out_mcm, 2), "MCM") +
+    metric("stored", fmt(d.volume_stored_mcm, 2), "MCM");
+}
+
+function stripResult() {
+  if (!S.meta) { $("strip").className = ""; return; }
+  const r = S.meta.results || {}, t = (S.impact || {}).totals || {};
+  $("strip").className = "on";
+  $("strip").innerHTML =
+    metric("flooded area", fmt(r.flood_area_km2), "km²", true) +
+    metric("max depth", fmt(r.max_depth_m), "m") +
+    metric("max velocity", fmt(r.max_velocity_ms), "m/s") +
+    metric("peak discharge", fmt(r.peak_discharge_cumecs, 0), "m³/s") +
+    metric("mass balance", fmt(r.mass_balance_err_pct, 4), "%") +
+    (t.population_affected !== undefined
+      ? metric("people affected", fmt(t.population_affected, 0), "") : "") +
+    (t.damage_inr_crore !== undefined
+      ? metric("damage", "₹ " + fmt(t.damage_inr_crore), "crore") : "") +
+    metric("solver runtime", fmt(r.runtime_s, 1), "s");
+}
+
+/* ======================================================================
+   The dam picker — only the fields an operator actually fills in
+   ====================================================================== */
+
+async function loadStates2() {
+  try {
+    const r = await jget("/api/dams/states");
+    for (const st of r.states) {
+      const o = document.createElement("option");
+      o.value = st; o.textContent = st; $("fstate").appendChild(o);
+    }
+  } catch { log("dam catalogue unavailable", "err"); }
+}
+
+async function loadDams() {
+  const p = new URLSearchParams();
+  if ($("fstate").value) p.set("state", $("fstate").value);
+  p.set("limit", "400");
+  let r;
+  try { r = await jget("/api/dams?" + p.toString()); } catch { return; }
+  S.dams = r.dams || [];
+  $("damcount").textContent = `(${S.dams.length})`;
+  const sel = $("fdam");
+  sel.innerHTML = "";
+  for (const d of S.dams) {
+    const o = document.createElement("option");
+    o.value = d.id;
+    o.textContent = `${d.name} — ${d.river || "?"} — ${d.height_m ?? "?"} m`;
+    sel.appendChild(o);
+  }
+  if (S.dams.length > 0) {
+    // Prefer Hirakud or Cheyyeru if present in the initial batch, else first dam
+    const preferred = S.dams.find(d => d.name.toUpperCase().includes("HIRAKUD") || d.name.toUpperCase().includes("CHEYYERU")) || S.dams[0];
+    sel.value = preferred.id;
+  }
+}
+
+$("fstate").onchange = loadDams;
+$("mode").onchange = () => {
+  const m = $("mode").value;
+  $("fldGate").style.display  = m === "gated_release" ? "" : "none";
+  $("fldBlock").style.display = m === "blockage_breach" ? "" : "none";
+  $("fldLevel").style.display = m === "blockage_breach" ? "none" : "";
+};
+
+/* ======================================================================
+   PLAY / PAUSE / RESET — these drive the real backend
+   ====================================================================== */
+
+$("bPlay").onclick = play;
+$("bPause").onclick = togglePause;
+$("bReset").onclick = reset;
+$("bLast").onclick = replayLast;
+
+async function play() {
+  if (S.mode === "running") return;
+  let damId = $("fdam").value;
+  if (!damId && S.dams.length > 0) {
+    damId = S.dams[0].id;
+    $("fdam").value = damId;
+  }
+  if (!damId) { log("pick a dam first — every physical number comes from the register.", "warn"); return; }
+
+  const mode = $("mode").value;
+  const body = {
+    dam_id: damId,
+    failure_mode: mode,
+    reservoir_level_frac: +$("level").value / 100,
+    reach_length_km: +$("reach").value,
+    end_hr: +$("endhr").value,
+    real_terrain: true,
+  };
+  if (mode === "gated_release")   body.gate_opening_frac = +$("gate").value / 100;
+  if (mode === "blockage_breach") body.blockage_height_m = +$("blockh").value;
+
+  resetStates();
+  S.meta = S.impact = S.evac = null;
+  S.live = {}; S.lastStage = null;
+  $("strip").className = "";
+  $("log").innerHTML = "";
+  log("POST /api/runs …");
+
+  let j;
+  try {
+    const r = await fetch("/api/runs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    j = await r.json();
+    if (!r.ok) { log("REJECTED: " + JSON.stringify(j), "err"); return; }
+  } catch (e) { log("failed to start: " + e.message, "err"); return; }
+
+  S.runId = j.run_id;
+  S.mode = "running";
+  S.t0 = Date.now();
+  chip("cRun", j.run_id);
+  chip("cStatus", "running", "live");
+  $("bPlay").disabled = true;
+  $("bPause").disabled = false;
+  $("bPause").innerHTML = "&#10073;&#10073;&nbsp; PAUSE";
+  log("run_id " + j.run_id + " — following " + j.websocket, "ok");
+  follow(j.run_id);
+}
+
+function follow(runId) {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  S.ws = ws;
+
+  /* Every handler checks it is still the run the page cares about. Closing a
+     socket fires onclose asynchronously, so without this a RESET is undone a
+     moment later by the close handler of the run it just cancelled. */
+  const stale = () => S.runId !== runId;
+
+  ws.onmessage = ev => {
+    if (stale()) return;
+    let d; try { d = JSON.parse(ev.data); } catch { return; }
+    S.live = d;
+    if (d.nodes) applyNodeMap(d.nodes);
+    // The registry keeps `stage` in its state, so every frame carries the last
+    // one. Log it only when it changes, or the panel fills with a hundred
+    // copies of "solving shallow water".
+    if (d.stage && d.stage !== S.lastStage) { S.lastStage = d.stage; log(d.stage); }
+    if (d.pct !== undefined && d.t_hr !== undefined) { stripLive(d); paintStates(); }
+    if (d.status === "failed") log("FAILED: " + (d.error || ""), "err");
+  };
+  ws.onerror = () => { if (!stale()) log("websocket dropped — polling instead", "warn"); };
+  ws.onclose = async () => {
+    if (S.ws === ws) S.ws = null;
+    if (stale()) return;
+    let st = null;
+    try { st = await jget(`/api/runs/${runId}/status`); } catch {}
+    if (stale()) return;
+    if (st && st.error) { finishRun(runId, "failed", st.error); return; }
+    finishRun(runId, "done");
+  };
+}
+
+async function finishRun(runId, how, err) {
+  if (S.runId !== runId) return;
+  $("bPlay").disabled = false;
+  $("bPause").disabled = true;
+  if (how === "failed") {
+    S.mode = "failed";
+    chip("cStatus", "failed", "bad");
+    log("run failed: " + (err || ""), "err");
+    return;
+  }
+  S.mode = "done";
+  chip("cStatus", `done in ${((Date.now() - S.t0) / 1000).toFixed(1)}s`, "done");
+  log("run complete — loading outputs", "ok");
+  await loadRun(runId);
+}
+
+async function togglePause() {
+  if (!S.runId) return;
+  const to = S.mode === "paused" ? "resume" : "pause";
+  try {
+    const r = await fetch(`/api/runs/${S.runId}/${to}`, { method: "POST" });
+    const j = await r.json();
+    if (!r.ok) { log("pause failed: " + JSON.stringify(j), "err"); return; }
+    S.mode = j.paused ? "paused" : "running";
+    $("bPause").innerHTML = j.paused ? "&#9654;&nbsp; RESUME" : "&#10073;&#10073;&nbsp; PAUSE";
+    chip("cStatus", j.paused ? "paused" : "running", j.paused ? "" : "live");
+    log(j.paused
+      ? "solver paused — the solve thread is blocked between timesteps"
+      : "solver resumed", "warn");
+  } catch (e) { log("pause failed: " + e.message, "err"); }
+}
+
+async function reset() {
+  /* Disown the run FIRST. Everything below yields, and a WebSocket close
+     handler that fires mid-await must find that the page has already moved on -
+     otherwise it repopulates the workspace we are in the middle of clearing. */
+  const cancelling = S.runId;
+  const wasLive = S.mode === "running" || S.mode === "paused";
+  S.runId = null; S.mode = "idle"; S.live = {}; S.lastStage = null;
+
+  if (S.ws) { try { S.ws.close(); } catch {} S.ws = null; }
+  if (cancelling && wasLive) {
+    try {
+      await fetch(`/api/runs/${cancelling}/cancel`, { method: "POST" });
+      log("cancel sent to the solver — " + cancelling, "warn");
+    } catch {}
+  }
+
+  S.meta = S.impact = S.evac = null;
+  chip("cRun", "no run"); chip("cStatus", "idle");
+  $("bPlay").disabled = false;
+  $("bPause").disabled = true;
+  $("bPause").innerHTML = "&#10073;&#10073;&nbsp; PAUSE";
+  $("banner").style.display = "none";
+  $("strip").className = "";
+  $("drawer").classList.remove("open"); S.selected = null;
+  $("log").innerHTML = "";
+  resetStates();
+  log("reset. every box is back to WAITING.");
+}
+
+async function replayLast() {
+  try {
+    const r = await jget("/api/runs");
+    const runs = r.runs || [];
+    if (!runs.length) { log("no runs on disk yet", "warn"); return; }
+    resetStates();
+    // A replay did not execute anything now. The boxes report what the run
+    // folder on disk ACTUALLY contains - a missing evacuation.json means the
+    // stage produced none, and the box says skipped rather than green - and
+    // the status chip says replay so nobody reads it as a live solve.
+    chip("cStatus", "replay — nothing is solving", "");
+    S.mode = "done";
+    await loadRun(runs[0].run_id, true);
+  } catch (e) { log("replay failed: " + e.message, "err"); }
+}
+
+/* ======================================================================
+   Loading a finished run
+   ====================================================================== */
+
+async function loadRun(runId, markGraph) {
+  if (!runId) return;
+  S.runId = runId;
+  chip("cRun", runId);
+  const d = await jget("/api/runs/" + runId);
+  S.meta = d.meta;
+  S.impact = d.impact || null;
+  $("banner").style.display = d.is_fake ? "block" : "none";
+
+  try { S.evac = await jget(`/api/runs/${runId}/evacuation`); } catch { S.evac = null; }
+
+  if (markGraph) markGraphFromRun(d);
+  stripResult();
+  openNode("result");
+  log("loaded " + runId, "ok");
+}
+
+/* For a replay, derive each node's state from what the run folder ACTUALLY
+   contains. A missing evacuation.json means the stage did not produce one, and
+   the box says skipped rather than green. */
+function markGraphFromRun(d) {
+  const files = d.files || [];
+  const has = f => files.includes(f);
+  const meta = d.meta || {}, r = meta.results || {};
+  const site = meta.site || {}, dem = meta.dem || {};
+  const set = (id, status, detail) => { S.states[id] = { status, detail, note: "" }; };
+
+  set("input", "complete", `${(meta.scenario || {}).failure_mode || ""} at ${site.name || ""}`);
+  set("catalogue", "complete",
+      `${site.dam_height_m ?? "?"} m, ${site.reservoir_capacity_mcm ?? "?"} MCM, source ${site.source || "?"}`);
+  const real = (dem.source || "") !== "SYNTHETIC";
+  set("river", real ? "complete" : "skipped",
+      real ? `domain traced, ${((meta.domain || {}).reach_length_km ?? "?")} km reach` : "synthetic valley");
+  set("terrain", real ? "complete" : "skipped",
+      real ? `${dem.source}, ${dem.native_resolution_m ?? "?"} m native` : "synthetic valley");
+  set("exposure", S.impact ? "complete" : "skipped",
+      S.impact ? `${(S.impact.totals || {}).settlements_affected ?? 0} settlements affected`
+               : "no impact.json in this run");
+  set("breach", "complete",
+      `${(meta.scenario || {}).breach_param_source || "gated release — no breach regression"}`);
+  set("solve", "complete",
+      `${fmt(r.solver_steps, 0)} steps, mass balance ${fmt(r.mass_balance_err_pct, 4)}%`);
+  set("grids", has("packed.png") ? "complete" : "skipped",
+      `${(meta.domain || {}).nx}×${(meta.domain || {}).ny} cells at ${fmt((meta.domain || {}).cellsize_m, 0)} m`);
+  set("impact", S.impact ? "complete" : "skipped",
+      S.impact
+        ? `₹ ${fmt((S.impact.totals || {}).damage_inr_crore)} crore, ${fmt((S.impact.totals || {}).population_affected, 0)} people`
+        : "no impact.json");
+  set("evacuation", S.evac ? "complete" : "skipped",
+      S.evac ? `${(S.evac.routes || []).length} routes planned` : "no evacuation.json in this run");
+  set("uncertainty", has("uncertainty.json") ? "complete" : "skipped", "regression spread published");
+  set("validate", "running", "running the contract validator…");
+  set("result", "complete",
+      `${fmt(r.flood_area_km2)} km² flooded, max depth ${fmt(r.max_depth_m)} m, peak ${fmt(r.peak_discharge_cumecs, 0)} m³/s`);
+  if (has("validation.json")) set("gee", "complete", "Sentinel-1 comparison stored with this run");
+  paintStates();
+
+  /* The validator is the definition of done, so a replay runs it for real
+     rather than assuming the folder passed when it was written. */
+  jget(`/api/runs/${S.runId}/validate`).then(rep => {
+    const n = rep.warnings.length;
+    S.states.validate = rep.ok
+      ? { status: "complete",
+          detail: "contract clean" + (n ? `, ${n} warning${n === 1 ? "" : "s"}` : ""), note: "" }
+      : { status: "failed", detail: rep.errors.join("; "), note: "" };
+    if (!rep.ok) S.states.result = { status: "failed", detail: "run does not validate", note: "" };
+    paintStates();
+  }).catch(() => {
+    S.states.validate = { status: "skipped", detail: "validator did not answer", note: "" };
+    paintStates();
+  });
+}
+
+/* ======================================================================
+   Boot
+   ====================================================================== */
+
+function buildLegend() {
+  const items = [
+    ["waiting", "var(--wait)"], ["running", "var(--run)"], ["complete", "var(--ok)"],
+    ["failed", "var(--bad)"], ["skipped", "var(--skip)"], ["absent", "var(--absent)"],
+  ];
+  $("legend").innerHTML = items
+    .map(([k, c]) => `<b><i style="background:${c}"></i>${k}</b>`).join("");
+}
+
+(async () => {
+  buildLegend();
+  try {
+    const h = await jget("/health");
+    chip("cHealth", `backend ok · jit ${h.jit_warmup_s ?? "?"}s`, "done");
+  } catch { chip("cHealth", "backend unreachable", "bad"); }
+
+  try {
+    S.manifest = await jget("/api/pipeline");
+  } catch (e) {
+    log("could not load the pipeline manifest: " + e.message, "err");
+    return;
+  }
+  buildGraph();
+  resetStates();
+  fitGraph();
+
+  const eng = S.manifest.engines || {};
+  for (const k in eng) log(`${k}: ${eng[k].summary}`, eng[k].installed ? "ok" : "warn");
+  log(`${S.manifest.nodes.length} stages, ${S.manifest.edges.length} data flows — pick a dam and press PLAY.`);
+
+  await loadStates2();
+  await loadDams();
+})();
+
+let fitTimer = null;
+addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitGraph, 150); });
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { $("drawer").classList.remove("open"); S.selected = null; paintStates(); }
+  if (e.key === "f" && !/input|select/i.test(document.activeElement.tagName)) fitGraph();
+});
+</script>
+</body>
+</html>

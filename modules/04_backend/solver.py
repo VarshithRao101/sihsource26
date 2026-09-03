@@ -453,12 +453,19 @@ def _apply_swe(
     return limited
 
 
-@njit(cache=True, fastmath=True)
+@njit(cache=True, fastmath=True, parallel=True)
 def _max_wave_speed(h, hu, hv, active, g):
-    """max(|u| + sqrt(gh)) over the domain, for the CFL condition."""
+    """max(|u| + sqrt(gh)) over the domain, for the CFL condition.
+
+    Runs every timestep, so it is worth the cores. The per-row maximum is
+    reduced with `smax = max(smax, row)` rather than an `if` because that is
+    the form numba recognises as a parallel reduction - written as a branch it
+    silently serialises.
+    """
     ny, nx = h.shape
     smax = 0.0
-    for i in range(ny):
+    for i in prange(ny):
+        row = 0.0
         for j in range(nx):
             if active[i, j] == 0:
                 continue
@@ -469,8 +476,8 @@ def _max_wave_speed(h, hu, hv, active, g):
             su = abs(hu[i, j] / hij) + c
             sv = abs(hv[i, j] / hij) + c
             s = su if su > sv else sv
-            if s > smax:
-                smax = s
+            row = max(row, s)
+        smax = max(smax, row)
     return smax
 
 
@@ -620,28 +627,66 @@ def _step_inertial(h, z, n, qx, qy, active, dx, dt, g, flow_eps, open_edges):
 # ==========================================================================
 
 
-@njit(cache=True, fastmath=True)
-def _accumulate(
-    h, u, v, t_hr, dt_hr,
+@njit(cache=True, fastmath=True, inline="always")
+def _bump(hij, speed, t_hr, dt_hr, i, j,
+          max_depth, arrival_time, time_of_peak, max_velocity, duration):
+    """The running maxima for one wet cell. Shared by both accumulators."""
+    if hij > max_depth[i, j]:
+        max_depth[i, j] = hij
+        time_of_peak[i, j] = t_hr
+    if speed > max_velocity[i, j]:
+        max_velocity[i, j] = speed
+    if arrival_time[i, j] < 0.0:  # ARRIVAL_UNSET; see the constant
+        arrival_time[i, j] = t_hr
+    duration[i, j] += dt_hr
+
+
+# The cell-centred velocity used to be built as numpy temporaries in the main
+# loop - a max, a comparison and a where-plus-divide per component, six
+# full-domain arrays every timestep - and handed in. It is computed here
+# instead, for the wet cells only, which allocates nothing and runs on all
+# cores. The result is identical: a cell only reaches this code when
+# h >= wet_threshold (0.05 m), which is above both DRY_EPS and the 0.01 m floor
+# the old `safe_h` applied, so `safe_h` was always exactly h and `wet_now` was
+# always true here.
+
+
+@njit(cache=True, fastmath=True, parallel=True)
+def _accumulate_swe(
+    h, hu, hv, t_hr, dt_hr,
     max_depth, arrival_time, time_of_peak, max_velocity, duration,
     wet_threshold,
 ):
     """Update the four contract grids plus duration. Called every step."""
     ny, nx = h.shape
-    for i in range(ny):
+    for i in prange(ny):
         for j in range(nx):
             hij = h[i, j]
             if hij < wet_threshold:
                 continue
-            speed = math.sqrt(u[i, j] * u[i, j] + v[i, j] * v[i, j])
-            if hij > max_depth[i, j]:
-                max_depth[i, j] = hij
-                time_of_peak[i, j] = t_hr
-            if speed > max_velocity[i, j]:
-                max_velocity[i, j] = speed
-            if arrival_time[i, j] < 0.0:  # ARRIVAL_UNSET; see the constant
-                arrival_time[i, j] = t_hr
-            duration[i, j] += dt_hr
+            u = hu[i, j] / hij
+            v = hv[i, j] / hij
+            _bump(hij, math.sqrt(u * u + v * v), t_hr, dt_hr, i, j,
+                  max_depth, arrival_time, time_of_peak, max_velocity, duration)
+
+
+@njit(cache=True, fastmath=True, parallel=True)
+def _accumulate_inertial(
+    h, qx, qy, t_hr, dt_hr,
+    max_depth, arrival_time, time_of_peak, max_velocity, duration,
+    wet_threshold,
+):
+    """Same, for the inertial scheme, whose velocities live on the faces."""
+    ny, nx = h.shape
+    for i in prange(ny):
+        for j in range(nx):
+            hij = h[i, j]
+            if hij < wet_threshold:
+                continue
+            u = 0.5 * (qx[i, j] + qx[i, j + 1]) / hij
+            v = 0.5 * (qy[i, j] + qy[i + 1, j]) / hij
+            _bump(hij, math.sqrt(u * u + v * v), t_hr, dt_hr, i, j,
+                  max_depth, arrival_time, time_of_peak, max_velocity, duration)
 
 
 # ==========================================================================
@@ -935,21 +980,19 @@ def run_solver(
         step += 1
         t_hr = t_s / 3600.0
 
-        # ---- cell-centred velocities for the running maxima -----------
-        safe_h = np.maximum(h, 0.01)
-        wet_now = h > DRY_EPS
+        # ---- running maxima, straight off the state arrays ------------
         if use_swe:
-            u = np.where(wet_now, hu / safe_h, 0.0)
-            v = np.where(wet_now, hv / safe_h, 0.0)
+            _accumulate_swe(
+                h, hu, hv, t_hr, dt / 3600.0,
+                max_depth, arrival_time, time_of_peak, max_velocity, duration,
+                WET_THRESHOLD_M,
+            )
         else:
-            u = np.where(wet_now, 0.5 * (qx[:, :-1] + qx[:, 1:]) / safe_h, 0.0)
-            v = np.where(wet_now, 0.5 * (qy[:-1, :] + qy[1:, :]) / safe_h, 0.0)
-
-        _accumulate(
-            h, u, v, t_hr, dt / 3600.0,
-            max_depth, arrival_time, time_of_peak, max_velocity, duration,
-            WET_THRESHOLD_M,
-        )
+            _accumulate_inertial(
+                h, qx, qy, t_hr, dt / 3600.0,
+                max_depth, arrival_time, time_of_peak, max_velocity, duration,
+                WET_THRESHOLD_M,
+            )
 
         if config.keep_frames and t_s >= next_frame_s:
             frames.append(h.astype(np.float32).copy())

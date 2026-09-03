@@ -41,7 +41,7 @@ from shared.contract import ENGINES, FAILURE_MODES, SCHEMA_VERSION
 from shared.io import RunFolder, list_runs, read_json, read_meta
 from shared.validate import validate_run
 
-from . import reservoir
+from . import pipeline, reservoir
 from .runner import SyntheticTerrain, run_scenario
 from .scenario import DEMO_SITES, ScenarioSpec, SiteSpec
 from .solver import warm_up_jit
@@ -52,6 +52,10 @@ OUTPUTS = Path("outputs")
 # ==========================================================================
 # In-flight run registry
 # ==========================================================================
+
+
+class RunCancelled(Exception):
+    """RESET was pressed while this run was solving."""
 
 
 class RunRegistry:
@@ -66,6 +70,12 @@ class RunRegistry:
         self._state: dict[str, dict[str, Any]] = {}
         self._queues: dict[str, list[asyncio.Queue]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
+        # PAUSE and RESET on the workflow page reach the solver through these.
+        # The solve runs on a worker thread and calls progress() between
+        # timesteps, so blocking or raising inside that callback is a real
+        # pause and a real stop - not the UI pretending while the CPU carries
+        # on burning through the run.
+        self._control: dict[str, dict[str, Any]] = {}
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -81,25 +91,117 @@ class RunRegistry:
             "site": spec.site.name,
             "engine": spec.engine,
             "error": None,
+            # Per-node state for the workflow graph. Probe nodes start on their
+            # real state - see pipeline.initial_nodes.
+            "nodes": pipeline.initial_nodes(),
+            "node": None,
         }
         self._queues.setdefault(run_id, [])
 
     def publish(self, run_id: str, update: dict) -> None:
-        """Called from the solver thread. Hops back onto the event loop."""
+        """Called from the solver thread. Hops back onto the event loop.
+
+        An update carrying `node` also moves that node in the workflow graph.
+        `node_status` defaults to running, because every emitter that names a
+        node is announcing that it has started work on it.
+        """
         state = self._state.get(run_id)
         if state is None:
             return
+
+        node_id = update.get("node")
+        if node_id:
+            nodes = state.setdefault("nodes", pipeline.initial_nodes())
+            entry = nodes.setdefault(node_id, {"status": pipeline.WAITING})
+            new_status = update.pop("node_status", pipeline.RUNNING)
+            entry["status"] = new_status
+            if "node_detail" in update:
+                entry["detail"] = update.pop("node_detail")
+            # Anything still upstream of a node that has started is finished by
+            # definition - the pipeline is sequential and a stage cannot begin
+            # before the one feeding it returned.
+            if new_status == pipeline.RUNNING:
+                for prior in pipeline.LIVE_NODES:
+                    if prior == node_id:
+                        break
+                    if nodes.get(prior, {}).get("status") == pipeline.RUNNING:
+                        nodes[prior]["status"] = pipeline.COMPLETE
+
         state.update(update)
         payload = dict(state)
+        # Deep-copy the node map so a later mutation cannot rewrite a message
+        # that is already sitting in a subscriber's queue.
+        payload["nodes"] = {k: dict(v) for k, v in state.get("nodes", {}).items()}
         for q in self._queues.get(run_id, []):
             if self._loop is not None:
                 self._loop.call_soon_threadsafe(q.put_nowait, payload)
 
+    def finish_node(self, run_id: str, node_id: str, detail: str = "") -> None:
+        self.publish(
+            run_id,
+            {"node": node_id, "node_status": pipeline.COMPLETE, "node_detail": detail},
+        )
+
+    def fail_node(self, run_id: str, node_id: str, detail: str) -> None:
+        self.publish(
+            run_id,
+            {"node": node_id, "node_status": pipeline.FAILED, "node_detail": detail},
+        )
+
+    def skip_node(self, run_id: str, node_id: str, why: str) -> None:
+        """A stage that legitimately did not run. Never shown as complete."""
+        self.publish(
+            run_id,
+            {"node": node_id, "node_status": pipeline.SKIPPED, "node_detail": why},
+        )
+
     def finish(self, run_id: str, error: str | None = None) -> None:
+        # Whichever node was mid-flight owns the failure. Leaving it on RUNNING
+        # would show a spinner forever on the box that actually broke.
+        state = self._state.get(run_id)
+        if error and state:
+            for entry in state.get("nodes", {}).values():
+                if entry.get("status") == pipeline.RUNNING:
+                    entry["status"] = pipeline.FAILED
+                    entry["detail"] = error
         self.publish(
             run_id,
             {"status": "failed" if error else "done", "pct": 100.0, "error": error},
         )
+
+    # ---- pause / cancel, from the workflow page ---------------------------
+
+    def control(self, run_id: str) -> dict:
+        return self._control.setdefault(
+            run_id, {"paused": False, "cancelled": False}
+        )
+
+    def set_paused(self, run_id: str, paused: bool) -> bool:
+        self.control(run_id)["paused"] = paused
+        self.publish(run_id, {"paused": paused})
+        return paused
+
+    def cancel(self, run_id: str) -> None:
+        c = self.control(run_id)
+        c["cancelled"] = True
+        c["paused"] = False  # a paused run must wake up to notice it is cancelled
+
+    def gate(self, run_id: str) -> None:
+        """Called from the solver thread between timesteps.
+
+        Blocks while the run is paused and raises when it is cancelled. This is
+        the only place either one takes effect, which is why the solver's own
+        code needs no knowledge of the buttons.
+        """
+        import time as _time
+
+        c = self.control(run_id)
+        while c.get("paused"):
+            if c.get("cancelled"):
+                break
+            _time.sleep(0.1)
+        if c.get("cancelled"):
+            raise RunCancelled(run_id)
 
     def get(self, run_id: str) -> dict | None:
         return self._state.get(run_id)
@@ -191,6 +293,16 @@ class RunRequest(BaseModel):
         ),
     )
     spillway_length_m: float = Field(60.0, gt=0, le=2000)
+    sph_run: str | None = Field(
+        None,
+        description=(
+            "Path to a finished module 02 SPH run folder. Setting it switches "
+            "the engine to 'sphcoupled': the near-field discharge DualSPHysics "
+            "measured is spliced onto the front of the level-pool curve, and "
+            "the disagreement between the two engines at the handover is "
+            "published in meta.json under `sph_coupling`."
+        ),
+    )
     keep_frames: bool = False
     real_terrain: bool = True
     """Use module 01's downloaded, conditioned DEM. False falls back to the
@@ -258,6 +370,11 @@ class RunRequest(BaseModel):
             ),
             target_release_cumecs=self.target_release_cumecs,
             spillway_length_m=self.spillway_length_m,
+            # Asking for an SPH run IS asking for the coupled engine. Making the
+            # caller set both would only create a way to set one and forget the
+            # other, and the scenario validator rejects that combination anyway.
+            engine="sphcoupled" if self.sph_run else "fast",
+            sph_run=self.sph_run,
             notes=self.notes,
         )
 
@@ -409,6 +526,35 @@ def reservoir_simulate(req: ReservoirRequest) -> dict:
         raise HTTPException(422, f"unknown config keys: {sorted(unknown)}")
     cfg = reservoir.ReservoirConfig(**{**reservoir.ReservoirConfig().as_dict(), **req.config})
     return reservoir.simulate(cfg, req.hours, req.sample_every_s)
+
+
+@app.get("/workflow", include_in_schema=False)
+def workflow_page():
+    """The node workflow workspace: boxes, arrows and the 3D scene."""
+    page = UI_DIR / "workflow.html"
+    if not page.exists():
+        return JSONResponse({"detail": "workflow UI not built"}, status_code=404)
+    return FileResponse(page, media_type="text/html")
+
+
+if (UI_DIR / "vendor").exists():
+    # Babylon.js is vendored, not pulled from a CDN. Demo-day wifi is not a
+    # dependency we accept, and the console has to render with the network
+    # unplugged.
+    app.mount(
+        "/vendor", StaticFiles(directory=UI_DIR / "vendor"), name="frontend-vendor"
+    )
+
+
+@app.get("/api/pipeline", tags=["meta"])
+def get_pipeline() -> dict:
+    """The processing graph the workflow page draws.
+
+    Nodes, edges, what each stage actually does, and a live probe of every
+    external engine. The page hardcodes none of this - if a stage is added to
+    pipeline.py the picture grows a box.
+    """
+    return pipeline.manifest()
 
 
 @app.get("/health", tags=["meta"])
@@ -584,33 +730,92 @@ def _prepare_real(spec: ScenarioSpec, run_id: str):
     gd = import_module("modules.01_geodata")
     site_slug = spec.site_slug
 
-    REGISTRY.publish(run_id, {"stage": "tracing river", "pct": 0})
-    plan = gd.plan_domain(
-        lat=spec.site.lat,
-        lon=spec.site.lon,
-        site=site_slug,
-        reach_length_km=spec.reach_length_km,
-        corridor_width_km=spec.corridor_width_km,
-    )
-    # The dam moves onto the channel and the domain follows the traced river.
-    spec.site.lat, spec.site.lon = plan.dam_lonlat[1], plan.dam_lonlat[0]
-    spec.domain_bbox = plan.bbox
-
-    REGISTRY.publish(run_id, {"stage": "fetching terrain", "pct": 0})
-    terrain = gd.RealTerrain(
-        site=site_slug,
-        source=spec.dem_source if spec.dem_source != "SYNTHETIC" else "COP30",
-        dam_lonlat=plan.dam_lonlat,
-        reach_length_km=spec.reach_length_km,
-    )
-
-    REGISTRY.publish(run_id, {"stage": "downloading settlements", "pct": 0})
     try:
-        exposure = gd.exposure.build_exposure(plan.bbox, site=site_slug)
-    except Exception:
+        REGISTRY.publish(run_id, {"stage": "tracing river", "pct": 0, "node": "river"})
+        plan = gd.plan_domain(
+            lat=spec.site.lat,
+            lon=spec.site.lon,
+            site=site_slug,
+            reach_length_km=spec.reach_length_km,
+            corridor_width_km=spec.corridor_width_km,
+        )
+        spec.site.lat, spec.site.lon = plan.dam_lonlat[1], plan.dam_lonlat[0]
+        spec.domain_bbox = plan.bbox
+
+        REGISTRY.finish_node(
+            run_id,
+            "river",
+            f"channel traced, domain {plan.bbox[0]:.4f},{plan.bbox[1]:.4f} "
+            f"to {plan.bbox[2]:.4f},{plan.bbox[3]:.4f}",
+        )
+    except Exception as exc:
+        plan = None
+        REGISTRY.skip_node(
+            run_id,
+            "river",
+            f"river tracing offline fallback ({type(exc).__name__})",
+        )
+
+    REGISTRY.publish(
+        run_id, {"stage": "fetching terrain", "pct": 0, "node": "terrain"}
+    )
+    try:
+        terrain = gd.RealTerrain(
+            site=site_slug,
+            source=spec.dem_source if spec.dem_source != "SYNTHETIC" else "COP30",
+            dam_lonlat=plan.dam_lonlat if plan else (spec.site.lon, spec.site.lat),
+            reach_length_km=spec.reach_length_km,
+        )
+        REGISTRY.finish_node(
+            run_id,
+            "terrain",
+            f"{spec.dem_source if spec.dem_source != 'SYNTHETIC' else 'COP30'} "
+            f"fetched and conditioned",
+        )
+    except Exception as exc:
+        terrain = SyntheticTerrain()
+        REGISTRY.skip_node(
+            run_id,
+            "terrain",
+            f"cloud DEM fetch offline ({type(exc).__name__}); using synthetic valley",
+        )
+
+    REGISTRY.publish(
+        run_id, {"stage": "downloading settlements", "pct": 0, "node": "exposure"}
+    )
+    try:
+        bbox_to_use = plan.bbox if plan else spec.bbox
+        exposure = gd.exposure.build_exposure(bbox_to_use, site=site_slug)
+        n_set = len((exposure or {}).get("settlements") or [])
+        n_road = len((exposure or {}).get("roads") or [])
+        REGISTRY.finish_node(
+            run_id, "exposure", f"{n_set} settlements, {n_road} road segments"
+        )
+    except Exception as exc:  # noqa: BLE001
         exposure = None  # a flood map without names is still a valid run
+        REGISTRY.skip_node(
+            run_id,
+            "exposure",
+            f"no exposure downloaded ({type(exc).__name__}); the flood map is "
+            f"still valid but carries no names",
+        )
 
     return terrain, exposure
+
+
+def _gated_progress(run_id: str):
+    """The progress callback the solver actually gets.
+
+    Every publish goes through the pause/cancel gate first, so PAUSE on the
+    workflow page stops the solve between timesteps rather than only freezing
+    the picture of it.
+    """
+
+    def _cb(update: dict) -> None:
+        REGISTRY.gate(run_id)
+        REGISTRY.publish(run_id, update)
+
+    return _cb
 
 
 def _execute(
@@ -618,10 +823,31 @@ def _execute(
 ) -> None:
     """Runs on the background thread. Never raises into the request."""
     try:
+        REGISTRY.publish(run_id, {"stage": "scenario accepted", "node": "input"})
+        REGISTRY.finish_node(
+            run_id, "input", f"{spec.failure_mode} at {spec.site.name}"
+        )
+        REGISTRY.publish(run_id, {"stage": "reading the register", "node": "catalogue"})
+        REGISTRY.finish_node(
+            run_id,
+            "catalogue",
+            f"{spec.site.name}: {spec.site.dam_height_m:g} m high, "
+            f"{spec.site.reservoir_capacity_mcm:g} MCM, source {spec.site.source}",
+        )
+
         if real_terrain:
             terrain, exposure = _prepare_real(spec, run_id)
         else:
             terrain, exposure = SyntheticTerrain(), None
+            # Synthetic terrain means module 01 did not run. Say that on the
+            # graph rather than letting two boxes sit on WAITING.
+            for node_id in ("river", "terrain"):
+                REGISTRY.skip_node(
+                    run_id, node_id, "synthetic valley requested - module 01 not used"
+                )
+            REGISTRY.skip_node(
+                run_id, "exposure", "no real domain, so no settlements to download"
+            )
 
         # The solver publishes pct but no stage, so without this the label
         # would still read "downloading settlements" at 99% - the operator
@@ -634,16 +860,75 @@ def _execute(
             run_id=run_id,
             keep_frames=keep_frames,
             exposure=exposure,
-            progress=lambda u: REGISTRY.publish(run_id, u),
+            progress=_gated_progress(run_id),
         )
-        REGISTRY.publish(run_id, {"stage": "validating run"})
+
+        REGISTRY.publish(run_id, {"stage": "validating run", "node": "validate"})
         report = validate_run(OUTPUTS / run_id)
         if not report.ok:
+            REGISTRY.fail_node(run_id, "validate", "; ".join(report.errors))
             REGISTRY.finish(run_id, "; ".join(report.errors))
-        else:
-            REGISTRY.finish(run_id)
+            return
+
+        n_warn = len(report.warnings)
+        REGISTRY.finish_node(
+            run_id,
+            "validate",
+            "contract clean"
+            + (f", {n_warn} warning{'s' if n_warn != 1 else ''}" if n_warn else ""),
+        )
+
+        # The result node carries the headline the operator asked for, read
+        # back off the run folder that just validated - not from anything held
+        # in memory during the solve.
+        meta = read_meta(OUTPUTS / run_id)
+        res = meta.get("results", {})
+        REGISTRY.publish(run_id, {"stage": "result ready", "node": "result"})
+        REGISTRY.finish_node(
+            run_id,
+            "result",
+            f"{res.get('flood_area_km2')} km2 flooded, "
+            f"max depth {res.get('max_depth_m')} m, "
+            f"peak {res.get('peak_discharge_cumecs')} m3/s",
+        )
+        REGISTRY.finish(run_id)
+    except RunCancelled:
+        REGISTRY.finish(run_id, "cancelled by the operator (RESET)")
     except Exception as exc:  # noqa: BLE001 - the message is the product here
         REGISTRY.finish(run_id, f"{type(exc).__name__}: {exc}")
+
+
+@app.post("/api/runs/{run_id}/pause", tags=["runs"])
+def pause_run(run_id: str) -> dict:
+    """Hold the solve where it is.
+
+    The solver thread blocks inside its own progress callback between
+    timesteps, so this really does stop the computation - the CPU is not
+    quietly finishing the run behind a frozen picture of it.
+    """
+    if REGISTRY.get(run_id) is None:
+        raise HTTPException(404, f"no active run {run_id!r}")
+    REGISTRY.set_paused(run_id, True)
+    return {"run_id": run_id, "paused": True}
+
+
+@app.post("/api/runs/{run_id}/resume", tags=["runs"])
+def resume_run(run_id: str) -> dict:
+    if REGISTRY.get(run_id) is None:
+        raise HTTPException(404, f"no active run {run_id!r}")
+    REGISTRY.set_paused(run_id, False)
+    return {"run_id": run_id, "paused": False}
+
+
+@app.post("/api/runs/{run_id}/cancel", tags=["runs"])
+def cancel_run(run_id: str) -> dict:
+    """Stop the solve. Whatever it had written so far stays on disk, and the
+    run is marked failed rather than done - a half-solved flood is not a
+    result."""
+    if REGISTRY.get(run_id) is None:
+        raise HTTPException(404, f"no active run {run_id!r}")
+    REGISTRY.cancel(run_id)
+    return {"run_id": run_id, "cancelled": True}
 
 
 @app.get("/api/runs/{run_id}/status", tags=["runs"])
@@ -784,6 +1069,280 @@ def extent(run_id: str) -> JSONResponse:
     run_dir = _require_run(run_id)
     with open(run_dir / "extent.geojson", "r", encoding="utf-8") as fh:
         return JSONResponse(json.load(fh))
+
+
+# --------------------------------------------------------------------------
+# Point query and derived rasters - what the map hover and the 3D scene read
+# --------------------------------------------------------------------------
+#
+# Everything below is READ BACK OFF THE RUN FOLDER. Nothing is modelled here,
+# nothing is interpolated into existence, and no file is added to the contract:
+# these endpoints render GeoTIFFs the solver already wrote into shapes a
+# browser can consume.
+
+_GRID_CACHE: dict[str, dict] = {}
+_GRID_CACHE_MAX = 4
+
+# Derived rasters live OUTSIDE the run folder. A run folder is the data
+# contract and nothing else; a rendering we made for the browser has no
+# business sitting next to the GeoTIFFs where another module might read it as
+# an output.
+DERIVED = OUTPUTS / ".derived"
+
+
+def _derived(run_id: str) -> Path:
+    d = DERIVED / run_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _fields(run_id: str) -> dict:
+    """max_depth / max_velocity / arrival_time for a run, held in memory.
+
+    A hover fires several times a second. Re-opening three GeoTIFFs per pointer
+    move would make the map feel broken, so the arrays are cached; the cache is
+    tiny because a demo looks at one or two runs.
+    """
+    hit = _GRID_CACHE.get(run_id)
+    if hit is not None:
+        return hit
+
+    from shared.io import read_grid
+
+    run_dir = _require_run(run_id)
+    depth, grid = read_grid(run_dir, "max_depth")
+    vel, _ = read_grid(run_dir, "max_velocity")
+    arr, _ = read_grid(run_dir, "arrival_time")
+
+    entry = {"depth": depth, "velocity": vel, "arrival": arr, "grid": grid}
+    if len(_GRID_CACHE) >= _GRID_CACHE_MAX:
+        _GRID_CACHE.pop(next(iter(_GRID_CACHE)))
+    _GRID_CACHE[run_id] = entry
+    return entry
+
+
+@app.get("/api/runs/{run_id}/probe", tags=["runs"])
+def probe(run_id: str, lat: float, lon: float) -> dict:
+    """What the flood does at one point on the map.
+
+    The map hover calls this. Every value is the cell the coordinate lands in,
+    read straight from the run's GeoTIFFs - depth in metres, depth-averaged
+    speed in m/s, arrival in hours since the breach, and the hazard class the
+    contract computes from the two. Outside the domain it says so instead of
+    returning a zero that would read as "dry".
+    """
+    import numpy as np
+
+    from shared.contract import WET_THRESHOLD_M, hazard_class
+
+    f = _fields(run_id)
+    grid = f["grid"]
+    if not grid.contains(lon, lat):
+        return {"run_id": run_id, "lat": lat, "lon": lon, "inside_domain": False}
+
+    r, c = grid.rowcol(lon, lat)
+    depth = float(f["depth"][r, c])
+    vel = float(f["velocity"][r, c])
+    arrival = float(f["arrival"][r, c])
+    if not np.isfinite(depth):
+        depth = 0.0
+    if not np.isfinite(vel):
+        vel = 0.0
+
+    wet = depth >= WET_THRESHOLD_M
+    return {
+        "run_id": run_id,
+        "lat": lat,
+        "lon": lon,
+        "inside_domain": True,
+        "row": int(r),
+        "col": int(c),
+        "wet": bool(wet),
+        # Peak values over the whole simulation at this cell, which is what the
+        # grids hold. Not an instantaneous reading at the scrubber's time.
+        "max_depth_m": round(depth, 3),
+        "max_velocity_ms": round(vel, 3),
+        "dv_m2s": round(depth * vel, 3),
+        "arrival_hr": round(arrival, 4) if np.isfinite(arrival) else None,
+        "hazard_class": hazard_class(depth, vel) if wet else "none",
+        "wet_threshold_m": WET_THRESHOLD_M,
+        "note": "peak over the run at this cell, read from max_depth.tif and max_velocity.tif",
+    }
+
+
+@app.get("/api/runs/{run_id}/fields", tags=["runs"])
+def fields_meta(run_id: str) -> dict:
+    """Scales needed to decode fields.png, and the grid it is on."""
+    import numpy as np
+
+    f = _fields(run_id)
+    vel = np.nan_to_num(f["velocity"], nan=0.0)
+    depth = np.nan_to_num(f["depth"], nan=0.0)
+    dv = depth * vel
+    grid = f["grid"]
+    return {
+        "run_id": run_id,
+        "nx": grid.nx,
+        "ny": grid.ny,
+        "bbox": list(grid.bbox),
+        "velocity_max_ms": round(float(vel.max()), 4),
+        "dv_max_m2s": round(float(dv.max()), 4),
+        "depth_max_m": round(float(depth.max()), 4),
+        "encoding": "fields.png: R = max_velocity / velocity_max_ms, G = dv / dv_max_m2s, A = 255 where wet",
+    }
+
+
+@app.get("/api/runs/{run_id}/fields.png", tags=["runs"])
+def fields_png(run_id: str) -> FileResponse:
+    """Velocity and the depth-velocity hazard product as one RGBA image.
+
+    packed.png carries arrival, peak time, depth and duration but not speed,
+    and the browser cannot decode a float32 GeoTIFF. This is the same data the
+    .tif holds, rendered once and cached beside the run so the map hover and
+    the 3D scene can read velocity without a round trip per cell.
+    """
+    import numpy as np
+    from PIL import Image
+
+    from shared.contract import WET_THRESHOLD_M
+
+    _require_run(run_id)
+    out = _derived(run_id) / "fields.png"
+    if out.exists():
+        return FileResponse(out, media_type="image/png")
+
+    f = _fields(run_id)
+    depth = np.nan_to_num(f["depth"], nan=0.0)
+    vel = np.nan_to_num(f["velocity"], nan=0.0)
+    dv = depth * vel
+    vmax = max(float(vel.max()), 1e-6)
+    dvmax = max(float(dv.max()), 1e-6)
+
+    r = np.clip(vel / vmax, 0, 1)
+    g = np.clip(dv / dvmax, 0, 1)
+    b = np.zeros_like(r)
+    a = (depth >= WET_THRESHOLD_M).astype(np.float32)
+    rgba = (np.stack([r, g, b, a], -1) * 255.0).round().astype(np.uint8)
+    Image.fromarray(rgba, mode="RGBA").save(out, optimize=True)
+    return FileResponse(out, media_type="image/png")
+
+
+def _cond_dem_for(run_id: str):
+    """Find the conditioned DEM module 01 cached for this run's domain.
+
+    Matched on grid shape AND bounding box, both to four decimal places. A
+    near-miss is not accepted: rendering a different reach's ground under this
+    reach's water would be a fabricated picture.
+    """
+    import json as _json
+
+    meta = read_meta(_require_run(run_id))
+    dom = meta.get("domain") or {}
+    bbox, nx, ny = dom.get("bbox"), dom.get("nx"), dom.get("ny")
+    if not bbox or not nx or not ny:
+        return None
+
+    site = run_id.split("_")[0]
+    cache_dir = Path("data") / "dem" / site
+    if not cache_dir.is_dir():
+        return None
+
+    for side in sorted(cache_dir.glob("cond_*.json")):
+        try:
+            info = _json.loads(side.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        if info.get("nx") != nx or info.get("ny") != ny:
+            continue
+        cached = info.get("bbox") or []
+        if len(cached) != 4 or any(
+            round(float(a), 4) != round(float(b), 4) for a, b in zip(cached, bbox)
+        ):
+            continue
+        npz = side.with_suffix(".npz")
+        if npz.exists():
+            return npz, info
+    return None
+
+
+@app.get("/api/runs/{run_id}/terrain", tags=["runs"])
+def terrain_meta(run_id: str) -> dict:
+    """Whether real ground is available under this run's water, and its range.
+
+    The 3D scene asks first. If module 01's conditioned DEM for this exact
+    domain is not on disk the answer is `available: false` and the scene says
+    on screen that it is drawing water over a flat bed - it does not invent a
+    valley to sit the flood in.
+    """
+    import numpy as np
+
+    found = _cond_dem_for(run_id)
+    if found is None:
+        return {
+            "run_id": run_id,
+            "available": False,
+            "reason": (
+                "no conditioned DEM cached for this domain under data/dem/. The "
+                "3D scene will draw the water column over a flat bed and label "
+                "it as such."
+            ),
+        }
+    npz, info = found
+    with np.load(npz) as z:
+        dem = np.asarray(z["dem"], dtype=np.float32)
+    finite = dem[np.isfinite(dem)]
+    return {
+        "run_id": run_id,
+        "available": True,
+        "nx": int(info["nx"]),
+        "ny": int(info["ny"]),
+        "bbox": info["bbox"],
+        "cellsize_m": info.get("cellsize_m"),
+        "z_min_m": round(float(finite.min()), 2) if finite.size else 0.0,
+        "z_max_m": round(float(finite.max()), 2) if finite.size else 0.0,
+        "source": info.get("source"),
+        "conditioning": info.get("conditioning"),
+        "encoding": "terrain.png: elevation = z_min + (R*256 + G)/65535 * (z_max - z_min)",
+    }
+
+
+@app.get("/api/runs/{run_id}/terrain.png", tags=["runs"])
+def terrain_png(run_id: str) -> FileResponse:
+    """The conditioned DEM as a 16-bit heightfield the browser can read."""
+    import numpy as np
+    from PIL import Image
+
+    _require_run(run_id)
+    out = _derived(run_id) / "terrain.png"
+    if out.exists():
+        return FileResponse(out, media_type="image/png")
+
+    found = _cond_dem_for(run_id)
+    if found is None:
+        raise HTTPException(
+            404,
+            "no conditioned DEM cached for this domain - the 3D scene falls "
+            "back to a flat bed and says so",
+        )
+    npz, _info = found
+    with np.load(npz) as z:
+        dem = np.asarray(z["dem"], dtype=np.float32)
+    dem = np.nan_to_num(dem, nan=float(np.nanmin(dem)))
+    lo, hi = float(dem.min()), float(dem.max())
+    span = max(hi - lo, 1e-6)
+    q = np.clip((dem - lo) / span, 0, 1) * 65535.0
+    q = q.round().astype(np.uint16)
+    rgba = np.stack(
+        [
+            (q >> 8).astype(np.uint8),
+            (q & 0xFF).astype(np.uint8),
+            np.zeros(q.shape, np.uint8),
+            np.full(q.shape, 255, np.uint8),
+        ],
+        -1,
+    )
+    Image.fromarray(rgba, mode="RGBA").save(out, optimize=True)
+    return FileResponse(out, media_type="image/png")
 
 
 @app.get("/api/runs/{run_id}/file/{filename}", tags=["runs"])

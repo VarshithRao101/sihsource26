@@ -1,0 +1,15 @@
+{
+  "site": "hirakud",
+  "source": "COP30",
+  "bbox": [
+    83.82291338282518,
+    21.35036741845842,
+    84.03817171388506,
+    21.584676832142325
+  ],
+  "nx": 248,
+  "ny": 289,
+  "cellsize_m": 89.9856090796391,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 268 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

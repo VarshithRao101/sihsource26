@@ -1,0 +1,15 @@
+{
+  "site": "tehrihpp",
+  "source": "COP30",
+  "bbox": [
+    78.41471956329433,
+    30.069439242524968,
+    78.66361208914847,
+    30.42527843509057
+  ],
+  "nx": 266,
+  "ny": 440,
+  "cellsize_m": 89.9026712602128,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 487 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

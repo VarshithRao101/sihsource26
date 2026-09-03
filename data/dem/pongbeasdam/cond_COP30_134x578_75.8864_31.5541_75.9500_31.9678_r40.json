@@ -1,0 +1,15 @@
+{
+  "site": "pongbeasdam",
+  "source": "COP30",
+  "bbox": [
+    75.88639479266577,
+    31.554090632686712,
+    76.01360520733424,
+    32.02173722182347
+  ],
+  "nx": 134,
+  "ny": 578,
+  "cellsize_m": 89.84624175720607,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 58 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

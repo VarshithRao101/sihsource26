@@ -1,0 +1,15 @@
+{
+  "site": "largetankpulkal",
+  "source": "COP30",
+  "bbox": [
+    77.67033907360772,
+    18.32152737375416,
+    77.86781510264328,
+    18.716256095561903
+  ],
+  "nx": 231,
+  "ny": 488,
+  "cellsize_m": 90.03897675452833,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 510 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}
