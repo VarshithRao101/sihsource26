@@ -12,7 +12,7 @@ printed at the same size as the good ones.
 
 ## 1. Verification — strong
 
-All of these run in `integration/run_all.py` (22/22) and
+All of these run in `integration/run_all.py` (23/23) and
 `modules/04_backend/tests/test_solver_physics.py` (23 tests).
 
 | Test | What it proves | Result | Acceptable? |
@@ -97,6 +97,32 @@ accurately*, **no** — and we do not present it that way.
 
 ---
 
+## 2.3 Grid convergence - measured, and it changes what we should quote
+
+A third question sits between verification and validation: how much of the answer is the MESH?
+Measured on two independent sites in [`CONVERGENCE.md`](CONVERGENCE.md).
+
+| refinement | max depth | flood area |
+|---|---|---|
+| 90 m -> 60 m | -5.9% / +3.2% | +7.7% / +3.3% |
+| **60 m -> 45 m** | **+1.1% / +0.6%** | +1.0% / +5.7% |
+
+**Maximum depth converges by 60 m.** The 60->45 m change is an order of magnitude smaller than the
+coarse-grid changes, so depth at 60 m is within about 1% of its grid-independent value.
+
+**90 m - the resolution every published run here uses - is not in the converged range.** Refining
+from it still moves depth by 3 to 6%, which is pure discretisation error carried by every depth
+figure in this document.
+
+**Flood extent converges more slowly, and on one site not at all**: Lower Manair's area is still
+moving +5.7% between 60 m and 45 m. Extent is decided by very shallow water at the margin, where a
+cell sits just either side of the 0.05 m threshold. Every AREA figure in this repository should be
+read as carrying a several-percent grid dependence. Depth figures should not.
+
+Mass conservation is unaffected by cell size - 0.0000% at every grid on both sites.
+
+---
+
 ## 3. Cross-checks that are not validation
 
 Useful, and honestly labelled as something less than validation.
@@ -132,6 +158,8 @@ Mirrors `AGENTS.md` Part 4.
 | Limitation | Number | Recorded in |
 |---|---|---|
 | Terrain resolution | 30 m COP30, ~90 m solver grid | `meta.json` → `dem` |
+| **Grid dependence, depth** | 90 m is not converged: refining to 60 m moves max depth **3–6%**. Converged by 60 m (60→45 m is ~1%) | `docs/CONVERGENCE.md` |
+| **Grid dependence, extent** | Area still moves **+5.7%** from 60 m to 45 m on one of two sites. Every area figure carries several percent of grid dependence | `docs/CONVERGENCE.md` |
 | Bathymetry | none — bed is estimated | `meta.json` → `dem.bathymetry` |
 | SAR validation, gorge | CSI 0.0075 | `validation.json` |
 | SAR validation, floodplain | CSI 0.0268, bias 7.31 | `validation.json` |
@@ -170,7 +198,7 @@ In order of value, and honest about what each requires from outside the project:
 ```bash
 .venv\Scripts\python.exe integration\run_all.py
 ```
-22/22, about twenty seconds, works with the network unplugged.
+23/23, about twenty seconds, works with the network unplugged.
 
 ```bash
 .venv\Scripts\python.exe -m pytest modules\04_backend\tests -q

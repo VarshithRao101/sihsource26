@@ -59,7 +59,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 copy .env.example .env          # then fill it in
 .venv\Scripts\python.exe -m shared.creds        # check what is missing
-.venv\Scripts\python.exe integration\run_all.py # should print 18/18
+.venv\Scripts\python.exe integration\run_all.py # should print 23/23
 ```
 
 `run_all.py` works with the network unplugged. Run it before every push.
