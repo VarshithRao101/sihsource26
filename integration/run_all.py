@@ -514,6 +514,87 @@ def check_sfincs_engine():
     )
 
 
+def check_delft3d_case():
+    """The Delft3D case writer obeys the conventions read off Deltares' example.
+
+    This is NOT evidence that Delft3D accepts the case - no kernel exists here
+    and case.py has never been run against one. It guards the four conventions
+    that are silent when wrong, each checked against the f34 example in
+    Deltares' own repository:
+
+      * MNKmax is the grid dimensions PLUS ONE (f34.grd says 14 21, f34.mdf
+        says MNKmax = 15 22 5)
+      * the .dep file is sized to MNKmax, not to the grid (f34.dep holds
+        15 x 22 = 330 values)
+      * bed level is POSITIVE DOWN, so it is the negative of our elevation
+      * time is in MINUTES, because Tunit is #M#
+
+    A regression in any of these produces a run that completes and is wrong,
+    which is the failure this project can least afford.
+    """
+    import tempfile
+
+    import numpy as np
+
+    case = import_module("modules.03_delft3d.case")
+
+    ny, nx = 12, 9
+    dem = np.linspace(100.0, 40.0, ny)[:, None] + np.zeros((ny, nx))
+    dem[0, 0] = np.nan
+
+    with tempfile.TemporaryDirectory() as tmp:
+        c = case.write_case(
+            tmp, dem, dx_m=90.0, src_row=1, src_col=4,
+            t_hr=np.array([0.0, 1.0, 2.0]),
+            q_cumecs=np.array([0.0, 500.0, 120.0]),
+            end_hr=2.0, run_id="sih",
+        )
+        d = Path(tmp)
+
+        assert (c.mmax, c.nmax) == (nx + 1, ny + 1), (
+            f"MNKmax must be the grid plus one: got {(c.mmax, c.nmax)}, "
+            f"expected {(nx + 1, ny + 1)}"
+        )
+
+        grd = (d / "sih.grd").read_text(encoding="ascii").splitlines()
+        assert grd[4].split() == [str(nx), str(ny)], (
+            f"grd header must be the grid itself, not MNKmax: {grd[4]!r}"
+        )
+        eta = sum(1 for line in grd if line.strip().startswith("ETA="))
+        assert eta == 2 * ny, f"grd needs an x and a y block: {eta} ETA rows"
+
+        dep = (d / "sih.dep").read_text(encoding="ascii").split()
+        assert len(dep) == c.mmax * c.nmax, (
+            f"dep is sized to MNKmax: {len(dep)} values, "
+            f"expected {c.mmax * c.nmax}"
+        )
+        assert float(dep[0]) < 0, (
+            f"dep must be POSITIVE DOWN - the negative of our elevation - "
+            f"but the first value is {dep[0]}"
+        )
+
+        mdf = (d / "sih.mdf").read_text(encoding="ascii")
+        assert f"MNKmax = {c.mmax} {c.nmax} 1" in mdf, "mdf MNKmax disagrees"
+        assert "Tunit  = #M#" in mdf, "Tunit must be minutes"
+        stop = float([ln for ln in mdf.splitlines()
+                      if ln.startswith("Tstop")][0].split("=")[1])
+        assert abs(stop - 120.0) < 1e-6, (
+            f"Tstop must be MINUTES: 2 h should be 120, got {stop}"
+        )
+
+        enc = (d / "sih.enc").read_text(encoding="ascii").splitlines()
+        assert enc[0].split()[:2] == enc[-1].split()[:2], "enclosure is not closed"
+
+        for name in ("sih.bnd", "sih.bct", "sih.src", "sih.dis",
+                     "config_d_hydro.xml"):
+            assert (d / name).is_file(), f"case is missing {name}"
+
+    return (
+        f"case writes MNKmax {c.mmax}x{c.nmax} from a {nx}x{ny} grid, "
+        f"dep positive-down, Tstop in minutes - UNVERIFIED against a kernel"
+    )
+
+
 def check_delft3d_absence():
     """Delft3D absence is measured, not assumed.
 
@@ -676,6 +757,7 @@ def main() -> int:
     check("04_backend release uncertainty block", check_release_uncertainty_block)
     check("09_sfincs engine end to end", check_sfincs_engine)
     check("03_delft3d absence is measured", check_delft3d_absence)
+    check("03_delft3d case structure", check_delft3d_case)
     check("07_ml maths (SCS, routing, MC)", check_ml_layer)
     check("07_ml surrogate", check_surrogate)
     check("credentials", check_credentials)
