@@ -1,0 +1,33 @@
+# What the container image does not need. Same discipline as .vercelignore,
+# and the same trap: these are gitignore-style patterns, so a bare name matches
+# at EVERY depth. Anything meant to name one directory at the repo root is
+# anchored with a leading slash. An unanchored "requirements.txt" here would
+# delete api/requirements.txt too, which is exactly how the Vercel deploy broke.
+
+/.venv/
+/.git/
+/.pytest_cache/
+**/__pycache__/
+*.pyc
+
+# Simulation engines: Windows binaries, gigabytes, and unusable on Linux. The
+# engine probes will correctly report them absent inside the container.
+/DualSPHysics_v5.4/
+/SFINCS/
+/SFINCS_v2.4.0/
+/Deltares License Software/
+
+# Generated runs. The container writes its own into /app/outputs at run time.
+/outputs/
+
+# Dev-only
+/tests/
+/.github/
+/secrets/
+.env
+
+# The read-only Vercel build is a different program with different deps. It has
+# no business inside this image.
+/api/
+/vercel.json
+/.vercelignore

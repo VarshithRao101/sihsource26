@@ -1,0 +1,42 @@
+# Render blueprint for the real backend.
+#
+# Render reads this when you point it at the repository, so the service comes up
+# configured instead of you filling in a form and hoping you remembered the
+# CORS variable.
+#
+# THE PLAN MATTERS. The free tier is 512 MB of RAM and this will not fit in it:
+# torch, numba and rasterio together exceed that before a single cell is solved,
+# and the container is OOM-killed mid-run with no useful error. Standard (2 GB)
+# is the smallest plan that actually solves. Read docs/DEPLOY.md before
+# deploying.
+
+services:
+  - type: web
+    name: sih26161-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard          # 2 GB. starter/free WILL be OOM-killed. See above.
+    region: singapore       # nearest to India of Render's regions
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      # The origin the Vercel pages are served from. Without it the browser
+      # blocks every call the page makes and the console reads "backend
+      # unreachable" while this service sits here perfectly healthy.
+      # Set the real value in the Render dashboard after the Vercel deploy.
+      - key: SIH_CORS_ORIGINS
+        sync: false
+
+      # Numba writes its JIT cache here. The image filesystem is read-only in
+      # places and /tmp always is not.
+      - key: NUMBA_CACHE_DIR
+        value: /tmp/numba_cache
+
+    # Run folders. WITHOUT THIS DISK every finished run is lost on the next
+    # deploy or restart, because a container filesystem is ephemeral. 1 GB holds
+    # a few hundred runs at the sizes this project produces.
+    disk:
+      name: outputs
+      mountPath: /app/outputs
+      sizeGB: 1
