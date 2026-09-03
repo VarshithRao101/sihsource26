@@ -182,7 +182,7 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | SAR validation, Annamayya floodplain | CSI 0.027, POD 0.217, **bias 7.3** | `validation.json`, run `cheyyeruprojectannamayya_overtop_fast_001` |
 | SPH is near-field only | first ~60 s | `sph_meta.json` limitation field; `engine='sphcoupled'` uses it only before the handover |
 | Largest grid load-tested | 542,970 cells, 128 MB peak, validates clean | `docs/LOAD_TEST.md` |
-| Solver sweeps the whole domain every step | the flood's bounding box is only 60% of the domain at the END and far less early, so a windowed sweep is the next real speedup and is **not** implemented | measured in `docs/LOAD_TEST.md` |
+| Solver sweep | **windowed** — every kernel sweeps a padded box around the wet cells, recomputed every 8 steps. **2.32× on 30k cells, 4.53× on 126k**, and bit-identical output: max depth differs by 0.000e+00 m, same step count, same volumes | `solver.SolverConfig.window_every_steps`; set 0 for the old full sweep |
 | Surrogate is an emulator | CSI 0.909 vs **our solver** | not validated against real floods |
 | Damage replacement values | assumptions | `damage_curve_source` string |
 | Breach parameter spread | up to 10× | `uncertainty.json` |

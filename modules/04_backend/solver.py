@@ -108,6 +108,12 @@ depth clamp, and the clamp invents water to keep them non-negative. 0.25 m is
 well under the depth at which the shallow-water fluxes carry it away, and it
 only binds during the breach peak - it costs nothing for the rest of the run."""
 
+# The windowed sweep. See SolverConfig.window_every_steps for why the margin
+# has to exceed the recompute interval - it is the CFL condition that makes it
+# safe, not an assumption about how fast floods spread.
+WINDOW_EVERY_STEPS = 8
+WINDOW_MARGIN_CELLS = 16
+
 ARRIVAL_UNSET = -1.0
 """Sentinel for "this cell has never been wet".
 
@@ -195,7 +201,8 @@ def _hll_flux(hL, uL, vL, hR, uR, vR, g):
 
 
 @njit(cache=True, fastmath=True, parallel=True)
-def _fluxes_x(h, hu, hv, z, active, g, open_edges, Fh, Fhu, Fhv, SL, SR):
+def _fluxes_x(h, hu, hv, z, active, g, open_edges, Fh, Fhu, Fhv, SL, SR,
+              i0, i1, j0, j1):
     """HLL fluxes on every x-interface, plus the two Audusse pressure
     corrections. Parallel over rows; each row writes only its own slice.
 
@@ -207,8 +214,9 @@ def _fluxes_x(h, hu, hv, z, active, g, open_edges, Fh, Fhu, Fhv, SL, SR):
     """
     ny, nx = h.shape
     outflow = 0.0
-    for i in prange(ny):
-        for j in range(nx + 1):
+    # Interfaces on BOTH sides of the cell window, hence j1 + 1.
+    for i in prange(i0, i1):
+        for j in range(j0, min(j1 + 1, nx + 1)):
             has_left = j > 0 and active[i, j - 1] == 1
             has_right = j < nx and active[i, j] == 1
             if not has_left and not has_right:
@@ -299,7 +307,8 @@ def _fluxes_x(h, hu, hv, z, active, g, open_edges, Fh, Fhu, Fhv, SL, SR):
 
 
 @njit(cache=True, fastmath=True, parallel=True)
-def _fluxes_y(h, hu, hv, z, active, g, open_edges, Gh, Ghu, Ghv, TL, TR):
+def _fluxes_y(h, hu, hv, z, active, g, open_edges, Gh, Ghu, Ghv, TL, TR,
+              i0, i1, j0, j1):
     """Same as _fluxes_x, on y-interfaces. Parallel over columns.
 
     Interface i lies between cell (i-1, j) [north] and (i, j) [south]. The
@@ -309,8 +318,8 @@ def _fluxes_y(h, hu, hv, z, active, g, open_edges, Gh, Ghu, Ghv, TL, TR):
     """
     ny, nx = h.shape
     outflow = 0.0
-    for j in prange(nx):
-        for i in range(ny + 1):
+    for j in prange(j0, j1):
+        for i in range(i0, min(i1 + 1, ny + 1)):
             has_up = i > 0 and active[i - 1, j] == 1
             has_dn = i < ny and active[i, j] == 1
             if not has_up and not has_dn:
@@ -377,6 +386,7 @@ def _fluxes_y(h, hu, hv, z, active, g, open_edges, Gh, Ghu, Ghv, TL, TR):
 def _apply_swe(
     h, hu, hv, n, active, dx, dt, g, froude_max,
     Fh, Fhu, Fhv, SL, SR, Gh, Ghu, Ghv, TL, TR,
+    i0, i1, j0, j1,
 ):
     """Divergence, then semi-implicit friction, then the Froude limiter.
 
@@ -391,8 +401,8 @@ def _apply_swe(
     lam = dt / dx
     limited = 0
 
-    for i in prange(ny):
-        for j in range(nx):
+    for i in prange(i0, i1):
+        for j in range(j0, j1):
             if active[i, j] == 0:
                 h[i, j] = 0.0
                 hu[i, j] = 0.0
@@ -454,7 +464,7 @@ def _apply_swe(
 
 
 @njit(cache=True, fastmath=True, parallel=True)
-def _max_wave_speed(h, hu, hv, active, g):
+def _max_wave_speed(h, hu, hv, active, g, i0, i1, j0, j1):
     """max(|u| + sqrt(gh)) over the domain, for the CFL condition.
 
     Runs every timestep, so it is worth the cores. The per-row maximum is
@@ -464,9 +474,9 @@ def _max_wave_speed(h, hu, hv, active, g):
     """
     ny, nx = h.shape
     smax = 0.0
-    for i in prange(ny):
+    for i in prange(i0, i1):
         row = 0.0
-        for j in range(nx):
+        for j in range(j0, j1):
             if active[i, j] == 0:
                 continue
             hij = h[i, j]
@@ -487,7 +497,8 @@ def _max_wave_speed(h, hu, hv, active, g):
 
 
 @njit(cache=True, fastmath=True)
-def _step_inertial(h, z, n, qx, qy, active, dx, dt, g, flow_eps, open_edges):
+def _step_inertial(h, z, n, qx, qy, active, dx, dt, g, flow_eps, open_edges,
+                   i0, i1, j0, j1):
     """One local-inertial step. Advection is dropped; see the module docstring.
 
     qx[i, j] is the flux between (i, j-1) and (i, j), positive eastward.
@@ -496,8 +507,11 @@ def _step_inertial(h, z, n, qx, qy, active, dx, dt, g, flow_eps, open_edges):
     ny, nx = h.shape
     outflow = 0.0
 
-    for i in range(ny):
-        for j in range(1, nx):
+    # The three O(ny*nx) loops below are windowed. The open-edge loops that
+    # follow them are O(n) and stay full-range: they are negligible, and they
+    # own the outflow accounting.
+    for i in range(i0, i1):
+        for j in range(max(j0, 1), min(j1 + 1, nx)):
             hl = h[i, j - 1]
             hr = h[i, j]
             zl = z[i, j - 1]
@@ -524,8 +538,8 @@ def _step_inertial(h, z, n, qx, qy, active, dx, dt, g, flow_eps, open_edges):
                     qn = cap
             qx[i, j] = qn
 
-    for i in range(1, ny):
-        for j in range(nx):
+    for i in range(max(i0, 1), min(i1 + 1, ny)):
+        for j in range(j0, j1):
             hup = h[i - 1, j]
             hdn = h[i, j]
             zu = z[i - 1, j]
@@ -612,8 +626,8 @@ def _step_inertial(h, z, n, qx, qy, active, dx, dt, g, flow_eps, open_edges):
             outflow += qy[ny, j] * dx * dt
 
     fac = dt / dx
-    for i in range(ny):
-        for j in range(nx):
+    for i in range(i0, i1):
+        for j in range(j0, j1):
             if active[i, j] == 0:
                 continue
             hn = h[i, j] + fac * (qx[i, j] - qx[i, j + 1] + qy[i, j] - qy[i + 1, j])
@@ -655,12 +669,12 @@ def _bump(hij, speed, t_hr, dt_hr, i, j,
 def _accumulate_swe(
     h, hu, hv, t_hr, dt_hr,
     max_depth, arrival_time, time_of_peak, max_velocity, duration,
-    wet_threshold,
+    wet_threshold, i0, i1, j0, j1,
 ):
     """Update the four contract grids plus duration. Called every step."""
     ny, nx = h.shape
-    for i in prange(ny):
-        for j in range(nx):
+    for i in prange(i0, i1):
+        for j in range(j0, j1):
             hij = h[i, j]
             if hij < wet_threshold:
                 continue
@@ -674,12 +688,12 @@ def _accumulate_swe(
 def _accumulate_inertial(
     h, qx, qy, t_hr, dt_hr,
     max_depth, arrival_time, time_of_peak, max_velocity, duration,
-    wet_threshold,
+    wet_threshold, i0, i1, j0, j1,
 ):
     """Same, for the inertial scheme, whose velocities live on the faces."""
     ny, nx = h.shape
-    for i in prange(ny):
-        for j in range(nx):
+    for i in prange(i0, i1):
+        for j in range(j0, j1):
             hij = h[i, j]
             if hij < wet_threshold:
                 continue
@@ -729,6 +743,26 @@ class SolverConfig:
     On real terrain the same cap removes a 35 m/s thin-film artefact. Both
     numbers are real; the cap is right for one problem and wrong for the other,
     so it is a setting rather than a constant."""
+
+    window_every_steps: int = WINDOW_EVERY_STEPS
+    """Recompute the active window this often. 0 sweeps the whole domain every
+    step, which is what this solver did until now.
+
+    A dam break wets its domain gradually: for most of a run the flood occupies
+    a fraction of the grid and the rest is dry cells being visited, tested and
+    skipped. Restricting every sweep to a box around the wet cells is the
+    speedup docs/LOAD_TEST.md flagged and did not implement.
+
+    WHY IT IS SAFE, which matters more than that it is fast. The CFL condition
+    the timestep already obeys says information crosses at most one cell per
+    step. So water cannot travel further than `window_every_steps` cells before
+    the window is recomputed, and a margin wider than that cannot be escaped.
+    The margin is deliberately double. Set this to 0 and every kernel sweeps the
+    full grid again, which is the comparison the speedup was measured against."""
+
+    window_margin_cells: int = WINDOW_MARGIN_CELLS
+    """Cells of dry padding around the wet box. Must exceed window_every_steps
+    or the flood can reach the window edge before the window moves."""
 
 
 @dataclass
@@ -898,6 +932,51 @@ def run_solver(
     volume_in = float(h.sum()) * cell_area
     volume_out = 0.0
 
+    # ---- the active window --------------------------------------------
+    # Every kernel sweeps only this box. See SolverConfig.window_every_steps
+    # for why a margin wider than the recompute interval cannot be escaped:
+    # the CFL condition already limits information to one cell per step.
+    win_every = int(config.window_every_steps)
+    win_margin = max(int(config.window_margin_cells), win_every + 1)
+    win = np.array([0, ny, 0, nx], dtype=np.int64)
+
+    def _recompute_window() -> None:
+        """Box the wet cells, pad it, and keep the inflow cells inside.
+
+        Wet is measured at DRY_EPS rather than the contract's 0.05 m: a cell
+        holding a millimetre is still routing water, and a window that clipped
+        it would quietly delete that water instead of letting it flow.
+        """
+        wet = h > DRY_EPS
+        rows = np.flatnonzero(wet.any(axis=1))
+        cols = np.flatnonzero(wet.any(axis=0))
+        if rows.size == 0 or cols.size == 0:
+            # Nothing wet yet. Keep the window on the inflow cells so the first
+            # water has somewhere to land.
+            if cells:
+                r = [c[0] for c in cells]
+                c_ = [c[1] for c in cells]
+                lo_i, hi_i, lo_j, hi_j = min(r), max(r), min(c_), max(c_)
+            else:
+                win[:] = (0, ny, 0, nx)
+                return
+        else:
+            lo_i, hi_i = int(rows[0]), int(rows[-1])
+            lo_j, hi_j = int(cols[0]), int(cols[-1])
+            if cells:
+                lo_i = min(lo_i, min(c[0] for c in cells))
+                hi_i = max(hi_i, max(c[0] for c in cells))
+                lo_j = min(lo_j, min(c[1] for c in cells))
+                hi_j = max(hi_j, max(c[1] for c in cells))
+
+        win[0] = max(0, lo_i - win_margin)
+        win[1] = min(ny, hi_i + win_margin + 1)
+        win[2] = max(0, lo_j - win_margin)
+        win[3] = min(nx, hi_j + win_margin + 1)
+
+    if win_every > 0:
+        _recompute_window()
+
     t_s = 0.0
     end_s = config.end_hr * 3600.0
     min_dt_seen = float(config.initial_dt_s)
@@ -909,12 +988,16 @@ def run_solver(
     next_frame_s = 0.0
 
     while t_s < end_s and step < config.max_steps:
+        if win_every > 0 and step % win_every == 0:
+            _recompute_window()
+        i0, i1, j0, j1 = int(win[0]), int(win[1]), int(win[2]), int(win[3])
+
         # ---- adaptive timestep ----------------------------------------
         if use_swe:
-            smax = _max_wave_speed(h, hu, hv, active, GRAVITY)
+            smax = _max_wave_speed(h, hu, hv, active, GRAVITY, i0, i1, j0, j1)
             dt = config.cfl * dx / smax if smax > 1e-9 else config.initial_dt_s
         else:
-            h_max = float(h.max())
+            h_max = float(h[i0:i1, j0:j1].max()) if i1 > i0 and j1 > j0 else 0.0
             dt = (
                 config.cfl * dx / math.sqrt(GRAVITY * h_max)
                 if h_max > FLOW_DEPTH_EPS
@@ -964,16 +1047,20 @@ def run_solver(
 
         # ---- one step -------------------------------------------------
         if use_swe:
-            out_x = _fluxes_x(h, hu, hv, z, active, GRAVITY, open_edges, Fh, Fhu, Fhv, SL, SR)
-            out_y = _fluxes_y(h, hu, hv, z, active, GRAVITY, open_edges, Gh, Ghu, Ghv, TL, TR)
+            out_x = _fluxes_x(h, hu, hv, z, active, GRAVITY, open_edges,
+                              Fh, Fhu, Fhv, SL, SR, i0, i1, j0, j1)
+            out_y = _fluxes_y(h, hu, hv, z, active, GRAVITY, open_edges,
+                              Gh, Ghu, Ghv, TL, TR, i0, i1, j0, j1)
             volume_out += (out_x + out_y) * dx * dt
             froude_limited += _apply_swe(
                 h, hu, hv, n_grid, active, dx, dt, GRAVITY, config.froude_max,
                 Fh, Fhu, Fhv, SL, SR, Gh, Ghu, Ghv, TL, TR,
+                i0, i1, j0, j1,
             )
         else:
             volume_out += _step_inertial(
-                h, z, n_grid, qx, qy, active, dx, dt, GRAVITY, FLOW_DEPTH_EPS, open_edges
+                h, z, n_grid, qx, qy, active, dx, dt, GRAVITY, FLOW_DEPTH_EPS,
+                open_edges, i0, i1, j0, j1,
             )
 
         t_s += dt
@@ -985,13 +1072,13 @@ def run_solver(
             _accumulate_swe(
                 h, hu, hv, t_hr, dt / 3600.0,
                 max_depth, arrival_time, time_of_peak, max_velocity, duration,
-                WET_THRESHOLD_M,
+                WET_THRESHOLD_M, i0, i1, j0, j1,
             )
         else:
             _accumulate_inertial(
                 h, qx, qy, t_hr, dt / 3600.0,
                 max_depth, arrival_time, time_of_peak, max_velocity, duration,
-                WET_THRESHOLD_M,
+                WET_THRESHOLD_M, i0, i1, j0, j1,
             )
 
         if config.keep_frames and t_s >= next_frame_s:

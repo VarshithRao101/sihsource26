@@ -19,6 +19,33 @@ Cell size **90 m**, simulated duration **1 h**.
 | 250 | 135×2911 | 392,985 | 92.7 | 0.16 | 92.88 | 83.1 | 36,966,874 | 6.7 | 0.2 MB | 0 | yes |
 | 350 | 135×4022 | 542,970 | 151.7 | 0.23 | 151.95 | 114.8 | 31,142,927 | 7.2 | 0.2 MB | -0 | yes |
 
+## These timings predate the windowed sweep
+
+**The table above was measured when every kernel swept the whole domain every
+step.** The solver now sweeps only a padded box around the wet cells
+(`SolverConfig.window_every_steps`), so every `solve s` figure here is a
+**conservative upper bound** on what the same run costs today. The sizes, cell
+counts, memory and mass errors are unaffected.
+
+Measured A/B on real terrain, same DEM, same hydrograph, only the window
+differing:
+
+| site | cells | full sweep | windowed | speedup |
+|---|---|---|---|---|
+| Annamayya | 30,369 | 9.32 s | 4.02 s | **2.32×** |
+| Nagarjuna Sagar | 126,480 | 26.28 s | 5.80 s | **4.53×** |
+
+The gain grows with domain size, which is what it should do: the larger the
+grid, the more of it is dry ground that used to be visited, tested and skipped.
+
+Output is **bit-identical**, not merely close — max depth differs by
+`0.000e+00 m`, max velocity by `0.000e+00 m/s`, the step counts match exactly
+and the volumes agree to the last digit. That is the requirement; a window that
+were fast and lost water would be worse than no window.
+
+The table has not been re-run at every size because doing so costs a full sweep
+of real solves. Nothing above has been edited to look better.
+
 ## What this says
 
 - Largest grid that ran and validated: **135×4022 = 542,970 cells**, 151.95 s end to end, 114.8 MB peak.
