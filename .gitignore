@@ -1,5 +1,14 @@
-# generated runs - never commit these, they are large and regenerable
-outputs/
+# generated runs - never commit these, they are large and regenerable.
+# NOTE the trailing /* rather than a bare outputs/. Git cannot re-include a
+# file whose PARENT DIRECTORY is excluded, so "outputs/" would silently kill
+# both negations below and the demo run would only ever reach the index by
+# git add -f. Excluding the contents instead leaves the directory itself
+# includable, which is what makes the exception work.
+outputs/*
+# ...that exception: the primary demo run is committed so the read-only
+# Vercel build has something real to show. 2.3 MB, solved on a real machine,
+# contract-valid. It is the ONLY run that ships.
+!outputs/chungthangdam_overtop_fast_002/
 
 # raw downloads - shared via drive, not git
 data/**/*.tif
@@ -24,11 +33,15 @@ data/**/*.pdf
 !data/**/*.geojson
 
 # downloaded simulation engines - 1.7 GB, everyone installs their own
-DualSPHysics_v5.4/
-Delft3D*/
-D-Flow*/
-Deltares*/
-SFINCS*/
+# Anchored with a leading slash: these are the engine installs at the REPO
+# ROOT. Unanchored, "SFINCS*/" also matched outputs/<run>/sfincs/ - git on
+# Windows compares ignore rules case-insensitively - and silently dropped the
+# cross-check output that CSI 0.9607 is computed from.
+/DualSPHysics_v5.4/
+/Delft3D*/
+/D-Flow*/
+/Deltares*/
+/SFINCS*/
 *.msi
 *.exe
 

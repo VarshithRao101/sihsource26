@@ -1,0 +1,38 @@
+# Everything the read-only build does not need. Vercel caps a function bundle
+# at 250 MB and this repository is several gigabytes with its engines and
+# caches, so this file is what makes the deploy possible at all.
+
+# The real environment. api/requirements.txt is the deployed one.
+requirements.txt
+.venv/
+
+# Simulation engines - Windows binaries, gigabytes, and unusable on Linux.
+DualSPHysics_v5.4/
+SFINCS/
+SFINCS_v2.4.0/
+Deltares License Software/
+
+# Heavy inputs. The dam register is small and IS deployed; these are not.
+data/dem/
+data/worldpop/
+data/observed/
+data/surrogate/
+data/labels/
+data/roads/
+data/rivers/
+data/roughness/
+data/damage/
+data/exposure/
+
+# Trained model weights - torch is not installed on the deployed build.
+modules/07_ml/models/
+
+# Dev-only
+tests/
+integration/
+docs/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+secrets/
+.env

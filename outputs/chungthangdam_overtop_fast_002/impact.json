@@ -1,0 +1,189 @@
+{
+  "run_id": "chungthangdam_overtop_fast_002",
+  "totals": {
+    "settlements_affected": 3,
+    "population_affected": 9126,
+    "population_by_source": {
+      "worldpop2020": 9126
+    },
+    "roads_cut_km": 5.36,
+    "settlement_sample_radius_m": 250.0,
+    "damage_inr_crore": 172.11,
+    "damage_breakdown_inr_crore": {
+      "buildings": 158.71,
+      "roads": 13.4,
+      "cropland": 0.0
+    },
+    "houses_affected": 1983,
+    "damage_curve_source": "Damage curves: Huizinga et al. (2017), JRC EUR 28552 EN, Asia continental functions. Replacement values: project assumptions for rural Sikkim, NOT measured - see modules/07_ml/damage.py.",
+    "flood_area_km2": 10.39
+  },
+  "settlements": [
+    {
+      "name": "Sangkalang",
+      "lat": 27.50683,
+      "lon": 88.52943,
+      "population": 796,
+      "population_source": "worldpop2020",
+      "arrival_hr": 1.031,
+      "max_depth_m": 27.77,
+      "max_velocity_ms": 3.07,
+      "hazard_class": "extreme",
+      "houses_affected": 173,
+      "damage_factor": 1.0,
+      "damage_inr": 138434783.0
+    },
+    {
+      "name": "Bringbong",
+      "lat": 27.47754,
+      "lon": 88.52145,
+      "population": 1764,
+      "population_source": "worldpop2020",
+      "arrival_hr": 1.207,
+      "max_depth_m": 18.05,
+      "max_velocity_ms": 3.15,
+      "hazard_class": "extreme",
+      "houses_affected": 383,
+      "damage_factor": 1.0,
+      "damage_inr": 306782609.0
+    },
+    {
+      "name": "Dikchu",
+      "lat": 27.40222,
+      "lon": 88.52242,
+      "population": 6566,
+      "population_source": "worldpop2020",
+      "arrival_hr": 1.761,
+      "max_depth_m": 20.41,
+      "max_velocity_ms": 4.22,
+      "hazard_class": "extreme",
+      "houses_affected": 1427,
+      "damage_factor": 1.0,
+      "damage_inr": 1141913043.0
+    }
+  ],
+  "roads": [
+    {
+      "osm_id": "1230461277",
+      "name": "SH",
+      "highway": "primary",
+      "length_cut_km": 1.177
+    },
+    {
+      "osm_id": "364388909",
+      "name": "North Sikkim Highway",
+      "highway": "tertiary",
+      "length_cut_km": 0.754
+    },
+    {
+      "osm_id": "266907781",
+      "name": "MDR",
+      "highway": "secondary",
+      "length_cut_km": 0.598
+    },
+    {
+      "osm_id": "1228953406",
+      "name": "North Sikkim Highway",
+      "highway": "tertiary",
+      "length_cut_km": 0.517
+    },
+    {
+      "osm_id": "599429229",
+      "name": "",
+      "highway": "tertiary",
+      "length_cut_km": 0.464
+    },
+    {
+      "osm_id": "594511550",
+      "name": "SH",
+      "highway": "primary",
+      "length_cut_km": 0.313
+    },
+    {
+      "osm_id": "478604115",
+      "name": "",
+      "highway": "tertiary",
+      "length_cut_km": 0.213
+    },
+    {
+      "osm_id": "599427270",
+      "name": "Phidang Check-post",
+      "highway": "tertiary",
+      "length_cut_km": 0.149
+    },
+    {
+      "osm_id": "1224919296",
+      "name": "North Sikkim Highway",
+      "highway": "tertiary",
+      "length_cut_km": 0.144
+    },
+    {
+      "osm_id": "704675588",
+      "name": "SH",
+      "highway": "primary",
+      "length_cut_km": 0.138
+    },
+    {
+      "osm_id": "1021879547",
+      "name": "North Sikkim Highway",
+      "highway": "tertiary",
+      "length_cut_km": 0.132
+    },
+    {
+      "osm_id": "696693017",
+      "name": "MDR",
+      "highway": "secondary",
+      "length_cut_km": 0.13
+    },
+    {
+      "osm_id": "47415182",
+      "name": "North Sikkim Highway",
+      "highway": "tertiary",
+      "length_cut_km": 0.121
+    },
+    {
+      "osm_id": "696693019",
+      "name": "MDR",
+      "highway": "secondary",
+      "length_cut_km": 0.111
+    },
+    {
+      "osm_id": "461631690",
+      "name": "MDR",
+      "highway": "secondary",
+      "length_cut_km": 0.098
+    },
+    {
+      "osm_id": "478602486",
+      "name": "Tanak Bridge",
+      "highway": "tertiary",
+      "length_cut_km": 0.094
+    },
+    {
+      "osm_id": "461631689",
+      "name": "MDR",
+      "highway": "secondary",
+      "length_cut_km": 0.077
+    },
+    {
+      "osm_id": "599429218",
+      "name": "",
+      "highway": "tertiary",
+      "length_cut_km": 0.067
+    },
+    {
+      "osm_id": "599424060",
+      "name": "",
+      "highway": "tertiary",
+      "length_cut_km": 0.052
+    },
+    {
+      "osm_id": "47415184",
+      "name": "North Sikkim Highway",
+      "highway": "tertiary",
+      "length_cut_km": 0.012
+    }
+  ],
+  "infrastructure": [],
+  "note": "Population and place names are read from the exposure layer produced by module 01. Depths, velocities and arrival times are sampled from the solver grids at those points. Nothing here is estimated by hand."
+}

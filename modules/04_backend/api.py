@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 import zipfile
 from contextlib import asynccontextmanager
@@ -33,7 +34,7 @@ from typing import Any, Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -433,7 +434,16 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     # The Vite dev server. Tightened before anything is deployed anywhere.
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    # The Vite dev server by default. If the pages are hosted somewhere else -
+    # Vercel, Netlify - set SIH_CORS_ORIGINS to a comma-separated list of those
+    # origins, or the browser will refuse every call the page makes.
+    allow_origins=[
+        o.strip()
+        for o in os.environ.get(
+            "SIH_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+        ).split(",")
+        if o.strip()
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -526,6 +536,20 @@ def reservoir_simulate(req: ReservoirRequest) -> dict:
         raise HTTPException(422, f"unknown config keys: {sorted(unknown)}")
     cfg = reservoir.ReservoirConfig(**{**reservoir.ReservoirConfig().as_dict(), **req.config})
     return reservoir.simulate(cfg, req.hours, req.sample_every_s)
+
+
+@app.get("/config.js", include_in_schema=False)
+def config_js():
+    """Tells the pages where the backend is. Same origin here, by default."""
+    path = UI_DIR / "config.js"
+    if not path.exists():
+        return PlainTextResponse(
+            "window.SIH_API_BASE='';"
+            "window.SIH_WS=function(p){return (location.protocol==='https:'?'wss':'ws')"
+            "+'://'+location.host+p;};",
+            media_type="text/javascript",
+        )
+    return FileResponse(path, media_type="text/javascript")
 
 
 @app.get("/workflow", include_in_schema=False)

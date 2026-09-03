@@ -1,0 +1,15 @@
+{
+  "site": "cheyyeruprojectannamayya",
+  "source": "COP30",
+  "bbox": [
+    78.93764399679746,
+    14.16773555672686,
+    79.07066756817436,
+    14.322539915965736
+  ],
+  "nx": 159,
+  "ny": 191,
+  "cellsize_m": 90.14559894680514,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 151 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

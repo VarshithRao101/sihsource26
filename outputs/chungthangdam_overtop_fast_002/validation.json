@@ -1,0 +1,49 @@
+{
+  "run_id": "chungthangdam_overtop_fast_002",
+  "event": "Teesta GLOF, October 2023",
+  "slope_mask_sensitivity": [],
+  "terrain_warning": null,
+  "observation": {
+    "site": "teesta",
+    "collection": "COPERNICUS/S1_GRD",
+    "polarisation": "VV",
+    "pre_window": [
+      "2023-09-01",
+      "2023-09-28"
+    ],
+    "post_window": [
+      "2023-10-04",
+      "2023-10-22"
+    ],
+    "n_scenes_pre": 2,
+    "n_scenes_post": 1,
+    "orbit_pass": "DESCENDING",
+    "reducer": "median",
+    "threshold_db": -15.0,
+    "threshold_method": "otsu_rejected_fell_back_to_fixed",
+    "water_pre_cells": 4717,
+    "water_post_cells": 5483,
+    "new_water_cells": 1825,
+    "terrain_mask": "UNAVAILABLE - shadow false positives likely"
+  },
+  "metrics": {
+    "hits": 23,
+    "false_alarms": 1262,
+    "misses": 1802,
+    "correct_negatives": 133533,
+    "csi": 0.0075,
+    "pod": 0.0126,
+    "far": 0.9821,
+    "bias": 0.7041,
+    "n_cells": 136620
+  },
+  "simulated_wet_cells": 1285,
+  "observed_wet_cells": 1825,
+  "caveats": [
+    "Sentinel-1 water detection is a backscatter threshold. Wet soil, smooth tarmac and radar shadow in steep terrain are also dark and can be misclassified as water.",
+    "The satellite pass is at a fixed time and the flood is transient. A pass hours after the peak sees a receded extent, which appears as false alarms in our favour-free direction.",
+    "Change detection removes permanent water, but it also removes any flooding already present in the pre-event window.",
+    "This compares MAXIMUM simulated extent over the whole run against extent at one instant of observation. They are not the same quantity, and the bias figure should be read with that in mind.",
+    "The scenario being validated must correspond to the event that was observed. Check meta.json scenario against the real event before quoting this number."
+  ]
+}

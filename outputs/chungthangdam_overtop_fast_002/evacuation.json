@@ -1,0 +1,75 @@
+{
+  "run_id": "chungthangdam_overtop_fast_002",
+  "assumptions": {
+    "speed_kmh": 4.5,
+    "safety_margin_hr": 0.25,
+    "dangerous_depth_m": 0.3,
+    "note": "Speeds and margin are assumptions, not measurements. Roads outside the model domain are treated as dry, which is the optimistic direction - a route that leaves the domain is unverified beyond its edge."
+  },
+  "graph": {
+    "nodes": 15181,
+    "edges": 15179
+  },
+  "method": "Time-dependent Dijkstra on the OSM road graph. Not a learned model - see the module docstring for why a GNN was not used.",
+  "settlements": [
+    {
+      "name": "Sangkalang",
+      "status": "route_found",
+      "reachable": true,
+      "road_floods_at_hr": 0.994,
+      "walk_time_hr": 0.023,
+      "water_arrives_hr": 1.031,
+      "margin_hr": 1.008,
+      "route_km": 0.103,
+      "route": [
+        [
+          88.52902,
+          27.50958
+        ],
+        [
+          88.52938,
+          27.51
+        ],
+        [
+          88.5297,
+          27.51028
+        ]
+      ],
+      "exit_point": [
+        88.5297,
+        27.51028
+      ]
+    },
+    {
+      "name": "Dikchu",
+      "status": "route_found",
+      "reachable": true,
+      "road_floods_at_hr": 1.749,
+      "walk_time_hr": 0.003,
+      "water_arrives_hr": 1.761,
+      "margin_hr": 1.758,
+      "route_km": 0.016,
+      "route": [
+        [
+          88.52035,
+          27.40418
+        ],
+        [
+          88.5205,
+          27.40414
+        ]
+      ],
+      "exit_point": [
+        88.5205,
+        27.40414
+      ]
+    },
+    {
+      "name": "Bringbong",
+      "status": "access_not_inundated",
+      "reachable": true,
+      "water_arrives_hr": 1.207,
+      "note": "No road within 400 m of this settlement is inundated above 0.30 m. The settlement is flagged as affected because water reaches within the sampled footprint, but its road access stays open - shelter in place or move locally uphill; no evacuation route is required."
+    }
+  ]
+}

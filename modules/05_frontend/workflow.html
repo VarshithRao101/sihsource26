@@ -393,8 +393,13 @@
 <div id="drawer"><button class="mini close" id="bClose">close</button><div id="dbody"></div></div>
 <div id="tip"></div>
 
+<script src="/config.js"></script>
 <script>
 "use strict";
+
+// Same origin when served by uvicorn; a full URL when the pages are
+// hosted apart from the backend. See config.js.
+const API = (window.SIH_API_BASE || "");
 
 /* ======================================================================
    State
@@ -434,7 +439,7 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 }
 async function jget(u) {
-  const r = await fetch(u);
+  const r = await fetch(API + u);
   if (!r.ok) throw new Error(u + " -> " + r.status);
   return r.json();
 }
@@ -840,9 +845,9 @@ function resultBlock() {
   }
 
   h += `<h3>Export</h3><p>
-    <a href="/api/runs/${S.runId}/export?format=kml">KML</a> ·
-    <a href="/api/runs/${S.runId}/export?format=shp">Shapefile</a> ·
-    <a href="/api/runs/${S.runId}/export?format=geojson">GeoJSON</a></p>
+    <a href="${API}/api/runs/${S.runId}/export?format=kml">KML</a> ·
+    <a href="${API}/api/runs/${S.runId}/export?format=shp">Shapefile</a> ·
+    <a href="${API}/api/runs/${S.runId}/export?format=geojson">GeoJSON</a></p>
     <p style="margin-top:10px"><a href="/">Open this run on the map &rarr;</a></p>`;
   return h;
 }
@@ -970,7 +975,7 @@ async function play() {
 
   let j;
   try {
-    const r = await fetch("/api/runs", {
+    const r = await fetch(API + "/api/runs", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -991,8 +996,7 @@ async function play() {
 }
 
 function follow(runId) {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  const ws = new WebSocket(window.SIH_WS(`/ws/runs/${runId}`));
   S.ws = ws;
 
   /* Every handler checks it is still the run the page cares about. Closing a
@@ -1044,7 +1048,7 @@ async function togglePause() {
   if (!S.runId) return;
   const to = S.mode === "paused" ? "resume" : "pause";
   try {
-    const r = await fetch(`/api/runs/${S.runId}/${to}`, { method: "POST" });
+    const r = await fetch(`${API}/api/runs/${S.runId}/${to}`, { method: "POST" });
     const j = await r.json();
     if (!r.ok) { log("pause failed: " + JSON.stringify(j), "err"); return; }
     S.mode = j.paused ? "paused" : "running";
@@ -1067,7 +1071,7 @@ async function reset() {
   if (S.ws) { try { S.ws.close(); } catch {} S.ws = null; }
   if (cancelling && wasLive) {
     try {
-      await fetch(`/api/runs/${cancelling}/cancel`, { method: "POST" });
+      await fetch(`${API}/api/runs/${cancelling}/cancel`, { method: "POST" });
       log("cancel sent to the solver — " + cancelling, "warn");
     } catch {}
   }
@@ -1195,7 +1199,16 @@ function buildLegend() {
   buildLegend();
   try {
     const h = await jget("/health");
-    chip("cHealth", `backend ok · jit ${h.jit_warmup_s ?? "?"}s`, "done");
+    if (h.mode === "readonly") {
+      chip("cHealth", "read-only build — cannot solve", "bad");
+      $("bPlay").disabled = true;
+      $("bPlay").title = h.reason || "";
+      $("bPlay").innerHTML = "&#9654;&nbsp; PLAY (unavailable here)";
+      log(h.reason || "This build serves stored runs only.", "warn");
+      log("Use \"Replay last run\" to walk a run that was solved on a real machine.", "warn");
+    } else {
+      chip("cHealth", `backend ok · jit ${h.jit_warmup_s ?? "?"}s`, "done");
+    }
   } catch { chip("cHealth", "backend unreachable", "bad"); }
 
   try {

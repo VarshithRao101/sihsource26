@@ -1,0 +1,15 @@
+{
+  "site": "nagarjunasagarproject",
+  "source": "COP30",
+  "bbox": [
+    79.26240628074856,
+    16.519721182598893,
+    79.6810407555256,
+    16.72648384640295
+  ],
+  "nx": 496,
+  "ny": 255,
+  "cellsize_m": 90.04465461251455,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 456 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}

@@ -1,0 +1,10 @@
+# Dependencies for the READ-ONLY Vercel build only (api/index.py).
+#
+# The root requirements.txt is the real environment - numba, rasterio, torch,
+# geopandas and the rest, 5.6 GB installed. Vercel caps a function bundle at
+# 250 MB, so the deployed app deliberately imports nothing but the standard
+# library and these two.
+#
+# If you find yourself adding numpy here, stop: that is the signal that the
+# thing you are trying to serve needs the real backend instead.
+fastapi==0.141.1

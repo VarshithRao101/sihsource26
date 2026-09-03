@@ -1,0 +1,15 @@
+{
+  "site": "indirasagar",
+  "source": "COP30",
+  "bbox": [
+    76.41418542011675,
+    21.870756632686714,
+    76.53081457988324,
+    22.338403221823473
+  ],
+  "nx": 134,
+  "ny": 578,
+  "cellsize_m": 89.81607786772376,
+  "conditioning": "pit-filled (priority-flood, Barnes et al. 2014), channel carved to the domain outlet along 94 traced cells (monotonic descent, Lindsay 2016), bed from the carve; hydraulic-geometry cut skipped",
+  "nodata_frac": 0.0
+}
