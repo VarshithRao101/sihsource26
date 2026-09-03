@@ -538,6 +538,13 @@ def reservoir_simulate(req: ReservoirRequest) -> dict:
     return reservoir.simulate(cfg, req.hours, req.sample_every_s)
 
 
+# config.js is the file that tells the pages WHICH BACKEND to talk to, so a
+# browser holding a stale copy points a redeployed page at the wrong host - or
+# at no host - and the only symptom is "backend unreachable". It is a few
+# hundred bytes. It is never worth caching.
+_NO_CACHE = {"Cache-Control": "no-store, max-age=0"}
+
+
 @app.get("/config.js", include_in_schema=False)
 def config_js():
     """Tells the pages where the backend is. Same origin here, by default."""
@@ -548,8 +555,9 @@ def config_js():
             "window.SIH_WS=function(p){return (location.protocol==='https:'?'wss':'ws')"
             "+'://'+location.host+p;};",
             media_type="text/javascript",
+            headers=_NO_CACHE,
         )
-    return FileResponse(path, media_type="text/javascript")
+    return FileResponse(path, media_type="text/javascript", headers=_NO_CACHE)
 
 
 @app.get("/workflow", include_in_schema=False)

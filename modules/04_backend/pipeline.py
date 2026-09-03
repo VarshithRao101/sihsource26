@@ -818,6 +818,26 @@ PROBE_NODES = {n["id"] for n in NODES if n.get("engine")}
 LIVE_NODES = [n["id"] for n in NODES if not n.get("engine")]
 
 
+def _unavailable(what: str, exc: Exception) -> str:
+    """Why a probe could not answer, in words a juror can read.
+
+    A stripped host - the read-only Vercel build installs fastapi and nothing
+    else - cannot import numpy or torch, and that is a fact about the HOST, not
+    a fault in the module. Printing the bare exception put
+    "probe failed: ModuleNotFoundError: No module named 'numpy'" on the graph,
+    which reads as broken code on the one page we put in front of people. A
+    missing dependency is named as a missing dependency; anything else still
+    reports its exception, because an unexpected failure must not be dressed up
+    as a routine absence.
+    """
+    if isinstance(exc, ModuleNotFoundError) and exc.name:
+        return (
+            f"{what} is not available on this host: it needs {exc.name}, which "
+            "this build does not install. The full backend has it."
+        )
+    return f"{what} unavailable: {type(exc).__name__}: {exc}"
+
+
 def _probe_engines() -> dict[str, dict]:
     """Probe each external engine. Never raises - a probe that fails is a
     reported unknown, not a 500."""
@@ -825,7 +845,7 @@ def _probe_engines() -> dict[str, dict]:
 
     out: dict[str, dict] = {}
 
-    def status_of(key: str, dotted: str) -> None:
+    def status_of(key: str, dotted: str, what: str) -> None:
         try:
             st = import_module(dotted).status()
             out[key] = {
@@ -836,12 +856,12 @@ def _probe_engines() -> dict[str, dict]:
         except Exception as exc:  # noqa: BLE001
             out[key] = {
                 "installed": False,
-                "summary": f"probe failed: {type(exc).__name__}: {exc}",
+                "summary": _unavailable(what, exc),
                 "detail": {},
             }
 
-    status_of("delft3d", "modules.03_delft3d.engine")
-    status_of("sfincs", "modules.09_sfincs.engine")
+    status_of("delft3d", "modules.03_delft3d.engine", "The Delft3D engine check")
+    status_of("sfincs", "modules.09_sfincs.engine", "The SFINCS engine check")
 
     # SPH and GEE expose no status() of their own. Report whether the code and
     # its dependencies import, and say plainly that importability is all that
@@ -862,7 +882,7 @@ def _probe_engines() -> dict[str, dict]:
         except Exception as exc:  # noqa: BLE001
             out[key] = {
                 "installed": False,
-                "summary": f"{what} unavailable: {type(exc).__name__}",
+                "summary": _unavailable(what, exc),
                 "detail": {},
             }
 

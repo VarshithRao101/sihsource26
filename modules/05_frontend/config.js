@@ -33,8 +33,15 @@ window.SIH_API_BASE = "";
 
   try {
     var q = new URLSearchParams(location.search).get("api");
-    if (q) {
+    if (q !== null) {
       base = q;
+      /* Persist it. The console and the workflow page are separate documents
+         and the nav links between them are plain hrefs with no query string,
+         so a base that lived only in the URL would be lost on the first click
+         and the page would quietly fall back to its own origin - where there
+         is no solver. "?api=" with an empty value clears it again. */
+      if (q) localStorage.setItem("sih_api_base", q);
+      else localStorage.removeItem("sih_api_base");
     } else {
       var stored = localStorage.getItem("sih_api_base");
       if (stored) base = stored;

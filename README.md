@@ -66,6 +66,52 @@ copy .env.example .env          # then fill it in
 
 ---
 
+## Deploying: the pages on Vercel, the solver here
+
+**The backend does not run on Vercel and cannot be made to.** It needs numba to JIT
+the kernels, rasterio for terrain, torch for the emulator, a writable disk for the run
+folder, a long-lived process to hold the run registry, and a WebSocket. Serverless
+functions freeze when they return, share no filesystem, do not support WebSockets at
+all, and cap the bundle at 250 MB against the 5.6 GB this project installs. That is
+architectural, not a setting.
+
+So there are two deployments, and they are different programs:
+
+| | what it is | what it does |
+|---|---|---|
+| `api/index.py` | the **read-only** build Vercel serves | both pages, the processing graph, the 5,686-dam register, and the runs committed to the repo. Anything that would have to compute returns **501 with the reason**. `/health` reports `mode: readonly` so PLAY greys out and says why |
+| `modules/04_backend/api.py` | the **real** backend | solves |
+
+Deployed alone, the read-only build loses PLAY, the live WebSocket, the 3D scene, the
+point query and `.shp`/`.kml`. To keep all of it, host the pages on Vercel and point
+them at the solver running **on your machine**, over a tunnel:
+
+```bash
+start_public.bat https://your-app.vercel.app
+```
+
+That sets `SIH_CORS_ORIGINS` so the backend accepts calls from the Vercel origin, and
+opens a Cloudflare tunnel in a second window. Take the `https://<random>.trycloudflare.com`
+URL it prints and open:
+
+```
+https://your-app.vercel.app/?api=https://<random>.trycloudflare.com
+```
+
+`config.js` writes that base to `localStorage`, so the Workflow page picks it up when
+you click across and you only paste it once. Open with a bare `?api=` to clear it and
+go back to same-origin.
+
+**The tunnel is not about being reachable from the internet — it is about TLS.** A
+browser refuses to let an `https://` page call `http://` or `ws://`, so a plain
+`localhost:8000` backend is unreachable from a Vercel page no matter how open your
+firewall is.
+
+Needs `cloudflared` (`winget install --id Cloudflare.cloudflared`). Running locally is
+unchanged: `start_console.bat`, same origin, no tunnel, no CORS.
+
+---
+
 ## Everyday commands
 
 ```bash

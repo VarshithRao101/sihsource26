@@ -87,12 +87,21 @@ def workflow():
     return _page("workflow.html")
 
 
+# The file that says WHICH BACKEND to talk to. A cached copy sends a
+# redeployed page at the wrong host, and the only symptom is "backend
+# unreachable". A few hundred bytes; never worth caching.
+_NO_CACHE = {"Cache-Control": "no-store, max-age=0"}
+
+
 @app.get("/config.js", include_in_schema=False)
 def config_js():
     p = UI / "config.js"
     if not p.exists():
-        return PlainTextResponse("window.SIH_API_BASE='';", media_type="text/javascript")
-    return FileResponse(p, media_type="text/javascript")
+        return PlainTextResponse(
+            "window.SIH_API_BASE='';", media_type="text/javascript",
+            headers=_NO_CACHE,
+        )
+    return FileResponse(p, media_type="text/javascript", headers=_NO_CACHE)
 
 
 # --------------------------------------------------------------------------
