@@ -43,20 +43,31 @@ COPY . .
 # attached at this path - see docs/DEMO_RUNBOOK.md. Without one, finished runs
 # vanish on the next deploy or restart, which is survivable for a demo and not
 # for anything else.
-RUN mkdir -p /app/outputs
+# 777 rather than root-owned: Hugging Face Spaces runs the container as a
+# non-root user, and a run folder the process cannot write is a solve that dies
+# at the last step after doing all the work.
+RUN mkdir -p /app/outputs && chmod -R 777 /app/outputs
 
+# Every one of these redirects a library that would otherwise write into $HOME.
+# On a Space $HOME is not writable, and each of them fails at IMPORT time with
+# an error that names a cache directory and not the real problem.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    NUMBA_CACHE_DIR=/tmp/numba_cache
+    NUMBA_CACHE_DIR=/tmp/numba_cache \
+    MPLCONFIGDIR=/tmp/mpl \
+    XDG_CACHE_HOME=/tmp/cache \
+    HOME=/tmp
 
-EXPOSE 8000
+EXPOSE 7860
 
-# Render, Railway and Fly all inject $PORT and expect the process to bind it on
-# 0.0.0.0. Binding 127.0.0.1 or a fixed port is the usual reason a container
-# deploys green and then health-checks fail.
+# 7860 is what Hugging Face Spaces expects and what README.md's app_port
+# declares. Render, Railway and Fly inject $PORT instead, so the fallback covers
+# Spaces and the variable covers everyone else - one image, both. Binding
+# 127.0.0.1 or a fixed port is the usual reason a container deploys green and
+# then fails its health check.
 #
 # ONE WORKER, deliberately. RunRegistry holds live runs in process memory, so a
 # second worker would answer /api/runs/{id}/status for a run it has never heard
 # of. Concurrency here means concurrent VIEWERS, which one worker serves fine;
 # it does not mean concurrent solves.
-CMD ["sh", "-c", "python -m uvicorn modules.04_backend.api:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+CMD ["sh", "-c", "python -m uvicorn modules.04_backend.api:app --host 0.0.0.0 --port ${PORT:-7860} --workers 1"]
