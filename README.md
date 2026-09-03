@@ -1,18 +1,3 @@
----
-title: SIH26161 Dam Break Inundation
-emoji: 🌊
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
----
-
-<!-- The block above is Hugging Face Spaces configuration. Spaces reads its
-     settings from YAML front-matter in README.md and there is nowhere else to
-     put it, so it lives here and GitHub renders it as a table. Deleting it
-     breaks the Space; it affects nothing else. See "Deploying" below. -->
-
 # SIH26161 — Dam Break Inundation Modelling
 
 Point it at any of 5,686 Indian dams and it tells you which villages flood, how deep, and **how
@@ -98,38 +83,15 @@ So there are two deployments, and they are different programs:
 | `modules/04_backend/api.py` | the **real** backend | solves |
 
 Deployed alone, the read-only build loses PLAY, the live WebSocket, the 3D scene, the
-point query and `.shp`/`.kml`. There are two ways to get them back, and they are not
-exclusive.
+point query and `.shp`/`.kml`. **This is how you get them back:** host the pages on
+Vercel and point them at the solver running on your own machine, over an HTTPS tunnel.
+Nothing to deploy, no hosting bill, and it keeps your GPU torch build and every cached
+DEM.
 
-### Option 1 — the solver on Hugging Face Spaces (hosted, no card)
-
-`Dockerfile` builds the real backend. Spaces gives **2 vCPU and 16 GB RAM free**, runs
-Docker, and supports WebSockets — more headroom than Render's paid 2 GB tier, and it
-does not ask for a card.
-
-```bash
-git remote add hf https://huggingface.co/spaces/<your-username>/<space-name>
-git push hf main
-```
-
-Create the Space first with **SDK: Docker**. The YAML front-matter at the top of this
-README is what configures it — `app_port: 7860` has to match the Dockerfile's fallback
-port, and it does.
-
-Then add **`OPENTOPOGRAPHY_API_KEY`** under the Space's *Settings → Secrets*. It is the
-only credential a live run genuinely needs: it fetches the DEM, and the code refuses to
-substitute synthetic terrain. `EARTHDATA_USERNAME` / `EARTHDATA_PASSWORD` are a fallback
-DEM provider; the `EE_*` and `CDSE_*` keys gate Earth Engine and SAR, neither of which
-runs inside a live request. `MAPTILER_API_KEY` is registered in `shared/creds.py` but
-**unused** — the map draws OpenStreetMap raster tiles directly.
-
-Two limits worth knowing before demo day: the Space's disk is **ephemeral**, so finished
-runs disappear when it restarts, and it **sleeps after about 48 hours idle** and needs a
-click to wake.
-
-### Option 2 — the solver on your own machine, over a tunnel
-
-Nothing to deploy, and it keeps your GPU torch build and every cached DEM:
+`Dockerfile` and `render.yaml` are also in the repo, for hosting the backend in a
+container instead. They are **not part of the demo path** and have never been built —
+every managed host that can hold this image (torch, numba and rasterio need well over
+2 GB) wanted a card. Keep them for later or ignore them.
 
 ```bash
 start_public.bat https://your-app.vercel.app
