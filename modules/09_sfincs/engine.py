@@ -4,10 +4,11 @@ modules/09_sfincs/engine.py - is the SFINCS solver installed, and which build?
     python -m modules.09_sfincs.engine
 
 SFINCS is Deltares' open-source flood model (GPL-3.0; the precompiled binaries
-ship under the Deltares Freeware licence). It needs no licence key, which is the
-entire reason it is here: NTRO's statement asks for Delft3D, Delft3D FM needs a
-licence file Deltares did not grant us, and a hydrodynamic framework that can
-only run its own solver has not proved much.
+ship under the Deltares Freeware licence). It needs no licence key AND it ships
+compiled, which is the entire reason it is here: NTRO's statement asks for
+Delft3D, we have neither kernel - the FM licence we requested was never answered
+and Delft3D 4 ships as source we have not compiled - and a hydrodynamic framework
+that can only run its own solver has not proved much.
 
     WHAT THIS IS NOT. SFINCS is not Delft3D and it is reduced-physics. Nothing
     in this repository may present it as Delft3D, and compare_engines.py keeps

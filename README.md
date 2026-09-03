@@ -169,37 +169,57 @@ person is counted once. Summing a box around each place instead double-counted a
 between two villages — it produced 83,966 people across the refined settlements when the whole tile
 only holds 152,239, a total a juror could break by adding up our own column.
 
-### 2. Delft3D — you need the **kernel**, not the licence manager
+### 2. Delft3D — you need the **kernel**, and it is a compile, not a licence
 
 The one NTRO deliverable we cannot currently claim.
 
-**Deltares ships three separate downloads and only one of them solves anything:**
+**"Delft3D" is two different products, and only one of them needs a licence.** Getting this
+backwards is the difference between "Deltares wouldn't let us" (false, and a better story than we
+are entitled to) and "we didn't compile it" (true).
 
-| Download | What it is | Do we need it |
+| | Licence | How you get the kernel |
 |---|---|---|
-| Deltares License Software | FlexNet licence manager (`DS_Flex.exe`, `lmadmin`) | only to license the suite |
-| Delft3D FM Suite 2D3D (HM) | the GUI modelling environment | optional |
-| **D-Flow FM kernel / DIMR** | **the solver we drive from the command line** | **yes — this one** |
+| **Delft3D 4** — Delft3D-FLOW, structured. **The model the problem statement means** | **none, GPLv3** | **source only.** `d_hydro` + `flow2d3d` are compiled from <https://github.com/Deltares/Delft3D>, build config `d3d4-suite` |
+| **Delft3D FM** — D-Flow Flexible Mesh, unstructured | required; ours was **requested and never answered** | precompiled, behind the licence |
 
-`Deltares License Software/` is already downloaded. It is **not** a solver, and the engine check
+Deltares also ships the Delft3D 4 **GUI** precompiled and free — but not its kernels, which is why
+their own FAQ has a "`d_hydro.exe` could not be found" entry.
+
+**Also: `Deltares License Software/` is already downloaded and is NOT a solver.** The engine check
 says so out loud rather than counting it.
 
-Get the kernel from <https://download.deltares.nl/> (manual approval, can take days), fallback
-<https://oss.deltares.nl/web/delft3d/download>. Unpack it next to `DualSPHysics_v5.4/`, or set
-`DELFT3D_HOME` in `.env` to wherever it lands. Then:
+The build (official route, Intel oneAPI inside a Docker devcontainer — gfortran is no longer
+supported for current releases):
+
+```bash
+git clone https://github.com/Deltares/Delft3D.git
+```
+
+then, inside the devcontainer:
+
+```bash
+python build.py --config d3d4-suite --build --build-type Release --build-dependencies
+```
+
+Put the result next to `DualSPHysics_v5.4/`, or set `DELFT3D_HOME` in `.env` to wherever it lands:
 
 ```bash
 .venv\Scripts\python.exe -m modules.03_delft3d.engine
 ```
 
-That prints what it found and exits 0 once a real kernel is present. It looks for `dimr` or
-`dflowfm` on PATH, under `$DELFT3D_HOME`, beside the repo, and in the Deltares-named folders of the
-usual install roots.
+That prints what it found and exits 0 once a real kernel is present. It looks for **both** kernels —
+`d_hydro` / `deltares_hydro` / `trisim` for Delft3D 4, `dimr` / `dflowfm` for FM — on PATH, under
+`$DELFT3D_HOME`, beside the repo, and in the Deltares-named folders of the usual install roots. It
+reports which flavour it found, and it refuses to call `d_hydro` installed without `flow2d3d.dll`
+beside it, because that pair is a launcher with nothing to launch.
 
 Until a kernel exists, `compare_engines.py` reports Delft3D as **absent, never estimated** — and
 that absence is now *measured* by `modules/03_delft3d/engine.py` rather than hardcoded. Once it
-lands, tell me and I will write the case builder (`hydrograph.csv` + DEM → D-Flow FM input) and the
-reader that pulls its output back into the contract.
+lands, tell me and I will write the case builder (`hydrograph.csv` + DEM → Delft3D-FLOW input:
+`.mdf`, `.grd`, `.enc`, `.dep`, `.bnd`, `.src`, `.dis`, `config_d_hydro.xml`) and the reader that
+pulls `trim-*.nc` back into the contract. It is deliberately **not** written yet: Delft3D input
+formats fail silently when they are wrong, and writing them against a solver we cannot run would be
+guessing.
 
 ### 3. Pick the second demo river and confirm the first
 

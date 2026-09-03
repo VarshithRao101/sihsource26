@@ -61,7 +61,8 @@ not claim one.
 
 ### "Why is Delft3D missing? The problem statement names it."
 
-Because we could not obtain a licence.
+Because we did not build the kernel. It is a build, not a permission wall — and those are different
+answers, so we give the accurate one.
 
 `modules/03_delft3d/engine.py` — the absence is **measured, not asserted**. It searches PATH,
 `$DELFT3D_HOME`, beside the repo, and the Deltares-named install folders, and reports what it
@@ -73,15 +74,25 @@ actually found:
 
 Deltares ships three separate downloads and only one solves anything. We have the **licence
 manager** (`DS_Flex.exe`, `lmadmin`) — which is not a solver. The **D-Flow FM kernel** requires a
-licence file Deltares issues on request; we requested one and had no reply. The fully open-source
-route is compiling 1.19 GB of Fortran with Intel oneAPI, which was not a defensible use of the time
-available.
+licence file Deltares issues on request; we requested one and had no reply.
+
+**"Delft3D" is two products, and only one of them needs that licence.** Say this before they say it:
+
+| | licence | how you get the kernel |
+|---|---|---|
+| **Delft3D 4** (Delft3D-FLOW, structured) — the model this statement means | **none, GPLv3** | source only: `d_hydro` + `flow2d3d` are compiled from `github.com/Deltares/Delft3D`, config `d3d4-suite` |
+| **Delft3D FM** (D-Flow Flexible Mesh) | required, **we asked and had no reply** | precompiled, behind the licence |
+
+So the honest answer is **not** "Deltares wouldn't let us." It is: the model NTRO names is free and we
+did not spend the time compiling it — Intel oneAPI in a Docker devcontainer, against a deadline that
+had a working solver in it already. The detector reports both kernels and says which one it found.
 
 `integration/compare_engines.py` prints Delft3D as absent on every run, and a gate check
 (`03_delft3d absence is measured`) means we cannot accidentally claim otherwise.
 
-> If asked "so you didn't do it?" — **"No. We asked for a licence and did not get one."** Do not
-> dress it up.
+> If asked "so you didn't do it?" — **"No. The FM licence we asked for never came, and the free one
+> we'd have had to compile ourselves. We didn't."** Do not dress it up, and do not let it come out
+> as "Deltares refused us" — that would be a better story and a false one.
 
 ---
 

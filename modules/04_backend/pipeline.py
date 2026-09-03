@@ -502,7 +502,7 @@ NODES: list[dict[str, Any]] = [
     },
     {
         "id": "delft3d",
-        "title": "Delft3D FM",
+        "title": "Delft3D",
         "subtitle": "named in the problem statement",
         "kind": "engine",
         "x": 6, "y": 5,
@@ -511,15 +511,23 @@ NODES: list[dict[str, Any]] = [
         "engine": "delft3d",
         "does": (
             "The problem statement names Delft3D explicitly. The kernel is not "
-            "installed on this machine and the licence was not granted, so this "
-            "node is a filesystem probe and nothing else. It reports what it "
-            "searched and what it found. It never estimates a Delft3D result, "
-            "never borrows another engine's numbers, and never turns green. "
-            "SFINCS above is a different Deltares model and is labelled as one."
+            "built on this machine, so this node is a filesystem probe and "
+            "nothing else. It reports what it searched and what it found. It "
+            "never estimates a Delft3D result, never borrows another engine's "
+            "numbers, and never turns green on a machine without the kernel. "
+            "SFINCS above is a different Deltares model and is labelled as one. "
+            "The reason is a BUILD, not a licence: Delft3D 4 (Delft3D-FLOW, the "
+            "structured model this statement means) is GPLv3 and its source is "
+            "public, but Deltares ships the kernels as source only - d_hydro and "
+            "flow2d3d have to be compiled. Delft3D FM, the newer unstructured "
+            "suite, is the one that needs the licence we were not granted."
         ),
         "inputs": ["-"],
-        "outputs": ["installed true / false, and the paths that were searched"],
-        "sources": ["Deltares D-Flow FM / DIMR - download.deltares.nl"],
+        "outputs": ["installed true / false, which flavour, and the paths searched"],
+        "sources": [
+            "Delft3D 4 (GPLv3) - github.com/Deltares/Delft3D, build config d3d4-suite",
+            "Delft3D FM / DIMR (licensed) - download.deltares.nl",
+        ],
         "optional": True,
     },
     {
@@ -771,12 +779,14 @@ DEPENDENCIES: dict[str, dict[str, list[str]]] = {
         "engines": ["SFINCS v2.4.0 Galibier executable"],
     },
     "delft3d": {
-        "code": ["nothing - there is no python side to a solver we do not have"],
+        "code": ["nothing - there is no python side to a solver we have not built"],
         "data": [],
         "services": [],
         "engines": [
-            "D-Flow FM kernel or DIMR - NOT INSTALLED",
-            "a Deltares licence - NOT GRANTED",
+            "Delft3D 4 kernel (d_hydro + flow2d3d) - NOT BUILT. GPLv3, source "
+            "public, ships as source only and has to be compiled",
+            "Delft3D FM kernel or DIMR - NOT INSTALLED, and its suite needs a "
+            "Deltares licence we were not granted",
         ],
     },
     "compare": {

@@ -25,7 +25,7 @@ missing it says so plainly — nothing here is estimated.
 | **Sudden water surge** | `shared/hydro.py` — Froehlich (2008), Von Thun & Gillette (1990), MacDonald & Langridge-Monopolis (1984), all computed, none averaged | `uncertainty.json` — 4.0× spread published per run | ✅ |
 | **Loss and damage** | `modules/07_ml/damage.py` — JRC Huizinga et al. (2017) Asia depth-damage curves + Clausen & Clark (1990) velocity aggravation | `impact.json` — damage in ₹ crore, buildings/roads/cropland split | 🟡 replacement values are **stated assumptions**, not measured |
 | **SPH model** | `modules/02_sph/breach.py` — DualSPHysics v5.4 on GPU, **coupled into the pipeline** by `runner.splice_sph_hydrograph` | 99,000 particles; agrees with the weir equation to **5%**. `engine='sphcoupled'` splices the measured near-field discharge onto the front of the level-pool curve and publishes the handover disagreement in `meta.json` → `sph_coupling` | ✅ coupled; still a cross-check, not independent validation |
-| **Delft3D model** | `modules/03_delft3d/engine.py` — detection only | Absence is **measured**, not asserted; gate-enforced | 🔴 **licence not granted** |
+| **Delft3D model** | `modules/03_delft3d/engine.py` — detection only, both kernels | Absence is **measured**, not asserted; gate-enforced | 🔴 **kernel not built** |
 | **"compare the scenario"** | `integration/compare_engines.py` | Compares our solver, weir equation, DualSPHysics and four empirical regressions. **The Delft3D row is empty** | 🟡 incomplete while Delft3D is absent |
 
 ---
@@ -139,7 +139,7 @@ any of them.
 | Deliverable | Status |
 |---|---|
 | (i) framework: dam break · blockage · water release · surge · loss & damage · SPH | ✅ |
-| (i) Delft3D and the engine comparison | 🔴 **licence not granted** |
+| (i) Delft3D and the engine comparison | 🔴 **kernel not built** |
 | (ii) customisable tool, different datasets | ✅ |
 | (iii) dashboard + .shp/.kml | ✅ (load-tested to 542,970 cells; solver 1.24-1.89x faster) |
 | (iv) near-real-time GEE | ✅ |

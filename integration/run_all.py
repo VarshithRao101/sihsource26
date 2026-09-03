@@ -521,6 +521,11 @@ def check_delft3d_absence():
     not having it is claiming we do. This asserts the detector actually looks
     and reports honestly - and that it never mistakes the Deltares licence
     manager, which is a separate download, for a solver.
+
+    The detector looks for both kernels: Delft3D 4 (d_hydro + flow2d3d, GPLv3,
+    source-only so it has to be compiled) and Delft3D FM (dimr / dflowfm, whose
+    suite needs the licence we were not granted). Reporting which one was found
+    is part of the honesty, because the two are not obtainable the same way.
     """
     d3d = import_module("modules.03_delft3d.engine")
     st = d3d.status()
@@ -532,7 +537,14 @@ def check_delft3d_absence():
         from pathlib import Path
 
         assert Path(st["kernel"]).exists(), f"kernel reported but missing: {st['kernel']}"
-        return f"D-Flow FM kernel present at {st['kernel']}"
+        assert st["flavour"] in ("delft3d4", "dflowfm"), (
+            f"kernel found but flavour unreported: {st['flavour']!r}"
+        )
+        # d_hydro without flow2d3d.dll is a launcher with nothing to launch.
+        # Saying "installed" there would be the same unearned claim as before.
+        if not st["can_solve"]:
+            return f"{st['flavour_name']} kernel found but UNUSABLE: {st['summary']}"
+        return f"{st['flavour_name']} kernel present at {st['kernel']}"
 
     # Absent is the expected answer today. It must say so in words.
     assert "NOT INSTALLED" in st["summary"], f"unclear absence: {st['summary']}"

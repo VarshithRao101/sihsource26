@@ -17,9 +17,11 @@ same wet threshold. Anything the two disagree about is a difference between the
 engines and not a difference in the problem.
 
     SFINCS IS NOT DELFT3D. It is a different Deltares model and it is
-    reduced-physics. Delft3D FM needs a licence file Deltares did not grant us
-    and remains reported as absent. What this comparison demonstrates is that
-    the framework drives an independent third-party solver at all.
+    reduced-physics. Delft3D remains reported as absent: the FM licence we
+    requested was never answered, and Delft3D 4 - the structured model the
+    statement actually names - is GPLv3 but ships as source, so its kernel is a
+    compile we have not done. What this comparison demonstrates is that the
+    framework drives an independent third-party solver at all.
 
 Two engines will not agree exactly and should not. SFINCS trades momentum terms
 for speed; the interesting output is WHERE they diverge, which this prints.
@@ -188,7 +190,10 @@ def compare(run_id: str, timeout_s: int = 1800) -> dict:
         },
         "delft3d": {
             "installed": False,
-            "note": "Licence not granted by Deltares. Absent, never estimated.",
+            "note": (
+                "Kernel not built. Delft3D 4 is GPLv3 and source-only; the FM "
+                "licence we requested was never answered. Absent, never estimated."
+            ),
         },
         "agreement": agreement(a_wet, b_wet),
         "reading": (

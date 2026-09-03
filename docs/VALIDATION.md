@@ -159,8 +159,9 @@ In order of value, and honest about what each requires from outside the project:
 3. **An observed inflow series** from India-WRIS or CWC. Unblocks the LSTM and lets us validate the
    rainfall-runoff nowcast. *Needs: a data download.*
 4. **A hydraulics engineer's review of Hirakud.** *Needs: ten minutes of an expert's time.*
-5. **Delft3D**, to complete the engine comparison the problem statement asks for. *Needs: a Deltares
-   licence.*
+5. **Delft3D**, to complete the engine comparison the problem statement asks for. *Needs: compiling
+   the Delft3D 4 kernel (`d3d4-suite`) — GPLv3, no licence, Intel oneAPI in a Docker devcontainer.
+   The FM licence we requested was never answered, but FM is not the model the statement names.*
 
 ---
 

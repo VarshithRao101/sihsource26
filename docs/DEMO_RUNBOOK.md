@@ -99,10 +99,12 @@ condition the terrain, find who lives downstream, size the breach, solve the wat
 grids, cost the damage, plan the evacuation, publish the uncertainty, validate. Then point at the
 grey dashed box at the bottom.
 
-> **"Delft3D is named in the problem statement. We do not have the kernel, the licence was not
-> granted, and that box is a filesystem probe. It lists the paths it searched and it never turns
-> green. The Deltares model above it is SFINCS, which is a different model, and we label it as
-> one."**
+> **"Delft3D is named in the problem statement and we do not have the kernel. To be precise about
+> why: Delft3D 4, the structured model this statement means, is GPLv3 and free — but Deltares ships
+> it as source, so it is a compile we did not do. The FM suite is the one that needs a licence, and
+> ours was never answered. That box is a filesystem probe. It lists the paths it searched and it
+> never turns green. The Deltares model above it is SFINCS, which is a different model, and we
+> label it as one."**
 >
 > Say this in the first minute, before anyone asks. It buys you the rest of the room.
 
@@ -237,7 +239,8 @@ These are strengths, not confessions. Full detail in `docs/QA.md` and `AGENTS.md
 - Breach parameter regressions disagree with each other by a factor of four on the same dam. We show
   all of them and average none of them.
 - Our satellite validation is **weak on both reaches we tried**, and we publish the numbers anyway.
-- Delft3D is **not installed**. We requested a licence and did not receive one.
+- Delft3D is **not installed** — a kernel we did not compile, not a door that was shut on us. The
+  free Delft3D 4 ships as source; the FM licence we asked for was never answered.
 - The ML surrogate emulates **our own solver**, not reality.
 
 ---
