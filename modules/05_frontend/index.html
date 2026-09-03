@@ -320,10 +320,14 @@
   </div>
 </div>
 
+<script src="/config.js"></script>
 <script>
-const API = "";
+// Same origin when served by uvicorn; a full URL when the pages are
+// hosted apart from the backend. See config.js.
+const API = (window.SIH_API_BASE || "");
 let RUN = null, META = null, PACKED = null, ENDHR = 12, IMPACT = null, DAM = null;
 let FIELDS = null, FIELDSMETA = null, VIEW = null, TNOW = 0;
+let READONLY = false;   // set from /health; the host cannot solve
 
 const $ = id => document.getElementById(id);
 const log = m => { const l = $("log"); l.textContent += "\n" + m; l.scrollTop = l.scrollHeight; };
@@ -339,7 +343,16 @@ async function jget(url) {
 (async () => {
   try {
     const h = await jget("/health");
-    $("health").textContent = "backend ok" + (h.jit_warmup_s ? " · jit " + h.jit_warmup_s + "s" : "");
+    if (h.mode === "readonly") {
+      READONLY = true;
+      $("health").innerHTML = '<span class="err">read-only build — cannot solve</span>';
+      $("run").disabled = true;
+      $("run").textContent = "Run simulation (unavailable here)";
+      $("run").title = h.reason || "";
+      clearLog(h.reason || "This build serves stored runs only.");
+    } else {
+      $("health").textContent = "backend ok" + (h.jit_warmup_s ? " · jit " + h.jit_warmup_s + "s" : "");
+    }
   } catch { $("health").innerHTML = '<span class="err">backend unreachable</span>'; }
 
 })();
@@ -503,11 +516,23 @@ $("run").onclick = async () => {
 };
 
 function follow(runId) {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  // Not location.host: when the page is hosted apart from the backend the
+  // socket has to go to the backend's origin, not this page's. config.js
+  // still falls back to location.host when they are the same, which is the
+  // local uvicorn case. workflow.html does this too.
+  const ws = new WebSocket(window.SIH_WS(`/ws/runs/${runId}`));
+
+  /* Every message is a full state SNAPSHOT, not an event. The registry merges
+     each update into one dict and sends the whole thing, so `stage` is sticky:
+     once the solver sets it, it arrives again on every progress tick. Logging
+     on presence rather than on CHANGE printed "solving shallow water" ninety
+     times - and because that branch returned early, the progress numbers below
+     it never printed at all. Both lines are therefore compared before logging. */
+  let lastStage = null, lastLine = null;
+
   ws.onmessage = ev => {
     let d; try { d = JSON.parse(ev.data); } catch { return; }
-    if (d.stage) { log(d.stage + "…"); return; }
+    if (d.stage && d.stage !== lastStage) { lastStage = d.stage; log(d.stage + "…"); }
     if (d.status === "done" || d.status === "error") return;
     if (d.pct !== undefined) {
       const bits = [`${String(d.pct).padStart(5)}%  t=${d.t_hr}h`];
@@ -515,7 +540,9 @@ function follow(runId) {
       if (d.max_depth_m !== undefined) bits.push(`max=${d.max_depth_m}m`);
       if (d.volume_stored_mcm !== undefined)
         bits.push(`in=${d.volume_in_mcm} stored=${d.volume_stored_mcm} MCM`);
-      log(bits.join("  "));
+      // A node-only update carries no new numbers; it would repeat this line.
+      const line = bits.join("  ");
+      if (line !== lastLine) { lastLine = line; log(line); }
     }
   };
   ws.onclose = async () => {
