@@ -10,20 +10,20 @@ Cell size **90 m**, simulated duration **1 h**.
 
 | reach km | grid | cells | solve s | write s | total s | peak MB | cell-updates/s | packed.png KB | run folder | mass err % | ok |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 10 | 133×244 | 32,452 | 25.4 | 0.63 | 26.1 | 34.7 | 11,018,348 | 5.4 | 0.1 MB | -0 | yes |
-| 20 | 133×356 | 47,348 | 12.62 | 0.1 | 12.73 | 11.2 | 32,472,024 | 4.9 | 0.1 MB | 0 | yes |
-| 40 | 134×578 | 77,452 | 21.06 | 0.11 | 21.18 | 18.3 | 32,021,584 | 6.3 | 0.1 MB | -0 | yes |
-| 80 | 134×1022 | 136,948 | 37.69 | 0.12 | 37.83 | 32.4 | 31,575,434 | 7.7 | 0.1 MB | -0 | yes |
-| 120 | 134×1467 | 196,578 | 68.79 | 0.14 | 68.95 | 46.5 | 24,793,004 | 6.4 | 0.1 MB | -0 | yes |
-| 180 | 134×2133 | 285,822 | 78.05 | 0.16 | 78.23 | 67.6 | 31,782,820 | 6.5 | 0.1 MB | 0 | yes |
-| 250 | 135×2911 | 392,985 | 134.74 | 0.19 | 134.96 | 92.9 | 25,432,902 | 6.7 | 0.2 MB | 0 | yes |
-| 350 | 135×4022 | 542,970 | 221.27 | 0.23 | 221.53 | 128.4 | 21,351,209 | 7.2 | 0.2 MB | -0 | yes |
+| 10 | 133×244 | 32,452 | 6.79 | 0.53 | 7.35 | 34.7 | 41,217,386 | 5.4 | 0.1 MB | -0 | yes |
+| 20 | 133×356 | 47,348 | 6.26 | 0.09 | 6.35 | 10 | 65,462,770 | 4.9 | 0.1 MB | 0 | yes |
+| 40 | 134×578 | 77,452 | 8.58 | 0.09 | 8.67 | 16.4 | 78,598,434 | 6.3 | 0.1 MB | -0 | yes |
+| 80 | 134×1022 | 136,948 | 15.43 | 0.11 | 15.54 | 29 | 77,127,552 | 7.7 | 0.1 MB | -0 | yes |
+| 120 | 134×1467 | 196,578 | 29.5 | 0.11 | 29.63 | 41.6 | 57,813,923 | 6.4 | 0.1 MB | -0 | yes |
+| 180 | 134×2133 | 285,822 | 53.19 | 0.13 | 53.33 | 60.4 | 46,637,510 | 6.5 | 0.1 MB | 0 | yes |
+| 250 | 135×2911 | 392,985 | 92.7 | 0.16 | 92.88 | 83.1 | 36,966,874 | 6.7 | 0.2 MB | 0 | yes |
+| 350 | 135×4022 | 542,970 | 151.7 | 0.23 | 151.95 | 114.8 | 31,142,927 | 7.2 | 0.2 MB | -0 | yes |
 
 ## What this says
 
-- Largest grid that ran and validated: **135×4022 = 542,970 cells**, 221.53 s end to end, 128.4 MB peak.
+- Largest grid that ran and validated: **135×4022 = 542,970 cells**, 151.95 s end to end, 114.8 MB peak.
 - The browser texture for it is **7.2 KB**, which is what the dashboard downloads to draw the whole time-varying flood.
-- Solver throughput across the sweep: 11,018,348 to 32,472,024 cell-updates per second. Flat throughput means the cost is linear in cells; a fall at the top means we are out of cache or memory.
+- Solver throughput across the sweep: 31,142,927 to 78,598,434 cell-updates per second. Flat throughput means the cost is linear in cells; a fall at the top means we are out of cache or memory.
 - **No ceiling was reached in this sweep.** The largest size tried still validated, so the limit is above it and is not yet measured.
 
 Nothing here is extrapolated. Sizes that were not run are not reported.

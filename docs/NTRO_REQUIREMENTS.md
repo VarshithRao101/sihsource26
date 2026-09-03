@@ -141,7 +141,7 @@ any of them.
 | (i) framework: dam break · blockage · water release · surge · loss & damage · SPH | ✅ |
 | (i) Delft3D and the engine comparison | 🔴 **licence not granted** |
 | (ii) customisable tool, different datasets | ✅ |
-| (iii) dashboard + .shp/.kml | ✅ (load-tested to 542,970 cells) |
+| (iii) dashboard + .shp/.kml | ✅ (load-tested to 542,970 cells; solver 1.24-1.89x faster) |
 | (iv) near-real-time GEE | ✅ |
 | (v) any Indian river and dam, live | ✅ |
 

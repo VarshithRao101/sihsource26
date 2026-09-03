@@ -167,7 +167,9 @@
     position:absolute; width:214px; height:112px; overflow:hidden;
     background:linear-gradient(180deg,var(--panel2),var(--panel));
     color:var(--fg); border:1px solid var(--line); border-radius:11px;
-    padding:11px 13px 10px; cursor:pointer;
+    /* The bottom padding reserves the dependency row, which is absolutely
+       positioned down there and must never be covered by the detail text. */
+    padding:11px 13px 24px; cursor:pointer;
     box-shadow:0 3px 14px #00000066, inset 0 1px 0 #ffffff08;
     transition:border-color .18s, box-shadow .18s, transform .18s;
   }
@@ -185,14 +187,13 @@
   .node .dot { width:7px; height:7px; border-radius:50%; background:var(--wait); flex:none; }
   .node .ndet { font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.35;
                 display:none; word-break:break-word; }
-  .node.has-det .ndet { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  .node.has-det .ndet { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical;
                         overflow:hidden; }
   /* Dependency counts. The point of the page is that these are not hidden. */
   .node .deps {
     position:absolute; left:13px; right:11px; bottom:9px; display:flex; gap:5px;
     font-size:9.5px; color:var(--dim); letter-spacing:.02em;
   }
-  .node.has-det .deps { display:none; }
   .node .deps span {
     background:#ffffff0a; border:1px solid var(--line); border-radius:5px;
     padding:1px 6px; white-space:nowrap;
