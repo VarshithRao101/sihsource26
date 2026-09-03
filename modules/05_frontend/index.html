@@ -142,19 +142,53 @@
   <!-- ------------------------------------------------ controls -->
   <div class="side">
     <fieldset>
-      <legend>1 · Which dam</legend>
-      <div class="muted" style="font-size:11px;margin-bottom:4px">
-        CWC National Register of Large Dams 2019 — <span id="damcount">…</span>
+      <legend>1 · Which dam or river</legend>
+
+      <!-- The problem statement is titled "...of any River" and four of the five
+           events it names are natural dams, so a river has to be selectable in
+           its own right and not only as a dam's attribute. -->
+      <div style="display:flex;gap:14px;margin-bottom:6px;font-size:12px">
+        <label style="width:auto;display:flex;gap:5px;align-items:center">
+          <input type="radio" name="srcmode" id="srcdam" value="dam" checked style="width:auto"> Dam
+        </label>
+        <label style="width:auto;display:flex;gap:5px;align-items:center">
+          <input type="radio" name="srcmode" id="srcriver" value="river" style="width:auto"> River
+        </label>
       </div>
-      <label>State</label>
-      <select id="fstate"><option value="">— all states —</option></select>
-      <label>Nearest city <span class="muted">(NRLD has no district field)</span></label>
-      <select id="fcity"><option value="">— all cities —</option></select>
-      <label>Search name / river</label>
-      <input id="fq" placeholder="e.g. Hirakud, Teesta">
-      <label>Dam</label>
-      <select id="fdam" size="6"></select>
-      <div id="damcard" class="damcard muted">No dam selected — pick one above.</div>
+
+      <div id="dampick">
+        <div class="muted" style="font-size:11px;margin-bottom:4px">
+          CWC National Register of Large Dams 2019 — <span id="damcount">…</span>
+        </div>
+        <label>State</label>
+        <select id="fstate"><option value="">— all states —</option></select>
+        <label>Nearest city <span class="muted">(NRLD has no district field)</span></label>
+        <select id="fcity"><option value="">— all cities —</option></select>
+        <label>Search name / river</label>
+        <input id="fq" placeholder="e.g. Hirakud, Teesta">
+        <label>Dam</label>
+        <select id="fdam" size="6"></select>
+        <div id="damcard" class="damcard muted">No dam selected — pick one above.</div>
+      </div>
+
+      <div id="riverpick" style="display:none">
+        <div class="muted" style="font-size:11px;margin-bottom:4px">
+          River index derived from the CWC register — <span id="rivcount">…</span>
+        </div>
+        <label>Search river / basin</label>
+        <input id="rq" placeholder="e.g. Godavari, Krishna">
+        <label>River</label>
+        <select id="friver" size="5"></select>
+        <label>Where on it <span class="muted">(points north to south)</span></label>
+        <select id="frpoint"></select>
+        <div id="rivcard" class="damcard muted">No river selected — pick one above.</div>
+        <div class="muted" style="font-size:11px;margin-top:6px;line-height:1.45">
+          This is an <b>index, not a river network</b>. It maps river names to points
+          whose coordinates we hold, and every one is a dam in the register — the
+          channel itself is traced from the DEM at run time. A river with no large
+          dam on it is not listed; use “Enter a site by hand” for those.
+        </div>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -327,6 +361,7 @@
 const API = (window.SIH_API_BASE || "");
 let RUN = null, META = null, PACKED = null, ENDHR = 12, IMPACT = null, DAM = null;
 let FIELDS = null, FIELDSMETA = null, VIEW = null, TNOW = 0;
+let RIVERS = [], RIVER = null;   // the river index, and the one selected
 let READONLY = false;   // set from /health; the host cannot solve
 
 const $ = id => document.getElementById(id);
@@ -413,6 +448,89 @@ async function loadDams() {
   }
 }
 
+/* ---------------------------------------------------------------- rivers
+   The statement asks for "any River" and for river blockage, and four of the
+   five events it names are natural dams rather than engineered ones. The
+   physics was always there - the channel is traced by D8 from any coordinate -
+   but every way IN was a dam_id until now. */
+
+async function loadRivers() {
+  const p = new URLSearchParams();
+  if ($("rq").value.trim()) p.set("q", $("rq").value.trim());
+  p.set("min_points", "1");
+  p.set("limit", "300");
+  let r;
+  try { r = await jget("/api/rivers?" + p.toString()); }
+  catch { $("rivcount").innerHTML = '<span class="err">river index unavailable</span>'; return; }
+
+  RIVERS = r.rivers;
+  $("rivcount").textContent = `${r.count} river${r.count === 1 ? "" : "s"} listed`;
+  const sel = $("friver");
+  sel.innerHTML = "";
+  for (const v of RIVERS) {
+    const o = document.createElement("option");
+    o.value = v.id;
+    o.textContent = `${v.name} — ${v.basin || "basin unknown"} — ${v.point_count} pt`;
+    sel.appendChild(o);
+  }
+  if (RIVERS.length > 0) { sel.value = RIVERS[0].id; await applyRiver(); }
+  else { RIVER = null; $("rivcard").textContent = "No river matched that search."; }
+}
+
+async function applyRiver() {
+  const id = $("friver").value;
+  if (!id) return;
+  try { RIVER = await jget("/api/rivers/" + encodeURIComponent(id)); }
+  catch { RIVER = null; return; }
+
+  const sel = $("frpoint");
+  sel.innerHTML = "";
+  RIVER.points.forEach((p, i) => {
+    const o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = `${p.name} — ${p.lat.toFixed(3)}, ${p.lon.toFixed(3)} — ${p.state}`;
+    sel.appendChild(o);
+  });
+  sel.value = "0";
+  paintRiverCard();
+}
+
+function paintRiverCard() {
+  if (!RIVER) return;
+  const p = RIVER.points[+$("frpoint").value] || RIVER.points[0];
+  /* points_may_not_be_one_channel is set when a river's points span more than
+     400 km. On the Godavari that is simply true, and saying so is cheaper than
+     letting an operator assume two points sit on one continuous reach. */
+  const warn = RIVER.points_may_not_be_one_channel
+    ? `<div class="err" style="font-size:11px;margin-top:4px">Points span
+       ${Math.round(RIVER.span_km)} km — they are not necessarily one continuous
+       channel.</div>` : "";
+  $("rivcard").innerHTML =
+    `<b>${RIVER.name}</b> — ${RIVER.basin || "basin unknown"}<br>` +
+    `<span class="muted">Blockage at</span> ${p.name}<br>` +
+    `<span class="muted">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} · ${p.state}</span><br>` +
+    `<span class="muted">${RIVER.point_count} known point(s) · ${RIVER.source}</span>` +
+    warn;
+}
+
+/* A river has no gates and no embankment to overtop, so the backend rejects
+   any other failure mode with a river_id. Rather than let the operator submit
+   something that will be refused, the scenario is switched here and said out
+   loud. */
+function syncSourceMode() {
+  const river = $("srcriver").checked;
+  $("dampick").style.display = river ? "none" : "";
+  $("riverpick").style.display = river ? "" : "none";
+  if (river) {
+    $("mode").value = "blockage_breach";
+    $("mode").dispatchEvent(new Event("change"));
+    if (!RIVERS.length) loadRivers();
+  }
+  for (const o of $("mode").options) {
+    o.disabled = river && o.value !== "blockage_breach";
+  }
+}
+
 /* The operator picks a dam; every physical number comes from the register.
    Nobody types a latitude. The card is read-only on purpose - if a value is
    wrong it is wrong in the CWC register and editing it here would hide that. */
@@ -448,6 +566,12 @@ function applyMode() {
   $("grp-level").style.display    = m === "blockage_breach" ? "none" : "";
 }
 
+$("srcdam").onchange = syncSourceMode;
+$("srcriver").onchange = syncSourceMode;
+let rTimer;
+$("rq").oninput = () => { clearTimeout(rTimer); rTimer = setTimeout(loadRivers, 250); };
+$("friver").onchange = applyRiver;
+$("frpoint").onchange = paintRiverCard;
 $("fstate").onchange = async () => { await loadCities(); loadDams(); };
 $("fcity").onchange = loadDams;
 let qTimer = null;
@@ -483,7 +607,11 @@ $("run").onclick = async () => {
   /* Send the dam_id when the operator picked from the register: the backend
      then reads name, coordinates, height, storage AND the design spillway
      capacity straight from CWC rather than trusting anything retyped here. */
-  if (DAM && !$("manual").checked) {
+  if ($("srcriver").checked) {
+    if (!RIVER) { log("pick a river first"); return; }
+    body.river_id = RIVER.id;
+    body.river_point_index = +$("frpoint").value || 0;
+  } else if (DAM && !$("manual").checked) {
     body.dam_id = DAM.id;
   } else if ($("manual").checked && $("lat").value !== "") {
     body.site = {
@@ -492,7 +620,7 @@ $("run").onclick = async () => {
       dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value
     };
   } else {
-    log("pick a dam from the register, choose a demo site, or tick 'Enter a site by hand'");
+    log("pick a dam or a river from the register, choose a demo site, or tick 'Enter a site by hand'");
     return;
   }
 
