@@ -3,14 +3,24 @@
 # caches, so this file is what makes the deploy possible at all.
 
 # The real environment. api/requirements.txt is the deployed one.
-requirements.txt
-.venv/
+#
+# ANCHORED WITH A LEADING SLASH, and it matters more here than anywhere else in
+# this file. These patterns are gitignore-style: an unanchored "requirements.txt"
+# matches at EVERY depth, so it excluded api/requirements.txt as well - the one
+# file that installs fastapi - and every request to the deployed function died
+# with ModuleNotFoundError: No module named 'fastapi'. The build itself
+# succeeded, which is what made it hard to see.
+/requirements.txt
+/.venv/
 
 # Simulation engines - Windows binaries, gigabytes, and unusable on Linux.
-DualSPHysics_v5.4/
-SFINCS/
-SFINCS_v2.4.0/
-Deltares License Software/
+# Anchored for the same reason as above: these are repo-root directories, and
+# unanchored "SFINCS/" is one case-fold away from also eating the sfincs
+# cross-check output inside the committed demo run.
+/DualSPHysics_v5.4/
+/SFINCS/
+/SFINCS_v2.4.0/
+/Deltares License Software/
 
 # Heavy inputs. The dam register is small and IS deployed; these are not.
 data/dem/
