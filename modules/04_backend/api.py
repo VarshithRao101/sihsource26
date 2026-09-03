@@ -255,6 +255,23 @@ class RunRequest(BaseModel):
             "typing physics."
         ),
     )
+    river_id: str | None = Field(
+        None,
+        description=(
+            "A river from the index, e.g. 'godavari-godavari'. The problem "
+            "statement asks for 'any River' and for river blockage analysis, "
+            "and four of the five events it names are natural dams. Only "
+            "failure_mode='blockage_breach' is valid with this: a river has no "
+            "gates and no embankment to overtop."
+        ),
+    )
+    river_point_index: int = Field(
+        0, ge=0,
+        description=(
+            "Which point on that river to block, indexed north to south. See "
+            "GET /api/rivers/{river_id}."
+        ),
+    )
     failure_mode: Literal[
         "overtopping", "piping", "gated_release", "blockage_breach"
     ] = "overtopping"
@@ -340,6 +357,49 @@ class RunRequest(BaseModel):
             # It is a measured number and beats any assumption we could make
             # about how much water the outlet works can pass.
             design_spillway = dam.get("spillway_cumecs")
+        elif self.river_id:
+            # The problem statement asks for "any River" and for river blockage,
+            # and four of the five events it names are natural dams rather than
+            # engineered ones. This is that entry point.
+            from importlib import import_module
+
+            rivers = import_module("modules.01_geodata.rivers")
+            river = rivers.get(self.river_id)
+            if river is None:
+                raise HTTPException(404, f"unknown river_id {self.river_id!r}")
+            pt = rivers.point(self.river_id, self.river_point_index)
+            if pt is None:
+                raise HTTPException(
+                    422,
+                    f"{river['name']} has {river['point_count']} point(s); "
+                    f"river_point_index {self.river_point_index} is out of range.",
+                )
+            if self.failure_mode != "blockage_breach":
+                # A river has no gates and no embankment to overtop. Silently
+                # switching the mode would run a scenario the operator did not
+                # ask for, so this refuses and says which mode applies.
+                raise HTTPException(
+                    422,
+                    f"failure_mode {self.failure_mode!r} needs a dam. A river "
+                    "entry point models a natural blockage - post "
+                    "failure_mode='blockage_breach' with blockage_height_m, or "
+                    "pick a dam_id instead.",
+                )
+            site = SiteSpec(
+                name=f"{river['name']} at {pt['name']}",
+                lat=pt["lat"],
+                lon=pt["lon"],
+                river=river["name"],
+                state=pt.get("state", ""),
+                # NEITHER of these is used in blockage mode: runner.py replaces
+                # the height with blockage_height_m and the capacity with the
+                # volume impounded behind the debris, read off the DEM. They are
+                # set to the blockage height only because SiteSpec.validate()
+                # requires them positive. Nothing downstream reads them.
+                dam_height_m=self.blockage_height_m,
+                reservoir_capacity_mcm=1.0,
+                source=river["source"],
+            )
         elif self.site_key:
             site = DEMO_SITES.get(self.site_key)
             if site is None:
@@ -349,7 +409,7 @@ class RunRequest(BaseModel):
         elif self.site:
             site = SiteSpec(**self.site.model_dump())
         else:
-            raise HTTPException(422, "provide either site or site_key")
+            raise HTTPException(422, "provide one of dam_id, river_id, site or site_key")
 
         return ScenarioSpec(
             site=site,
@@ -648,6 +708,58 @@ def _catalogue():
         return import_module("modules.01_geodata.dams")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, f"dam catalogue unavailable: {exc}")
+
+
+def _rivers():
+    from importlib import import_module
+
+    try:
+        return import_module("modules.01_geodata.rivers")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"river index unavailable: {exc}")
+
+
+@app.get("/api/rivers", tags=["rivers"])
+def river_search(
+    q: str | None = None,
+    state: str | None = None,
+    min_points: int = 1,
+    limit: int = 200,
+) -> dict:
+    """Find a river to place a blockage on.
+
+    This is an INDEX, not a river network: it maps river names to points whose
+    coordinates we hold, and every one of those is a dam in the CWC register.
+    The channel itself is traced from the DEM at run time, so a river absent
+    from here can still be modelled by posting a coordinate directly.
+    """
+    rv = _rivers()
+    rows = rv.search(q=q, state=state, min_points=min_points, limit=limit)
+    return {
+        "count": len(rows),
+        "rivers": rows,
+        "source": rv.SOURCE,
+        "note": (
+            "Grouped on river name AND basin. Indian river names repeat across "
+            "the country, and name-only grouping merged unrelated rivers - one "
+            "'Ghataprabha' spanned 13 basins from Kerala to Kashmir."
+        ),
+    }
+
+
+@app.get("/api/rivers/states", tags=["rivers"])
+def river_states() -> dict:
+    """Every state with at least one indexed river."""
+    return {"states": _rivers().states()}
+
+
+@app.get("/api/rivers/{river_id}", tags=["rivers"])
+def river_detail(river_id: str) -> dict:
+    """One river and every point we can start a blockage from."""
+    r = _rivers().get(river_id)
+    if r is None:
+        raise HTTPException(404, f"unknown river_id {river_id!r}")
+    return r
 
 
 @app.get("/api/dams/states", tags=["dams"])
