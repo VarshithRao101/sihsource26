@@ -112,10 +112,21 @@ Give each its own subsection and do not let them blur.
 discretisation error, which is why the default moved. Area converges more slowly and in a gorge not
 at all. `docs/CONVERGENCE.md`.
 
-**8.3 Validation — weak, and published anyway.** CSI 0.0075 in the gorge, 0.0268 on the
-floodplain with bias 7.31. Explain the scenario mismatch: full-reservoir worst case at 24 h maximum
+**8.3 Validation — weak, and published anyway.** CSI 0.0075 in the gorge, **0.0314** on the
+floodplain with bias **7.22** (60 m, no-data excluded — reconcile against the two superseded figures
+using `docs/VALIDATION.md` §2.2, and use only the headline). Explain the scenario mismatch: full-reservoir worst case at 24 h maximum
 extent against one satellite pass days later. **State that no strong observational validation
 exists and none is claimed.**
+
+**8.3a Breach severity inversion — a negative result worth a page.** `docs/SEVERITY_INVERSION.md`.
+Four severities (100/75/50/25% release), everything else identical. Bias falls monotonically
+7.22 → 1.01, so the over-prediction is the full-reservoir assumption and not the hydraulics — a
+clean sensitivity result. But the severity that matches the area overlaps the observation on **2%**
+of its cells, and the observed mask is **732 disconnected components** where a flood would be one
+corridor (the simulation puts 99.9% of its water in a single component). Write it as what it is:
+inverse estimation that came back *unidentifiable*, and evidence that this Sentinel-1 composite is
+not usable as a flood-extent reference. **It is not an accuracy figure and no cell of that table may
+be quoted as one.**
 
 **8.4 Cross-checks that are not validation.** SFINCS at CSI 0.9653, SPH within 5 % of the weir
 equation, the surrogate at CSI 0.909 against our own solver. Label each as what it is.

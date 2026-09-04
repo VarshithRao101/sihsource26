@@ -69,17 +69,35 @@ we did.
 
 | | Chungthang gorge | Annamayya floodplain |
 |---|---|---|
-| Wet area simulated | 10.4 km² | **100.6 km²** |
-| CSI | 0.0075 | **0.0268** |
-| POD | 0.013 | **0.217** |
-| FAR | 0.982 | 0.970 |
-| bias | 0.70 | **7.31** |
+| Wet area simulated | 10.4 km² | **71.6 km²** |
+| CSI | 0.0075 | **0.0314** |
+| POD | 0.013 | **0.250** |
+| FAR | 0.982 | 0.965 |
+| bias | 0.70 | **7.22** |
 
-**What improved and why it matters.** POD rose **seventeenfold** — we now detect 22% of observed
+**Which Annamayya number is the headline, and why there are three.** This event has been scored
+three times and all three figures are in this repository. Quote the last one.
+
+| | run | grid | no-data cells | CSI | POD | FAR | bias |
+|---|---|---|---|---|---|---|---|
+| A | `_001` | 90 m | counted as **dry** | 0.0268 | 0.2173 | 0.9703 | 7.3121 |
+| B | `_002` | 60 m | counted as **dry** | 0.0293 | 0.2325 | 0.9675 | 7.1615 |
+| **C — headline** | `_002` | **60 m** | **excluded** | **0.0314** | **0.250** | **0.965** | **7.22** |
+
+A is superseded by the resolution change: 90 m is no longer the default. B is superseded by the
+no-data fix. `modules/06`'s `agreement()` compares two boolean masks, so a cell the satellite never
+imaged counts as "observed dry" and lands in correct negatives or false alarms — inventing an
+observation where there is none. C excludes them: 246,181 cells scored, **1,959 excluded**, 99.2% of
+the domain imaged. Reproduce C with `python integration/annamayya_severity.py`.
+
+The three differ by less than a third of a CSI point and none of them is good. The reconciliation
+matters for consistency, not because any version rescues the result.
+
+**What improved and why it matters.** POD rose **nineteenfold** — we now detect 25% of observed
 water instead of 1%. That confirms the gorge result was a *resolution* problem, not a model problem.
 It is a real diagnostic finding.
 
-**What is still wrong, stated plainly.** Bias 7.31 means **12,416 simulated wet cells against 1,698
+**What is still wrong, stated plainly.** Bias 7.22 means **19,866 simulated wet cells against 2,752
 observed**. We are over-predicting extent by a large factor. The dominant reason is a scenario
 mismatch we cannot remove:
 
@@ -99,6 +117,10 @@ holding this one back. It was not:
 | POD | 0.2173 | **0.2325** | +7.0% |
 | FAR | 0.9703 | 0.9675 | -0.3% |
 | bias | 7.31 | **7.16** | -2.1% |
+
+Both rows count no-data as dry, so this is a like-for-like resolution comparison — rows A and B of
+the reconciliation table above. The headline excludes no-data and is not directly comparable to
+either.
 
 Every metric improved, and by very little. **That is the useful result**: on a floodplain,
 resolution is not what limits agreement. The residual is the scenario mismatch below, and no mesh
@@ -230,7 +252,7 @@ Mirrors `AGENTS.md` Part 4.
 | **Grid dependence, extent** | Area still moves **+5.7%** from 60 m to 45 m on one of two sites. Every area figure carries several percent of grid dependence | `docs/CONVERGENCE.md` |
 | Bathymetry | none — bed is estimated | `meta.json` → `dem.bathymetry` |
 | SAR validation, gorge | CSI 0.0075 | `validation.json` |
-| SAR validation, floodplain | CSI 0.0268, bias 7.31 | `validation.json` |
+| SAR validation, floodplain | CSI 0.0314, bias 7.22 (no-data excluded) | `validation.json`, `docs/SEVERITY_INVERSION.md` |
 | Populations, unmapped sites | 4 of 22 stay class defaults at Teesta | `impact.json` → `population_source` |
 | WorldPop coverage | only 13.8% of the Teesta tile has data | measured from the clipped raster |
 | SPH | near-field only, first ~60 s | `sph_meta.json` |
@@ -250,8 +272,9 @@ In order of value, and honest about what each requires from outside the project:
    than a raw backscatter threshold. Removes the SAR classifier as a source of error and would let us
    report a defensible CSI. *Needs: a matching EMS activation.*
 2. **A documented dam-break event with known breach parameters** — validating a worst-case scenario
-   against an event of unknown severity is what bias 7.31 is measuring. *Needs: a post-event
-   engineering report.*
+   against an event of unknown severity is what bias 7.22 is measuring — and the severity sweep in
+   `docs/SEVERITY_INVERSION.md` shows we cannot recover that severity from the satellite either.
+   *Needs: a post-event engineering report.*
 3. **An observed inflow series** from India-WRIS or CWC. Unblocks the LSTM and lets us validate the
    rainfall-runoff nowcast. *Needs: a data download.*
 4. **A hydraulics engineer's review of Hirakud.** *Needs: ten minutes of an expert's time.*

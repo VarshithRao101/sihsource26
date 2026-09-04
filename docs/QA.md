@@ -41,16 +41,16 @@ median terrain slope is 30° and the flood corridor is one to three cells wide a
 physically cannot resolve it. The sensitivity sweep is published in the run's `validation.json`.
 
 So we did the correct thing rather than the flattering one and re-validated on a **low-gradient
-reach**: the real Annamayya earthfill failure of 19 November 2021 in Andhra Pradesh, 100 km² wet
+reach**: the real Annamayya earthfill failure of 19 November 2021 in Andhra Pradesh, 72 km² wet
 against the gorge's 10 km².
 
 | | CSI | POD | bias |
 |---|---|---|---|
 | Teesta gorge | 0.0075 | 0.013 | 0.70 |
-| Annamayya floodplain | 0.0268 | **0.217** | **7.31** |
+| Annamayya floodplain | 0.0314 | **0.250** | **7.22** |
 
-Detection improved **seventeenfold**, which confirms the gorge failure was a resolution problem. It
-does **not** rescue the validation: bias 7.31 means 12,416 simulated wet cells against 1,698
+Detection improved **nineteenfold**, which confirms the gorge failure was a resolution problem. It
+does **not** rescue the validation: bias 7.22 means 19,866 simulated wet cells against 2,752
 observed. We are comparing a full-reservoir worst case at maximum extent over 24 hours against one
 satellite pass days after the event, with the real breach severity unknown.
 

@@ -140,13 +140,25 @@ dependence. In a gorge it does not converge at all.
 | | CSI | POD | bias |
 |---|---|---|---|
 | Teesta gorge | 0.0075 | 0.013 | 0.70 |
-| Annamayya floodplain | 0.0268 | **0.217** | **7.31** |
+| Annamayya floodplain | 0.0314 | **0.250** | **7.22** |
+
+*60 m grid, no-data cells excluded rather than counted as dry. Two earlier figures for this event
+exist (0.0268 at 90 m, 0.0293 unmasked) — `docs/VALIDATION.md` §2.2 reconciles all three. **Put only
+this row on the slide.***
 
 **We have no strong observational validation and we claim none.** Detection improved
-seventeenfold on the low-gradient reach, which diagnoses the gorge as a *resolution* problem —
+nineteenfold on the low-gradient reach, which diagnoses the gorge as a *resolution* problem —
 independently confirmed by the convergence study, which never touches satellite data.
 
 *Source: `docs/VALIDATION.md`.*
+
+**If a judge pushes on the bias**, this is the answer and it is a strong one: we swept the breach
+severity 100/75/50/25% and bias falls monotonically to **1.01** — the over-prediction is the
+worst-case assumption we adopt when breach parameters are unpublished, not the hydraulics. But the
+severity that matches the area overlaps on only **2%** of cells, and the observed mask is **732
+disconnected fragments** where a flood is one corridor. So the satellite composite itself is the
+limiting factor. *Source: `docs/SEVERITY_INVERSION.md`.* Do not put this on the slide — it is the
+answer to a question, not a bullet.
 
 > Say this before they ask. Being first to your own weakest number is worth more than the number
 > costs.
