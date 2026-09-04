@@ -93,7 +93,7 @@ Check any of them:
 Rehearse until it is boring. Eight minutes.
 
 **0:00 — Open on the Workflow page, not the console.**
-<http://localhost:8000/workflow>. Seventeen boxes, arrows between them, every one a real stage in
+<http://localhost:8000/workflow>. Twenty boxes, arrows between them, every one a real stage in
 this repository. Take fifteen seconds to say what the shape is — dam register, trace the river,
 condition the terrain, find who lives downstream, size the breach, solve the water, write the
 grids, cost the damage, plan the evacuation, publish the uncertainty, validate. Then point at the

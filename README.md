@@ -25,7 +25,7 @@ Read **`AGENTS.md`** before changing anything. If you are on the team, read your
 ## The Workflow page
 
 This is the one to open in front of somebody who has not seen the project. It draws all
-seventeen processing stages — dam register, river trace, DEM conditioning, exposure, breach,
+twenty processing stages — dam register, river trace, DEM conditioning, exposure, breach,
 SPH, the 2D solver, the contract writer, damage, evacuation, uncertainty, the validator — with
 the data flow between them, and it is generated from `modules/04_backend/pipeline.py` rather
 than drawn by hand, so the picture cannot drift from the code.
