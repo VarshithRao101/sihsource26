@@ -501,10 +501,15 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # The Vite dev server. Tightened before anything is deployed anywhere.
     # The Vite dev server by default. If the pages are hosted somewhere else -
     # Vercel, Netlify - set SIH_CORS_ORIGINS to a comma-separated list of those
     # origins, or the browser will refuse every call the page makes.
+    #
+    # "*" is accepted and works: allow_credentials is deliberately NOT set, and
+    # a wildcard origin is only rejected by browsers when credentials are
+    # allowed. start_live_demo.bat relies on that - it serves the pages from
+    # this backend through a tunnel whose hostname changes every run, so there
+    # is no fixed origin to list.
     allow_origins=[
         o.strip()
         for o in os.environ.get(
