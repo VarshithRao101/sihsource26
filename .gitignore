@@ -72,7 +72,11 @@ dist/
 # secrets - never commit
 .env
 .env.*
-!.env.example          # the template is the one env file that IS committed
+# The template is the one env file that IS committed. NOTE: this comment is
+# on its own line deliberately - gitignore has no trailing comments, so
+# "!.env.example  # ..." is one long pattern that matches nothing, and the
+# template silently never shipped. README tells people to copy it.
+!.env.example
 secrets/
 *.pem
 *credentials*.json
