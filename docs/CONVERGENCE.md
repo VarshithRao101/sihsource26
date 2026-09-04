@@ -150,18 +150,6 @@ are separate error sources, larger than this one, and no amount of refinement to
 What it does buy is a bounded, measured statement about **one** error source, where previously
 there was none.
 
-## The open decision
-
-The API default is still `cellsize_m = 90.0`. On this evidence **60 m is the better default** —
-it is inside the converged range for depth and the windowed sweep makes it affordable in a way it
-was not before.
-
-It has deliberately **not** been changed, because `AGENTS.md` records cell size as one of the
-values the project validates against: every published run, every number in `VALIDATION.md` and the
-SFINCS cross-check at CSI 0.9607 were all produced at 90 m. Changing the default silently would
-leave the documentation describing runs nobody can reproduce. That is the captain's call, and it
-needs a re-run of the published figures behind it.
-
 ## Caveats on the timings
 
 `grid_convergence.py` reports wall time, and that figure includes the terrain fetch and
