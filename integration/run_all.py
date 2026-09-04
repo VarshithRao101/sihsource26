@@ -515,22 +515,25 @@ def check_sfincs_engine():
 
 
 def check_delft3d_case():
-    """The Delft3D case writer obeys the conventions read off Deltares' example.
+    """The Delft3D case writer obeys the conventions the kernel actually enforces.
 
-    This is NOT evidence that Delft3D accepts the case - no kernel exists here
-    and case.py has never been run against one. It guards the four conventions
-    that are silent when wrong, each checked against the f34 example in
-    Deltares' own repository:
+    These are no longer read off an example and hoped for. On 2026-09-04 the
+    kernel was built and case.py was run against it until a case solved and read
+    back, and each rule below is one the kernel rejected in some way first:
 
-      * MNKmax is the grid dimensions PLUS ONE (f34.grd says 14 21, f34.mdf
-        says MNKmax = 15 22 5)
-      * the .dep file is sized to MNKmax, not to the grid (f34.dep holds
-        15 x 22 = 330 values)
-      * bed level is POSITIVE DOWN, so it is the negative of our elevation
+      * MNKmax is the CELL count PLUS TWO. Delft3D treats both the first and the
+        last index as dummy, and the .grd holds CORNERS - nx by ny cells need
+        nx+1 by ny+1 points. Writing cells as points silently lost the last row
+        of bed.
+      * the .dep is sized to MNKmax with the data offset one cell in each axis
+      * bed level is POSITIVE DOWN, the negative of our elevation
       * time is in MINUTES, because Tunit is #M#
 
     A regression in any of these produces a run that completes and is wrong,
-    which is the failure this project can least afford.
+    which is the failure this project can least afford. The bed-orientation
+    check inside read_map is the backstop: it compares the bed Delft3D echoes
+    against our own DEM and refuses the result if they disagree by more than a
+    centimetre.
     """
     import tempfile
 
@@ -551,17 +554,19 @@ def check_delft3d_case():
         )
         d = Path(tmp)
 
-        assert (c.mmax, c.nmax) == (nx + 1, ny + 1), (
-            f"MNKmax must be the grid plus one: got {(c.mmax, c.nmax)}, "
-            f"expected {(nx + 1, ny + 1)}"
+        assert (c.mmax, c.nmax) == (nx + 2, ny + 2), (
+            f"MNKmax must be the CELL count plus two - Delft3D treats both the "
+            f"first and the last index as dummy: got {(c.mmax, c.nmax)}, "
+            f"expected {(nx + 2, ny + 2)}"
         )
 
         grd = (d / "sih.grd").read_text(encoding="ascii").splitlines()
-        assert grd[4].split() == [str(nx), str(ny)], (
-            f"grd header must be the grid itself, not MNKmax: {grd[4]!r}"
+        assert grd[4].split() == [str(nx + 1), str(ny + 1)], (
+            f"grd holds CORNERS, so nx by ny cells need nx+1 by ny+1 points: "
+            f"{grd[4]!r}"
         )
         eta = sum(1 for line in grd if line.strip().startswith("ETA="))
-        assert eta == 2 * ny, f"grd needs an x and a y block: {eta} ETA rows"
+        assert eta == 2 * (ny + 1), f"grd needs an x and a y block: {eta} ETA rows"
 
         dep = (d / "sih.dep").read_text(encoding="ascii").split()
         assert len(dep) == c.mmax * c.nmax, (
@@ -574,10 +579,20 @@ def check_delft3d_case():
         )
 
         mdf = (d / "sih.mdf").read_text(encoding="ascii")
-        assert f"MNKmax = {c.mmax} {c.nmax} 1" in mdf, "mdf MNKmax disagrees"
-        assert "Tunit  = #M#" in mdf, "Tunit must be minutes"
+        # The keyword field is six characters wide with "=" at column 7 - the
+        # kernel reads it positionally and rejected anything else.
+        assert f"MNKmax= {c.mmax} {c.nmax} 1" in mdf, "mdf MNKmax disagrees"
+        assert "Tunit = #M#" in mdf, "Tunit must be minutes"
+        assert "Dpsopt= #DP#" in mdf, (
+            "bed must be taken AT THE CELL - #MAX# derives it from corners and "
+            "leaves a one-cell diagonal offset against our DEM"
+        )
+        assert "Ident" not in mdf, (
+            "Delft3D parses Ident for its own version stamp; free text there "
+            "fails the internal read before anything else is looked at"
+        )
         stop = float([ln for ln in mdf.splitlines()
-                      if ln.startswith("Tstop")][0].split("=")[1])
+                      if ln.startswith("Tstop")][0].split("=", 1)[1])
         assert abs(stop - 120.0) < 1e-6, (
             f"Tstop must be MINUTES: 2 h should be 120, got {stop}"
         )
@@ -590,8 +605,8 @@ def check_delft3d_case():
             assert (d / name).is_file(), f"case is missing {name}"
 
     return (
-        f"case writes MNKmax {c.mmax}x{c.nmax} from a {nx}x{ny} grid, "
-        f"dep positive-down, Tstop in minutes - UNVERIFIED against a kernel"
+        f"case writes MNKmax {c.mmax}x{c.nmax} from {nx}x{ny} cells, "
+        f"dep positive-down, Tstop in minutes"
     )
 
 

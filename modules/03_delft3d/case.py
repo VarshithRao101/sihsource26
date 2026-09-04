@@ -1,19 +1,20 @@
 """
 modules/03_delft3d/case.py - turn one of our scenarios into a Delft3D-FLOW case.
 
-    UNVERIFIED. THIS HAS NEVER BEEN RUN AGAINST A KERNEL.
+    VERIFIED AGAINST A REAL KERNEL on 2026-09-04, and the limits of that are
+    written down below because they matter.
 
-    There is no Delft3D kernel on this machine - engine.py reports it absent -
-    so every line below is written from the file formats and never executed.
-    AGENTS.md Part 1 does not allow us to call this working, and nothing in the
-    repository presents it as such: compare_engines.py still reports Delft3D
-    absent, and the workflow node still never turns green. What this file buys
-    is that the day a kernel exists, the case is one command away instead of a
-    day away.
+    WHAT WAS VERIFIED. Delft3D 4 was compiled from source on this machine
+    (d_hydro.exe + flow2d3d.dll, GPLv3, no licence), Deltares' own f34 example
+    was run first as a control and succeeded, and then a case written by THIS
+    module was run: it solved to completion - "0 errors", d_hydro shutting down
+    normally - and read_map pulled the result back onto our north-up grid with
+    the bed Delft3D echoed matching our own DEM to within a centimetre.
 
-    The formats below are NOT from memory. They were read off Deltares' own
-    f34 example (examples/delft3d4/11_standard_netcdf in github.com/Deltares/
-    Delft3D), and the places where memory would have been wrong are marked.
+    WHAT WAS NOT. That was a small synthetic channel, not one of our real
+    scenarios, and the result has NOT yet been compared against our own solver
+    on a real dam break. Until it has, this proves the case format is right and
+    nothing about whether the two engines agree.
 
 Delft3D-FLOW reads a keyword file plus a handful of attribute files:
 
@@ -43,6 +44,14 @@ FOUR CONVENTIONS THAT ARE SILENT WHEN WRONG. Each was checked against f34.
      and every table's time column are MINUTES since Itdate. Passing seconds
      gives a run 60x too long, which is the same failure mode SFINCS had with
      its datetime tstart.
+
+  5. EVERY Fil* KEY NEEDS ITS Fmt* PARTNER. Delft3D does not infer the format
+     of an attribute file: f34 pairs Filcco with Fmtcco= #FR#, Fildep with
+     Fmtdep= #FR#, and so on for every file it names. Omitting them was the
+     first thing that actually broke - the kernel aborted in "Initialisation
+     Time Dep. Data" with forrtl severe (64), an internal formatted read
+     failure, before reading a single cell. Found by running Deltares' own f34
+     example as a control, which succeeded, and diffing its MDF against ours.
 
   4. GRIDS ARE WRITTEN BOTTOM-UP. RGFGRID's N index increases northward and our
      rasters are north-up, so every array is flipped on the way out and flipped
@@ -114,11 +123,13 @@ class Delft3DCase:
             "boundary_edge": self.boundary_edge,
             "boundary_level_m": round(self.boundary_level_m, 3),
             "dryflc_m": DRYFLC_M,
-            "verified": False,
+            "verified": True,
             "note": (
-                "Written from the Deltares f34 example formats and NEVER RUN - "
-                "no Delft3D kernel exists on the machine that produced this. "
-                "Not evidence of a Delft3D result."
+                "The case format is verified: a case written by this module "
+                "solved on a locally built Delft3D 4 kernel and read back with "
+                "the bed matching our DEM to within a centimetre. That was a "
+                "synthetic channel; these two engines have NOT yet been "
+                "compared on a real scenario."
             ),
         }
 
@@ -128,9 +139,32 @@ class Delft3DCase:
 # --------------------------------------------------------------------------
 
 
+def _e3(v: float) -> str:
+    """A number with a THREE-DIGIT exponent, for the .dis and .bct data rows.
+
+    Same trap as the MDF and a separate code path, which is why it bit twice:
+    Fortran writes 8.0000000e+002, Python writes 8.0000000e+02, and Delft3D
+    crashes on the short form with a stack buffer overrun (0xC0000409) rather
+    than a readable error. Verified by bisection against f34's own tables.
+    """
+    mant, exp = f"{v:.7e}".split("e")
+    return f"{mant}e{exp[0]}{int(exp[1:]):03d}"
+
+
 def _fmt_e(v: float) -> str:
-    """The 7-decimal exponential the MDF uses: 5.0000000e-002."""
-    return f"{v: .7e}"
+    """The MDF's numeric field, byte-for-byte as f34 writes it.
+
+    THREE-DIGIT EXPONENT, RIGHT-JUSTIFIED TO 16. Fortran's E editing writes
+    "5.5000000e+001"; Python's %e writes "5.5000000e+01". With the keyword
+    field fixed at six characters the value that follows is read positionally
+    too, so a two-digit exponent leaves the number one character short and the
+    read fails or silently takes the wrong digits. f34 lines up exactly at 16:
+
+        Ag    =  9.8130000e+000
+        Dco   = -9.9999900e+002
+    """
+    mant, exp = f"{v:.7e}".split("e")
+    return f"{mant}e{exp[0]}{int(exp[1:]):03d}".rjust(16)
 
 
 def _write_grd(path: Path, nx: int, ny: int, dx_m: float) -> None:
@@ -193,7 +227,13 @@ def _write_dep(path: Path, dem: np.ndarray, mmax: int, nmax: int) -> None:
 
     flipped = np.flipud(dem)                       # north-up -> Delft3D bottom-up
     depth = np.where(np.isfinite(flipped), -flipped, DEP_DUMMY)
-    grid[:ny, :nx] = depth
+    # OFFSET BY ONE IN BOTH AXES. Delft3D's first row and column are the dummy
+    # edge of the enclosure, not cells. Writing our data from index 0 puts every
+    # value one cell off in m and n - the run completes and the terrain is
+    # shifted diagonally under the flood. Caught by read_map's bed check, which
+    # compared Delft3D's echoed bed against our DEM and found 116 m of
+    # disagreement.
+    grid[1:ny + 1, 1:nx + 1] = depth
 
     out = []
     for n in range(nmax):
@@ -230,7 +270,8 @@ def _table(name: str, location: str, param: str, unit: str,
         f"parameter            '{param:<20}'                     unit '{unit}'",
         f"records-in-table     {len(times_min)}",
     ]
-    body = [f"{t:.7e} {v:.7e}" for t, v in zip(times_min, values)]
+    body = ["".join(_fmt_e(x) for x in (t, v))
+            for t, v in zip(times_min, values)]
     return "\n".join(head + body) + "\n"
 
 
@@ -256,16 +297,24 @@ def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
     harmonic, which needs a .bch; T takes a time series from a .bct, which is
     what a constant outflow level is easiest to express as.
     """
+    # A BOUNDARY SECTION MUST NOT INCLUDE THE ENCLOSURE'S CORNER POINTS.
+    # Spanning the full edge (1 .. mmax) crashes the kernel outright with
+    # 0xC0000409, a stack buffer overrun, and no diagnostic at all. f34 keeps
+    # clear of them the same way: its boundary runs m = 2 .. 14 on a grid whose
+    # mmax is 15. So every span starts at 2 and stops one short of the far edge.
     spans = {
-        "south": (1, 1, mmax, 1),
-        "north": (1, nmax, mmax, nmax),
-        "west": (1, 1, 1, nmax),
-        "east": (mmax, 1, mmax, nmax),
+        "south": (2, 1, mmax - 1, 1),
+        "north": (2, nmax, mmax - 1, nmax),
+        "west": (1, 2, 1, nmax - 1),
+        "east": (mmax, 2, mmax, nmax - 1),
     }
     m1, n1, m2, n2 = spans[edge]
     name = "OUTFLOW"
     bnd.write_text(
-        f"{name:<20} Z T {m1:>5} {n1:>5} {m2:>5} {n2:>5}    0.0000000e+00\n",
+        # The alpha column takes the same three-digit exponent as the rest.
+        # This literal was the THIRD place the two-digit form hid: the MDF,
+        # the table data rows, and here.
+        f"{name:<20} Z T {m1:>5} {n1:>5} {m2:>5} {n2:>5}{_fmt_e(0.0)}\n",
         encoding="ascii", newline="\n",
     )
 
@@ -274,7 +323,9 @@ def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
     times_min = np.array([0.0, end_hr * 60.0])
     head = [
         "table-name           'Boundary Section : 1'",
-        "contents             'Uniform          '",
+        # 20 characters inside the quotes. Delft3D reads these name fields
+        # positionally; a short one shifts the columns after it.
+        "contents             'Uniform             '",
         f"location             '{name:<20}'",
         "time-function        'non-equidistant'",
         f"reference-time       {REFERENCE_TIME}",
@@ -285,7 +336,8 @@ def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
         "parameter            'water elevation (z)  end B'               unit '[m]'",
         f"records-in-table     {len(times_min)}",
     ]
-    body = [f"{t:.7e} {level_m:.7e} {level_m:.7e}" for t in times_min]
+    body = ["".join(_fmt_e(x) for x in (t, level_m, level_m))
+            for t in times_min]
     bct.write_text("\n".join(head + body) + "\n", encoding="ascii", newline="\n")
 
 
@@ -350,9 +402,18 @@ def write_case(
     case_dir.mkdir(parents=True, exist_ok=True)
 
     ny, nx = dem.shape
-    mmax, nmax = nx + 1, ny + 1          # convention 1 - see the module docstring
 
-    _write_grd(case_dir / f"{run_id}.grd", nx, ny, dx_m)
+    # CELLS VERSUS GRID POINTS. Our DEM is nx by ny CELLS. An RGFGRID .grd holds
+    # the CORNERS, so nx by ny cells need (nx+1) by (ny+1) points, and MNKmax is
+    # then two larger than the cell count - Delft3D treats BOTH the first and
+    # the last index as dummy, not just the first.
+    #
+    # Writing the cells as points instead cost a row: Delft3D returned zeros for
+    # the last row of bed, because there was nowhere for it to go. read_map's
+    # bed check is what surfaced it.
+    mmax, nmax = nx + 2, ny + 2
+
+    _write_grd(case_dir / f"{run_id}.grd", nx + 1, ny + 1, dx_m)
     _write_enc(case_dir / f"{run_id}.enc", mmax, nmax)
     _write_dep(case_dir / f"{run_id}.dep", dem, mmax, nmax)
 
@@ -380,68 +441,102 @@ def write_case(
                    mmax, nmax, edge, level, end_hr)
 
     stop_min = end_hr * 60.0
-    mdf = f"""Ident  = #Delft3D-FLOW written by SIH26161#
-Commnt =
-Runtxt = #SIH26161 dam break / river blockage#
-         #UNVERIFIED CASE - never run against a kernel#
-Filcco = #{run_id}.grd#
-Anglat =  0.0000000e+000
-Grdang =  0.0000000e+000
-Filgrd = #{run_id}.enc#
-MNKmax = {mmax} {nmax} 1
-Thick  =  1.0000000e+002
-Commnt =
-Fildep = #{run_id}.dep#
-Commnt =
-Itdate = #{ITDATE}#
-Tunit  = #M#
-Tstart = {_fmt_e(0.0)}
-Tstop  = {_fmt_e(stop_min)}
-Dt     = {dt_minutes}
-Tzone  = 0
-Commnt =
-Zeta0  = {_fmt_e(level)}
-Commnt =
-Filbnd = #{run_id}.bnd#
-FilbcT = #{run_id}.bct#
-Commnt =
-Ag     =  9.8130000e+000
-Rhow   =  1.0000000e+003
-Commnt =
-Roumet = #M#
-Ccofu  = {_fmt_e(manning)}
-Ccofv  = {_fmt_e(manning)}
-Xlo    =  0.0000000e+000
-Vicouv =  1.0000000e+000
-Dicouv =  1.0000000e+001
-Htur2d = #N#
-Irov   = 0
-Commnt =
-Iter   =      2
-Dryflp = #YES#
-Dpsopt = #MAX#
-Dpuopt = #MIN#
-Dryflc = {_fmt_e(DRYFLC_M)}
-Dco    = -9.9999900e+002
-Tlfsmo = {_fmt_e(0.0)}
-Forfuv = #Y#
-Forfww = #N#
-Sigcor = #N#
-Trasol = #Cyclic-method#
-Momsol = #Cyclic#
-Commnt =
-Filsrc = #{run_id}.src#
-Fildis = #{run_id}.dis#
-Commnt =
-Flmap  = {_fmt_e(0.0)} {map_interval_min:g} {_fmt_e(stop_min)}
-Flhis  = {_fmt_e(0.0)} {map_interval_min:g} {_fmt_e(stop_min)}
-Flpp   = {_fmt_e(0.0)} 0 {_fmt_e(0.0)}
-Flrst  = 0
-Commnt =
-Online = #N#
-FlNcdf = #map his#
-Commnt =
-"""
+
+    # THE KEYWORD FIELD IS SIX CHARACTERS WIDE AND "=" SITS AT COLUMN 7.
+    # f34 writes "Filcco= #f34.grd#", not "Filcco = #f34.grd#". Delft3D reads
+    # the key as a fixed-width field, so one extra space shifts every value one
+    # character right and the numeric parse lands on the wrong characters. That
+    # is exactly what forrtl severe (64) "internal formatted read" was - not a
+    # bad value anywhere, every value one column out. Never hand-align these.
+    def kv(key, value):
+        return f"{key:<6}={value}"
+
+    L = [
+        # NO Ident LINE, DELIBERATELY. Delft3D parses that field for its own
+        # version stamp - f34 carries "#Delft3D-FLOW  .03.02 3.41.06.10981#"
+        # - and free text there fails the internal read with forrtl severe
+        # (64) before anything else is looked at. Omitting it is accepted,
+        # and is preferable to writing a version string we did not verify.
+        kv("Commnt", " " * 30),
+        kv("Runtxt", " #SIH26161 dam break / river blockage#"),
+        kv("Filcco", f" #{run_id}.grd#"), kv("Fmtcco", " #FR#"),
+        kv("Anglat", _fmt_e(0.0)), kv("Grdang", _fmt_e(0.0)),
+        kv("Filgrd", f" #{run_id}.enc#"), kv("Fmtgrd", " #FR#"),
+        kv("MNKmax", f" {mmax} {nmax} 1"),
+        kv("Thick", _fmt_e(100.0)),
+        kv("Commnt", " " * 30),
+        kv("Fildep", f" #{run_id}.dep#"), kv("Fmtdep", " #FR#"),
+        kv("Commnt", " " * 30),
+        kv("Itdate", f" #{ITDATE}#"), kv("Tunit", " #M#"),
+        kv("Tstart", _fmt_e(0.0)), kv("Tstop", _fmt_e(stop_min)),
+        kv("Dt", f" {dt_minutes:g}"), kv("Tzone", " 0"),
+        kv("Commnt", " " * 30),
+        kv("Sub1", " #    #"), kv("Sub2", " #   #"),
+        kv("Commnt", " " * 30),
+        kv("Wnsvwp", " #N#"), kv("Wndint", " #Y#"),
+        kv("Commnt", " " * 30),
+        kv("Zeta0", _fmt_e(level)),
+        kv("U0", " [.]"), kv("V0", " [.]"), kv("S0", " [.]"),
+        kv("Commnt", " " * 30),
+        kv("Filbnd", f" #{run_id}.bnd#"), kv("Fmtbnd", " #FR#"),
+        kv("FilbcT", f" #{run_id}.bct#"), kv("FmtbcT", " #FR#"),
+        kv("Commnt", " " * 30),
+        kv("Ag", _fmt_e(9.813)), kv("Rhow", _fmt_e(1000.0)),
+        kv("Alph0", " [.]"),
+        kv("Tempw", _fmt_e(0.0)), kv("Salw", _fmt_e(0.0)),
+        kv("Rouwav", " #    #"),
+        kv("Wstres", f"{_fmt_e(2.5e-3)}{_fmt_e(0.0)}{_fmt_e(2.5e-3)}{_fmt_e(100.0)}"),
+        kv("Rhoa", _fmt_e(1.0)), kv("Betac", _fmt_e(0.5)),
+        kv("Equili", " #N#"), kv("Tkemod", " #Algebraic   #"),
+        kv("Ktemp", " 0"), kv("Fclou", _fmt_e(0.0)),
+        kv("Sarea", _fmt_e(0.0)), kv("Temint", " #Y#"),
+        kv("Commnt", " " * 30),
+        # Roumet #M# makes Ccofu/Ccofv Manning n rather than f34's
+        # White-Colebrook coefficients.
+        kv("Roumet", " #M#"),
+        kv("Ccofu", _fmt_e(manning)), kv("Ccofv", _fmt_e(manning)),
+        kv("Xlo", _fmt_e(0.0)),
+        kv("Vicouv", _fmt_e(1.0)), kv("Dicouv", _fmt_e(10.0)),
+        kv("Htur2d", " #N#"),
+        kv("Vicoww", _fmt_e(1e-6)), kv("Dicoww", _fmt_e(1e-6)),
+        kv("Irov", " 0"),
+        kv("Commnt", " " * 30),
+        kv("Iter", "      2"), kv("Dryflp", " #YES#"),
+        # Dpsopt #DP# takes the bed AT THE CELL, as written. f34 uses #MAX#,
+        # which derives each cell from its four corner depths - fine when the
+        # .dep really holds corners, wrong for us because our DEM is
+        # cell-centred, and it left a residual one-cell diagonal error of
+        # exactly one row step plus one column step.
+        kv("Dpsopt", " #DP#"), kv("Dpuopt", " #MIN#"),
+        kv("Dryflc", _fmt_e(DRYFLC_M)), kv("Dco", _fmt_e(-999.999)),
+        kv("Tlfsmo", _fmt_e(0.0)), kv("ThetQH", _fmt_e(0.0)),
+        kv("Forfuv", " #Y#"), kv("Forfww", " #N#"), kv("Sigcor", " #N#"),
+        kv("Trasol", " #Cyclic-method#"), kv("Momsol", " #Cyclic#"),
+        kv("Commnt", " " * 30),
+        kv("Filsrc", f" #{run_id}.src#"), kv("Fmtsrc", " #FR#"),
+        kv("Fildis", f" #{run_id}.dis#"), kv("Fmtdis", " #FR#"),
+        kv("Commnt", " " * 30),
+        kv("SMhydr", " #YYYYY#"), kv("SMderv", " #YYYYYY#"),
+        kv("SMproc", " #YYYYYYYYYY#"),
+        kv("PMhydr", " #YYYYYY#"), kv("PMderv", " #YYY#"),
+        kv("PMproc", " #YYYYYYYYYY#"),
+        kv("SHhydr", " #YYYY#"), kv("SHderv", " #YYYYY#"),
+        kv("SHproc", " #YYYYYYYYYY#"), kv("SHflux", " #YYYY#"),
+        kv("PHhydr", " #YYYYYY#"), kv("PHderv", " #YYY#"),
+        kv("PHproc", " #YYYYYYYYYY#"), kv("PHflux", " #YYYY#"),
+        kv("Online", " #N#"), kv("Waqmod", " #N#"),
+        kv("Flmap", f"{_fmt_e(0.0)} {map_interval_min:g} {_fmt_e(stop_min)}"),
+        kv("Flhis", f"{_fmt_e(0.0)} {map_interval_min:g} {_fmt_e(stop_min)}"),
+        kv("Flpp", f"{_fmt_e(0.0)} 0 {_fmt_e(0.0)}"),
+        kv("Flrst", " 0"),
+        kv("Commnt", " " * 30),
+        kv("Addtim", " #Y#"),
+        # Without this Delft3D writes NEFIS trim-*.dat/.def, which needs a
+        # reader we do not have. read_map() looks for the netCDF first.
+        kv("FlNcdf", " #map his#"),
+        kv("Commnt", " " * 30),
+    ]
+    mdf = "\n".join(L) + "\n"
     (case_dir / f"{run_id}.mdf").write_text(mdf, encoding="ascii", newline="\n")
     _write_config(case_dir / "config_d_hydro.xml", f"{run_id}.mdf")
 
@@ -512,18 +607,28 @@ def read_map(case_dir: Path | str, run_id: str = "sih",
         raise FileNotFoundError(f"{nc} - Delft3D produced no netCDF map output")
 
     with xr.open_dataset(nc) as ds:
-        # S1 is water level, DPS the bed. Both are (time, n, m).
-        s1 = np.asarray(ds["S1"].values)
-        dps = np.asarray(ds["DPS"].values)
-        if dps.ndim == 3:
-            dps = dps[0]
+        # THE VARIABLE IS DPS0, NOT DPS, AND THE AXES ARE (M, N) NOT (N, M).
+        # trim-*.nc carries S1 as (time, M, N) and the bed as DPS0 (M, N) -
+        # Delft3D's own index order, which is the transpose of the (row, col)
+        # our rasters use. Reading it without transposing gives a flood rotated
+        # ninety degrees, which is the kind of wrong that still looks like a
+        # result.
+        s1 = np.asarray(ds["S1"].values)                  # (time, M, N)
+        dps = np.asarray(ds["DPS0"].values)               # (M, N)
 
-    bed = -np.flipud(dps).astype(np.float64)          # positive down -> elevation
-    levels = np.flipud(np.nanmax(s1, axis=0)).astype(np.float32)
+    # THE INVERSE OF _write_dep, IN THIS ORDER. Established by writing a .dep
+    # whose every cell held a unique value n*100+m and reading back where each
+    # one landed: DPS0[m, n] is exactly the value written at file (row n,
+    # col m). So transpose first, then CROP OFF THE DUMMY ROW AND COLUMN, and
+    # only then flip bottom-up to north-up. Flipping before cropping shifts the
+    # data by one row and nothing lines up - which is what the bed check caught.
+    ny, nx = (dem.shape if dem is not None else (dps.shape[1] - 1, dps.shape[0] - 1))
 
-    ny, nx = (dem.shape if dem is not None else bed.shape)
-    bed = bed[:ny, :nx]
-    levels = levels[:ny, :nx]
+    bed_grid = -dps.T                                   # [n, m], nmax x mmax
+    bed = np.flipud(bed_grid[1:ny + 1, 1:nx + 1]).astype(np.float64)
+
+    lev_grid = np.nanmax(s1, axis=0).T                  # [n, m]
+    levels = np.flipud(lev_grid[1:ny + 1, 1:nx + 1]).astype(np.float32)
 
     if dem is not None:
         valid = np.isfinite(dem) & np.isfinite(bed)
@@ -532,8 +637,9 @@ def read_map(case_dir: Path | str, run_id: str = "sih",
             if err > 0.01:
                 raise ValueError(
                     f"Delft3D bed differs from our DEM by up to {err:.3f} m - "
-                    "the grid is flipped, sheared or misaligned, so the flood "
-                    "would be too. Check MNKmax against the .grd dimensions."
+                    "the grid is flipped, transposed or misaligned, so the "
+                    "flood would be too. Check MNKmax against the .grd, and "
+                    "that DPS0 was transposed and cropped before flipping."
                 )
 
     depth = np.where(np.isfinite(levels) & np.isfinite(bed), levels - bed, 0.0)

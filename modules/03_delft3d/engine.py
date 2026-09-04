@@ -204,6 +204,19 @@ def _candidate_roots() -> list[Path]:
     """Where a Delft3D install could plausibly live on this machine."""
     roots: list[Path] = []
     env = os.environ.get("DELFT3D_HOME", "").strip()
+    if not env:
+        # Fall back to .env, which is where every other credential and path in
+        # this project lives. Parsed here with six lines of stdlib rather than
+        # importing shared.creds, because this module is also imported by the
+        # read-only build, which has nothing but the standard library.
+        try:
+            for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("DELFT3D_HOME") and "=" in line:
+                    env = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+        except OSError:
+            pass
     if env:
         roots.append(Path(env))
     # Beside the repo, which is where DualSPHysics_v5.4 was unpacked.
