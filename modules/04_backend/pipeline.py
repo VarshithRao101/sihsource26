@@ -486,10 +486,14 @@ NODES: list[dict[str, Any]] = [
         "engine": "sfincs",
         "does": (
             "Routes the same flood through an independent Deltares solver and "
-            "compares the extent cell by cell - CSI 0.9607 against our solver on "
-            "the Chungthang reach. SFINCS is reduced-physics and it is NOT "
-            "Delft3D; it is never presented as Delft3D. It is a cross-check "
-            "between two implementations, not a validation against reality."
+            "compares the extent cell by cell - CSI 0.9653 against our solver on "
+            "the Chungthang reach at the 60 m default, and 0.9607 at the old "
+            "90 m grid. The two engines agree slightly BETTER on the finer grid "
+            "and their maximum depths converge from 2.6 m apart to 1.2 m, which "
+            "is what should happen if both are approaching the same solution. "
+            "SFINCS is reduced-physics and it is NOT Delft3D; it is never "
+            "presented as Delft3D. It is a cross-check between two "
+            "implementations, not a validation against reality."
         ),
         "inputs": ["the same DEM and the same breach hydrograph"],
         "outputs": ["an independent extent; CSI against our solver"],
@@ -544,9 +548,9 @@ NODES: list[dict[str, Any]] = [
             "for the scenarios to be COMPARED, which makes the comparison itself "
             "an asked-for output. This puts our solver, the weir equation, "
             "DualSPHysics and four empirical regressions in one table, and "
-            "compares extents cell by cell against SFINCS (CSI 0.9607 on the "
-            "Chungthang reach). The Delft3D row is empty, and it stays empty "
-            "rather than being filled in from another engine."
+            "compares extents cell by cell against SFINCS (CSI 0.9653 on the "
+            "Chungthang reach at the 60 m default). The Delft3D row is empty, "
+            "and it stays empty rather than being filled in from another engine."
         ),
         "inputs": ["run folders from each engine, on the same domain"],
         "outputs": [
