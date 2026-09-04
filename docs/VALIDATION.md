@@ -110,6 +110,36 @@ Simulated flood area fell from 100.61 km2 to 71.59 km2 on refinement, consistent
 
 Reproduce with `python integration/validate_annamayya.py --run <run_id>`.
 
+**We tried three methodological fixes and NONE of them improved it.** Written down because a
+negative result that eliminates explanations is worth more than a number that was tuned into
+looking good. Reproduce with `python integration/validate_annamayya.py --run <run_id>`.
+
+The error is 96% false alarms - 19,221 against 645 hits - so detection was never the limit. Even
+with perfect detection the score could not exceed 0.126. That pointed at three suspects:
+
+| lever | idea | result |
+|---|---|---|
+| Closest pass only | compare against the 21 Nov scene (+2 d), not a median containing +9 d and +14 d passes | **IMPOSSIBLE.** That pass images **0.4%** of this domain. No single descending pass covers it, which is why the composite exists |
+| Detectability threshold | Sentinel-1 cannot see 5 cm of water, so compare at 0.25 / 0.5 / 1.0 m | **WORSE.** CSI falls 0.0314 to 0.0249 as the threshold rises |
+| Extent at the observation time | compare where water WAS at +48 h, from arrival_time and duration, not the maximum over the run | **WORSE on CSI**, 0.0314 to 0.0149 - but bias falls 7.24 to 2.62 |
+
+The best cell in the whole matrix remains the original method: **CSI 0.0314**, maximum extent,
+3-scene composite, 0.05 m.
+
+**The third row is the interesting one and it changes the diagnosis.** Comparing at the
+observation time cut the over-prediction by nearly three - so our extent is not simply too big -
+but POD collapsed from 0.251 to 0.053. Our simulated flood has drained by 48 h; the observed mask
+has water that persists across passes at +2, +9 and +14 days.
+
+**Water still standing 14 days later is not dam-break flood water.** The Annamayya failure
+happened during the November 2021 Andhra floods, when the whole landscape was wet. The change
+detection is very likely picking up monsoon inundation, saturated soil and irrigation rather than
+the dam's own flood, which would explain why nothing done to the SIMULATION improves the match.
+
+That makes this a limitation of the OBSERVATION, not only of the model, and it is the strongest
+argument yet for what section 6 already lists first: a curated Copernicus EMS rapid-mapping extent
+rather than a raw backscatter threshold.
+
 **Is this scientifically defensible?** As a *diagnosis*, yes: it isolates resolution as the gorge's
 problem and scenario severity as the floodplain's. As *evidence the model predicts real flood extent
 accurately*, **no** — and we do not present it that way.
