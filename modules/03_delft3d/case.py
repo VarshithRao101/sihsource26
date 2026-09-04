@@ -84,6 +84,11 @@ DRYFLC_M = 0.05
 # The dummy value f34.dep uses for cells outside the enclosure.
 DEP_DUMMY = -999.0
 
+BOUNDARY_BAND_M = 5.0
+"""How far above the outlet's lowest bed a cell may sit and still carry the
+water-level boundary, in metres. Wide enough to cover a valley floor, narrow
+enough to exclude the hillsides - which, held at the channel's level, diverge."""
+
 ITDATE = "2026-01-01"
 REFERENCE_TIME = "20260101"
 
@@ -243,6 +248,44 @@ def _write_dep(path: Path, dem: np.ndarray, mmax: int, nmax: int) -> None:
     path.write_text("\n".join(out) + "\n", encoding="ascii", newline="\n")
 
 
+def _write_ini(path: Path, dem: np.ndarray, mmax: int, nmax: int,
+               level_m: float) -> None:
+    """Initial water level per cell: DRY, i.e. the level sits at the bed.
+
+    A uniform Zeta0 cannot express this. Our domains carry hundreds of metres
+    of relief, so one number is either far below most of the bed - which
+    Delft3D rejects on the first step with "Water level change too high
+    > 25.00 m", listing cells whose bed is tens of metres above the level being
+    imposed - or high enough to flood the whole valley before the breach opens.
+
+    So the level is written per cell at the bed, which is what "dry" means, and
+    only the outlet cells start at the boundary level so the boundary has
+    something consistent to hold.
+
+    Three blocks in the same layout as the .dep: water level, then u, then v.
+    """
+    ny, nx = dem.shape
+    s_field = np.full((nmax, mmax), 0.0, dtype=np.float64)
+
+    flipped = np.flipud(dem)
+    bed = np.where(np.isfinite(flipped), flipped, 0.0)
+    # Dry: water surface at the bed. Never below it, or the first step has to
+    # travel the gap.
+    s_field[1:ny + 1, 1:nx + 1] = np.maximum(bed, level_m)
+
+    def block(arr):
+        out = []
+        for n in range(nmax):
+            row = arr[n]
+            for i in range(0, mmax, 12):
+                out.append("".join(f"{v:12.3f}" for v in row[i:i + 12]))
+        return out
+
+    zeros = np.zeros((nmax, mmax), dtype=np.float64)
+    lines = block(s_field) + block(zeros) + block(zeros)
+    path.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
+
+
 def _write_src(path: Path, m: int, n: int) -> None:
     """One discharge source at (m,n), layer 1.
 
@@ -288,7 +331,8 @@ def _write_dis(path: Path, m: int, n: int,
 
 
 def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
-                   edge: str, level_m: float, end_hr: float) -> None:
+                   edge: str, level_m: float, end_hr: float,
+                   lo: int, hi: int) -> None:
     """One water-level boundary along a whole domain edge, held constant.
 
     f34's .bnd line is:
@@ -302,11 +346,18 @@ def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
     # 0xC0000409, a stack buffer overrun, and no diagnostic at all. f34 keeps
     # clear of them the same way: its boundary runs m = 2 .. 14 on a grid whose
     # mmax is 15. So every span starts at 2 and stops one short of the far edge.
+    # ONLY THE CHANNEL CELLS, NOT THE WHOLE EDGE. A water-level boundary
+    # imposes an absolute level on every cell it covers. On real terrain an
+    # edge spans hundreds of metres of relief, so holding the whole thing at
+    # the outlet level tells most of it to sit far below its own ground and
+    # Delft3D diverges on the first step - "Flow exited abnormally", with the
+    # diagnosis file listing cells whose bed is 200 m above the level being
+    # forced on them. `lo` and `hi` are the run of edge cells at the outlet.
     spans = {
-        "south": (2, 1, mmax - 1, 1),
-        "north": (2, nmax, mmax - 1, nmax),
-        "west": (1, 2, 1, nmax - 1),
-        "east": (mmax, 2, mmax, nmax - 1),
+        "south": (lo + 1, 1, hi + 1, 1),
+        "north": (lo + 1, nmax, hi + 1, nmax),
+        "west": (1, lo + 1, 1, hi + 1),
+        "east": (mmax, lo + 1, mmax, hi + 1),
     }
     m1, n1, m2, n2 = spans[edge]
     name = "OUTFLOW"
@@ -424,21 +475,41 @@ def write_case(
     _write_src(case_dir / f"{run_id}.src", src_m, src_n)
     _write_dis(case_dir / f"{run_id}.dis", src_m, src_n, t_hr, q_cumecs)
 
-    # Outflow on whichever edge holds the lowest bed - the crude but defensible
-    # choice documented at the top of this file.
+    # Outflow on whichever edge holds the lowest bed, and ONLY across the cells
+    # that form the channel there. Taking the whole edge imposes the outlet's
+    # water level on ground hundreds of metres above it and Delft3D diverges on
+    # the first step. The channel is taken as the contiguous run of edge cells
+    # within BOUNDARY_BAND_M of the lowest, which on a conditioned DEM is the
+    # valley floor and not the hillsides either side of it.
     finite = np.where(np.isfinite(dem), dem, np.inf)
-    edges = {
-        "north": float(np.min(finite[0, :])),
-        "south": float(np.min(finite[-1, :])),
-        "west": float(np.min(finite[:, 0])),
-        "east": float(np.min(finite[:, -1])),
+    profiles = {
+        "north": finite[0, :],
+        "south": finite[-1, :],
+        "west": finite[:, 0],
+        "east": finite[:, -1],
     }
-    edge = min(edges, key=edges.get)
-    level = edges[edge]
+    edge = min(profiles, key=lambda k: float(np.min(profiles[k])))
+    prof = np.asarray(profiles[edge], dtype=float)
+    level = float(np.min(prof))
     if not np.isfinite(level):
         level = float(np.nanmin(dem))
+
+    # Walk out from the lowest cell while the bed stays within the band.
+    k = int(np.argmin(prof))
+    lo = hi = k
+    while lo - 1 >= 0 and prof[lo - 1] <= level + BOUNDARY_BAND_M:
+        lo -= 1
+    while hi + 1 < prof.size and prof[hi + 1] <= level + BOUNDARY_BAND_M:
+        hi += 1
+    # Keep clear of the enclosure corners, as the spans below also require.
+    lo = max(lo, 1)
+    hi = min(hi, int(prof.size) - 2)
+    if hi < lo:
+        lo = hi = max(1, min(k, int(prof.size) - 2))
+
+    _write_ini(case_dir / f"{run_id}.ini", dem, mmax, nmax, level)
     _write_bnd_bct(case_dir / f"{run_id}.bnd", case_dir / f"{run_id}.bct",
-                   mmax, nmax, edge, level, end_hr)
+                   mmax, nmax, edge, level, end_hr, lo, hi)
 
     stop_min = end_hr * 60.0
 
@@ -475,7 +546,11 @@ def write_case(
         kv("Commnt", " " * 30),
         kv("Wnsvwp", " #N#"), kv("Wndint", " #Y#"),
         kv("Commnt", " " * 30),
-        kv("Zeta0", _fmt_e(level)),
+        # Zeta0 is a single number and our domains are not. The per-cell
+        # initial condition below replaces it; Zeta0 stays at the outlet level
+        # for the cells the .ini does not cover.
+        kv("Zeta0", " [.]"),
+        kv("Filic", f" #{run_id}.ini#"), kv("Fmtic", " #FR#"),
         kv("U0", " [.]"), kv("V0", " [.]"), kv("S0", " [.]"),
         kv("Commnt", " " * 30),
         kv("Filbnd", f" #{run_id}.bnd#"), kv("Fmtbnd", " #FR#"),
