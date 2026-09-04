@@ -618,6 +618,20 @@ def reservoir_simulate(req: ReservoirRequest) -> dict:
 _NO_CACHE = {"Cache-Control": "no-store, max-age=0"}
 
 
+@app.get("/theme.css", include_in_schema=False)
+def theme_css():
+    """The design layer. Owned by the two designers; nobody else edits it.
+
+    no-store like config.js, and for the same reason in reverse: a designer
+    reloading the page has to see the edit they just made, and a cached
+    stylesheet makes it look as though their change did nothing.
+    """
+    path = UI_DIR / "theme.css"
+    if not path.exists():
+        return PlainTextResponse("", media_type="text/css", headers=_NO_CACHE)
+    return FileResponse(path, media_type="text/css", headers=_NO_CACHE)
+
+
 @app.get("/config.js", include_in_schema=False)
 def config_js():
     """Tells the pages where the backend is. Same origin here, by default."""

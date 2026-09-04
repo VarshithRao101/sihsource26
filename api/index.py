@@ -93,6 +93,16 @@ def workflow():
 _NO_CACHE = {"Cache-Control": "no-store, max-age=0"}
 
 
+@app.get("/theme.css", include_in_schema=False)
+def theme_css():
+    """The design layer. Served here too, or the deployed pages lose the
+    designers' work entirely."""
+    p = UI / "theme.css"
+    if not p.exists():
+        return PlainTextResponse("", media_type="text/css", headers=_NO_CACHE)
+    return FileResponse(p, media_type="text/css", headers=_NO_CACHE)
+
+
 @app.get("/config.js", include_in_schema=False)
 def config_js():
     p = UI / "config.js"

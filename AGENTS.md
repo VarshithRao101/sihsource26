@@ -103,21 +103,26 @@ Say these out loud if asked. They are strengths, not gaps.
 
 # PART 2 — WHO OWNS WHAT
 
-| Person | Role | Owns | Task file |
+| Who | Role | Owns | Task file |
 |---|---|---|---|
-| **Captain** | everything that computes | `shared/`, `01`, `02`, `04`, `06`, `07`, `integration/` | — |
-| **Frontend A** | map, scene, timeline | `modules/05_frontend/src/map/`, `src/scene/` | `tasks/FRONTEND-A.md` |
-| **Frontend B** | panels, tables, forms | `modules/05_frontend/src/panels/`, `src/views/` | `tasks/FRONTEND-B.md` |
-| **Docs A** | the deck | `docs/deck/` | `tasks/DOCS-A.md` |
-| **Docs B** | the written report | `docs/report/` | `tasks/DOCS-B.md` |
-| **QA** | breaking it before a juror does | `docs/qa/` | `tasks/QA.md` |
+| **Captain** | everything that computes | `shared/`, `01`–`04`, `06`, `07`, `09`, `integration/`, and the two pages | — |
+| **Research & docs** (2) | research, testing, the deck, the report, presenting | `docs/deck/`, `docs/report/`, `docs/qa/` | `tasks/RESEARCH-DOCS.md` |
+| **Frontend design** (2) | how it looks — design only | `modules/05_frontend/theme.css`, `assets/` | `tasks/FRONTEND-DESIGN.md` |
 
 **The absolute rule: never create, edit or delete a file outside your own folder.** Not to fix a
 bug, not "just quickly". Because no two people touch the same file, merges are conflict-free by
 construction. Break folder ownership and you break the merge.
 
-Two people share `modules/05_frontend/`, so the split goes one level deeper — see the two frontend
-task files. `src/api.ts` and `src/types.ts` are **Frontend A owns, Frontend B may not edit**.
+**Why the designers get a stylesheet rather than the pages.** `index.html` and `workflow.html` keep
+their CSS in inline `<style>` blocks mixed in with the markup and the JavaScript that drives the
+solver, and the captain edits those files daily. Two designers working in them would collide on
+every push. `theme.css` is loaded **after** the inline styles on both pages, so anything set there
+wins — full control of the appearance, no shared file. That is the folder-ownership rule applied to
+a single-file frontend rather than an exception to it.
+
+**This replaced a five-way split on 2026-09-04.** The old `tasks/` files assigned
+`modules/05_frontend/src/map/`, `src/panels/`, `src/views/` and `src/scene/` — directories that were
+never created, because the frontend stayed two files. Five people owned folders that did not exist.
 
 Found a bug outside your folder? **Tell the captain.** Do not fix it yourself.
 

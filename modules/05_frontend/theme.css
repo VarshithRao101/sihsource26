@@ -1,0 +1,63 @@
+/* modules/05_frontend/theme.css - the design layer.
+ *
+ * OWNED BY THE TWO DESIGNERS. Nobody else edits this file, and the designers
+ * edit nothing else. That is the whole point of it existing.
+ *
+ * index.html and workflow.html carry their styles in inline <style> blocks
+ * mixed in with the markup and the JavaScript that drives the solver. If two
+ * designers edited those blocks while the backend work also touches the same
+ * files, every push would collide - and AGENTS.md Part 2 calls conflict-free
+ * merging by construction the absolute rule. This file is loaded AFTER those
+ * inline styles on both pages, so anything set here wins without either side
+ * touching the other's file.
+ *
+ * WHAT YOU CAN DO HERE
+ *   - Override any token below to restyle both pages at once.
+ *   - Add your own rules for any selector on either page.
+ *   - Add @media queries, fonts (see the note on fonts), animations.
+ *
+ * WHAT YOU MUST NOT DO
+ *   - Do not edit index.html, workflow.html, config.js or anything in vendor/.
+ *   - Do not add a CSS framework, a build step, or a CDN <link>. The console
+ *     is required to render with the network unplugged: it is demonstrated
+ *     offline, and a font or stylesheet fetched from the internet turns a
+ *     working demo into a blank page on conference wifi. Ship font files into
+ *     this folder and @font-face them from disk if you want custom type.
+ *   - Do not restyle anything into invisibility. Three things on these pages
+ *     are honesty features and must stay obvious: the SYNTHETIC DATA banner,
+ *     the "read-only build" health chip, and the greyed-out PLAY button.
+ *
+ * THE TOKENS, as index.html defines them. Redefine any subset.
+ *
+ *   --bg      #ffffff   page background
+ *   --fg      #14171a   body text
+ *   --muted   #5b6570   secondary text, legends, captions
+ *   --line    #d4dae0   borders and rules
+ *   --panel   #f5f7f9   sidebar and card fill
+ *   --accent  #1256a0   links, selected state, primary action
+ *   --warn    #a8410a   warnings, the synthetic-data banner
+ *   --bad     #a11212   errors, failed stages, no-safe-route rows
+ *   --ok      #14663a   success, complete stages, passing validation
+ *
+ * workflow.html defines its own palette in the same shape. Check that file's
+ * :root before assuming a token name is shared.
+ *
+ * HOW TO WORK ON IT
+ *   .venv\Scripts\python.exe -m uvicorn modules.04_backend.api:app --port 8000
+ *   then edit this file and hard-refresh. It is served with no-store, so a
+ *   reload always gets your latest version.
+ *
+ * Owner: Frontend Design (2 people). Questions about anything outside this
+ * file go to the captain rather than being fixed here.
+ */
+
+/* Nothing overridden yet. The pages ship with the palette above.
+ *
+ * Example - warmer neutrals, unchanged semantics:
+ *
+ *   :root {
+ *     --bg:    #fbfaf8;
+ *     --panel: #f2efea;
+ *     --line:  #ded8cf;
+ *   }
+ */
