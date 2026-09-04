@@ -89,6 +89,27 @@ mismatch we cannot remove:
 3. Sentinel-1 change detection removes permanent water — and any flooding already present before the
    event window.
 
+**Re-run at 60 m on 2026-09-04, after the default changed.** The convergence study said the
+gorge failure was a resolution problem, so the obvious question was whether resolution was also
+holding this one back. It was not:
+
+| | 90 m | 60 m | change |
+|---|---|---|---|
+| CSI | 0.0268 | **0.0293** | +9.3% |
+| POD | 0.2173 | **0.2325** | +7.0% |
+| FAR | 0.9703 | 0.9675 | -0.3% |
+| bias | 7.31 | **7.16** | -2.1% |
+
+Every metric improved, and by very little. **That is the useful result**: on a floodplain,
+resolution is not what limits agreement. The residual is the scenario mismatch below, and no mesh
+touches it. Peak discharge was identical at 11,325 m3/s across both grids - it comes from the
+breach regression, not the solver - which is the check that the scenario really was held fixed.
+
+Simulated flood area fell from 100.61 km2 to 71.59 km2 on refinement, consistent with
+`CONVERGENCE.md`: extent carries several percent of grid dependence and here it carried more.
+
+Reproduce with `python integration/validate_annamayya.py --run <run_id>`.
+
 **Is this scientifically defensible?** As a *diagnosis*, yes: it isolates resolution as the gorge's
 problem and scenario severity as the floodplain's. As *evidence the model predicts real flood extent
 accurately*, **no** — and we do not present it that way.
