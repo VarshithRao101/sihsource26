@@ -311,9 +311,18 @@ test("every stage declares the dependencies it really has", async ({ request }) 
   expect(by.sfincs.engines.join(" ")).toMatch(/SFINCS/);
 
   // And the one we do not have says so in the place a juror will look.
+  //
+  // The wording changed on 2026-09-03 and the assertion moved with it, because
+  // the old text was wrong. It said the Delft3D licence was "NOT GRANTED",
+  // which is true of Delft3D FM and false of Delft3D 4 - the structured model
+  // the problem statement actually names, which is GPLv3 and simply ships as
+  // source we did not compile. Both kernels are now declared separately, and
+  // this checks that each still states its own real reason.
   const d3 = by.delft3d.engines.join(" ");
-  expect(d3).toMatch(/NOT INSTALLED/);
-  expect(d3).toMatch(/NOT GRANTED/);
+  expect(d3, "Delft3D 4 must say the kernel was not built").toMatch(/NOT BUILT/);
+  expect(d3, "Delft3D FM must say the kernel is not installed").toMatch(/NOT INSTALLED/);
+  expect(d3, "the GPLv3 / source-only fact must be stated").toMatch(/GPLv3/);
+  expect(d3, "the FM licence must still be named as ungranted").toMatch(/not granted/i);
 });
 
 test("a box shows its dependency counts and expands to the full list", async ({ page }) => {
