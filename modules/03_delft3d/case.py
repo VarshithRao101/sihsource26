@@ -28,41 +28,52 @@ Delft3D-FLOW reads a keyword file plus a handful of attribute files:
     <run>.dis     discharge time series
     config_d_hydro.xml   what d_hydro.exe actually reads; it names the mdf
 
-FOUR CONVENTIONS THAT ARE SILENT WHEN WRONG. Each was checked against f34.
+SEVEN CONVENTIONS THAT ARE SILENT WHEN WRONG. Every one of these was found by
+running the real kernel and bisecting against Deltares' own f34 example, not by
+reading documentation - and every one of them fails without a useful message.
 
-  1. MNKmax IS THE GRID PLUS ONE. f34.grd declares "14 21" and f34.mdf declares
-     "MNKmax = 15 22 5". Delft3D carries a dummy row and column. f34.dep then
-     holds 330 values = 15 x 22, NOT 14 x 21. Get this backwards and the depth
-     array is read with the wrong stride: the run completes and the bed is
-     sheared, which looks like a modelling result rather than a bug.
+  1. MNKmax IS THE CELL COUNT PLUS TWO, AND THE .grd HOLDS CORNERS. nx by ny
+     cells need nx+1 by ny+1 grid points, because RGFGRID stores corners; and
+     Delft3D treats BOTH the first and the last index as dummy. Writing our
+     cells as points silently lost the last row of bed - the run completed and
+     the terrain was a row short.
 
-  2. DEPTH IS POSITIVE DOWN. The .dep file stores depth below the reference
-     level, so it is the NEGATIVE of our elevation. A sign error here inverts
-     the terrain and water runs up the valley walls.
+  2. DEPTH IS POSITIVE DOWN, at MNKmax size, offset one cell in each axis. The
+     .dep stores depth below the reference level, the negative of our
+     elevation, and the data starts at index 1 because index 0 is the dummy
+     edge.
 
   3. TIME IS IN Tunit, NOT SECONDS. Tunit = #M# means Tstart, Tstop, Dt, Flmap
-     and every table's time column are MINUTES since Itdate. Passing seconds
-     gives a run 60x too long, which is the same failure mode SFINCS had with
-     its datetime tstart.
-
-  5. EVERY Fil* KEY NEEDS ITS Fmt* PARTNER. Delft3D does not infer the format
-     of an attribute file: f34 pairs Filcco with Fmtcco= #FR#, Fildep with
-     Fmtdep= #FR#, and so on for every file it names. Omitting them was the
-     first thing that actually broke - the kernel aborted in "Initialisation
-     Time Dep. Data" with forrtl severe (64), an internal formatted read
-     failure, before reading a single cell. Found by running Deltares' own f34
-     example as a control, which succeeded, and diffing its MDF against ours.
+     and every table's time column are MINUTES since Itdate.
 
   4. GRIDS ARE WRITTEN BOTTOM-UP. RGFGRID's N index increases northward and our
-     rasters are north-up, so every array is flipped on the way out and flipped
-     back on the way in - exactly as modules/09_sfincs/case.py does.
+     rasters are north-up, so arrays are flipped both ways. On the way back in,
+     CROP THE DUMMY ROW AND COLUMN BEFORE FLIPPING, or everything shifts a row.
 
-WHAT IS DELIBERATELY SIMPLE, and would be the first thing to revisit once a
-kernel can actually run it: one water-level boundary, placed on whichever domain
-edge holds the lowest bed, held at that edge's own bed level. That is the
-crudest defensible outflow condition. The rim treatment SFINCS gets with msk=3
-has no one-line equivalent here, and inventing a more elaborate boundary that
-has never been tested would be worse than a simple one that has not.
+  5. EVERY Fil* KEY NEEDS ITS Fmt* PARTNER (#FR#). Delft3D does not infer the
+     format of an attribute file.
+
+  6. THE MDF KEYWORD FIELD IS SIX CHARACTERS WIDE, "=" AT COLUMN 7, AND FLOATS
+     NEED THREE-DIGIT EXPONENTS RIGHT-JUSTIFIED TO 16. "Filcco= #x.grd#", not
+     "Filcco = #x.grd#"; 8.0000000e+002, not e+02. Both are read positionally.
+     The exponent trap bit three separate times, because the MDF, the table
+     data rows and the .bnd alpha column each have their own format string.
+     Ident must be omitted entirely - Delft3D parses it for its own version
+     stamp and free text there fails before anything else is read.
+
+  7. A BOUNDARY MUST NOT INCLUDE THE ENCLOSURE CORNERS, and on real terrain it
+     must not span the whole edge either. Corners crash the kernel outright
+     (0xC0000409, no diagnostic). A full edge imposes the outlet's water level
+     on ground hundreds of metres above it, and the run aborts on the first
+     step with "Water level change too high".
+
+WHAT IS STILL TOO SIMPLE, and is why the comparison on a real reach does not
+run yet: the outflow is one water-level boundary on the channel cells at the
+lowest edge, and the domain starts from a per-cell initial condition at the bed.
+That is enough for gentle terrain - a 28 m-relief test channel solves and reads
+back clean - and not enough for 277 m of relief, where Delft3D still aborts on
+the first timestep. Finishing it is Delft3D model setup rather than file
+formats. See integration/compare_delft3d.py, which is written and waiting.
 
 Owner: captain.
 """
@@ -333,7 +344,9 @@ def _write_dis(path: Path, m: int, n: int,
 def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
                    edge: str, level_m: float, end_hr: float,
                    lo: int, hi: int) -> None:
-    """One water-level boundary along a whole domain edge, held constant.
+    """One water-level boundary across the channel cells at the outlet.
+
+    NOT the whole edge - see convention 7 in the module docstring.
 
     f34's .bnd line is:
         SEA BOUNDARY         Z H     2    22    14    22       0.00
