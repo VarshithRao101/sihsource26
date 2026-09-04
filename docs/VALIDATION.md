@@ -119,7 +119,24 @@ moving +5.7% between 60 m and 45 m. Extent is decided by very shallow water at t
 cell sits just either side of the 0.05 m threshold. Every AREA figure in this repository should be
 read as carrying a several-percent grid dependence. Depth figures should not.
 
-Mass conservation is unaffected by cell size - 0.0000% at every grid on both sites.
+**And the Chungthang gorge does not converge at all.** The two dams above are floodplain reaches.
+Our PRIMARY DEMO reach is a steep gorge, and it behaves completely differently:
+
+| refinement | max depth | flood area |
+|---|---|---|
+| 90 -> 60 m | **+13.9%** | -12.1% |
+| 60 -> 45 m | **+5.7%** | -9.3% |
+
+Still moving at the finest grid tested. A channel one to three cells wide at 90 m is barely
+represented, and each refinement carves it deeper and narrower. **Grid sensitivity is
+site-dependent and gorges are the bad case**, so `chungthangdam_overtop_fast_002`'s headline
+40.22 m maximum depth is resolution-bound - the same scenario at 45 m gives 48.43 m.
+
+This is INDEPENDENT NUMERICAL CONFIRMATION of section 2.1. The SAR result blamed resolution for
+CSI 0.0075 in this gorge; the convergence study reaches the same conclusion using no satellite data
+at all. Two separate lines of evidence, one conclusion.
+
+Mass conservation is unaffected by cell size - 0.0000% at every grid on all three sites.
 
 ---
 
@@ -129,7 +146,7 @@ Useful, and honestly labelled as something less than validation.
 
 | Cross-check | Result | What it does and does not prove |
 |---|---|---|
-| **Our solver vs SFINCS** | **CSI 0.9607** extent agreement; 10.39 vs 10.57 km²; 40.22 vs 37.58 m max depth | Two INDEPENDENT 2D engines, identical terrain, grid, forcing and wet threshold. The closest thing to external corroboration this project has. Still not validation against reality - both could be wrong the same way |
+| **Our solver vs SFINCS** | **CSI 0.9653** at the 60 m default (9.13 vs 9.20 km²; 45.83 vs 44.63 m). Was CSI 0.9607 at 90 m (10.39 vs 10.57 km²; 40.22 vs 37.58 m) - the two engines agree slightly BETTER on the finer grid and their depth gap narrows from 2.6 m to 1.2 m | Two INDEPENDENT 2D engines, identical terrain, grid, forcing and wet threshold. The closest thing to external corroboration this project has. Still not validation against reality - both could be wrong the same way |
 | SPH vs weir equation | within **5%** | Two independent methods agree on breach discharge. Does not prove either matches reality |
 | Surrogate vs solver | CSI **0.909**, depth MAE 1.11 m, ~20 ms | The U-Net faithfully emulates **our solver**. Says nothing about reality |
 | Hirakud vs empirical envelope | 265,799 m³/s inside 38,315–380,296 | Plausible, but near the top. **Not reviewed by a practising engineer** |

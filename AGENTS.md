@@ -187,7 +187,8 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | Damage replacement values | assumptions | `damage_curve_source` string |
 | Breach parameter spread | up to 10× | `uncertainty.json` |
 | Delft3D | absent | reported as absent, never estimated |
-| SFINCS cross-check | CSI 0.9607 vs our solver | `compare_routing.py`; SFINCS is **not** Delft3D |
+| SFINCS cross-check | **CSI 0.9653** at the 60 m default (0.9607 at 90 m) | `compare_routing.py`; SFINCS is **not** Delft3D |
+| Solver grid | default **60 m** since 2026-09-04, the coarsest CONVERGED grid on ordinary terrain. **Gorges do not converge at any resolution tried** - Chungthang depth still moves +5.7% from 60 m to 45 m | `docs/CONVERGENCE.md` |
 
 Populations are now measured from WorldPop 2020 (constrained, 100 m). Every mapped cell goes to
 its nearest settlement within 2 km, so nobody is counted twice. A settlement with a real OSM

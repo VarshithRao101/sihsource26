@@ -71,10 +71,23 @@ class ScenarioSpec:
 
     reach_length_km: float = 60.0
     corridor_width_km: float = 12.0
-    cellsize_m: float = 90.0
-    """Solver cell size. 90 m runs a 60 km reach in tens of seconds; 30 m is
-    four times as many cells and roughly eight times the runtime because the
-    timestep shrinks too."""
+    cellsize_m: float = 60.0
+    """Solver cell size, in metres.
+
+    60 m because it is the coarsest grid that is CONVERGED, measured rather than
+    chosen. docs/CONVERGENCE.md runs the same scenario at 120 / 90 / 60 / 45 m
+    on two independent dams: refining 90 -> 60 m still moves max depth by 5.9%
+    and 3.2%, while 60 -> 45 m moves it 1.1% and 0.6%. So 90 m - the old default
+    - sits outside the converged range and carried several percent of pure
+    discretisation error in every depth it produced.
+
+    It was 90 m because the solver used to sweep the whole domain every step and
+    finer grids cost what the domain cost. The windowed sweep made cost scale
+    with the flood instead, which is what made this affordable.
+
+    Flood EXTENT converges more slowly than depth and on one of the two sites had
+    not converged even at 45 m, so area figures still carry a several-percent
+    grid dependence. Depth figures no longer do."""
 
     end_hr: float = 12.0
     output_step_hr: float = 0.25

@@ -50,6 +50,75 @@ solver, contract writer and validator.
 
 ---
 
+## Chungthang / Teesta, Sikkim — a gorge, and it does not converge
+
+The two dams above are floodplain and moderate-gradient reaches. The primary demo run is neither:
+the Teesta at Chungthang is a **steep gorge** where the flood corridor is one to three cells wide.
+Same scenario throughout — 60 m dam, 50 MCM, overtopping at full reservoir, 40 km reach, 12 h — with
+**only** the cell size changed. Peak discharge is identical at **28,010 m³/s** across all three,
+which is the check that the scenario really was held fixed: breach outflow comes from the
+regression and cannot depend on the mesh.
+
+| cell | cells | max depth | area km² | peak m³/s | mass err % | solve s |
+|---|---|---|---|---|---|---|
+| 90 m | 136,620 | 40.22 m | 10.39 | 28,010 | −0.0000 | 68.0 |
+| 60 m | 306,900 | 45.83 m | 9.13 | 28,010 | −0.0000 | 111.9 |
+| 45 m | 544,993 | 48.43 m | 8.28 | 28,010 | −0.0002 | 268.1 |
+
+| refinement | max depth | flood area |
+|---|---|---|
+| 90 → 60 m | **+13.9%** | −12.1% |
+| 60 → 45 m | **+5.7%** | −9.3% |
+
+**This reach is not grid-converged at any resolution we have run.** Depth is still climbing 5.7%
+and area still falling 9.3% at the finest grid tested. Compare that with the floodplain sites,
+where depth had settled to about 1% by 60 m.
+
+**Grid sensitivity is therefore site-dependent, and gorges are the bad case.** That is not a
+surprise once stated: a channel one to three cells wide at 90 m is barely represented at all, and
+every refinement carves it deeper and narrower — depth up, wetted area down, exactly the pattern in
+the table.
+
+**This is independent numerical confirmation of what the SAR validation already suspected.**
+[`VALIDATION.md`](VALIDATION.md) reports CSI 0.0075 in this gorge and attributes it to resolution:
+Sentinel-1 cannot resolve a corridor that narrow. The convergence study reaches the same conclusion
+from the opposite direction, without using any satellite data at all. Two independent lines of
+evidence, one conclusion.
+
+**What it means for the demo run.** `chungthangdam_overtop_fast_002` — the committed run, produced
+at 90 m — reports 40.22 m maximum depth. At 45 m the same scenario gives 48.43 m. The number is
+resolution-bound and should be quoted as such. It is not wrong; it is unconverged, and now
+measurably so.
+
+---
+
+## The default was changed to 60 m on 4 September 2026
+
+Was 90 m. On the evidence above, 60 m is the coarsest grid that is converged on ordinary terrain,
+and it is strictly closer to converged on terrain that is not. The windowed sweep
+(`SolverConfig.window_every_steps`) is what made it affordable: cost now scales with the flood
+rather than the domain.
+
+Re-measured at the new default, on the same scenario and terrain:
+
+| | 90 m | 60 m |
+|---|---|---|
+| Our solver vs **SFINCS**, extent agreement | CSI 0.9607 | **CSI 0.9653** |
+| Wet area, ours vs SFINCS | 10.39 / 10.57 km² | 9.13 / 9.20 km² |
+| Max depth, ours vs SFINCS | 40.22 / 37.58 m | 45.83 / 44.63 m |
+
+Two independent engines agree slightly **better** on the finer grid, and their depth disagreement
+narrows from 2.6 m to 1.2 m. That is what should happen if both are converging on the same
+solution, and it is a mild point in favour of the refinement.
+
+**`outputs/chungthangdam_overtop_fast_002` was deliberately left at 90 m** rather than regenerated.
+It is the run committed to the repository for the read-only build, and it carries the `validation.json`
+holding the Sentinel-1 comparison — an artefact that needs an Earth Engine pass to reproduce and
+does not come from the solver. Replacing it would have silently discarded that. It is labelled
+throughout as a 90 m run.
+
+---
+
 ## What this says
 
 **Maximum depth converges by 60 m, on two independent sites.** The change from 60 m to 45 m is

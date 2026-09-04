@@ -282,7 +282,15 @@ class RunRequest(BaseModel):
     breach_width_m: float | None = Field(None, gt=0)
     formation_time_hr: float | None = Field(None, gt=0)
     reach_length_km: float = Field(60.0, gt=0, le=500)
-    cellsize_m: float = Field(90.0, ge=10, le=500)
+    cellsize_m: float = Field(
+        60.0, ge=10, le=500,
+        description=(
+            "Solver cell size in metres. 60 m is the coarsest CONVERGED grid, "
+            "measured on two dams in docs/CONVERGENCE.md - refining 90 m to "
+            "60 m still moves max depth 3-6%, while 60 m to 45 m moves it ~1%. "
+            "Runs before 2026-09-04 used 90 m and their depths carry that error."
+        ),
+    )
     end_hr: float = Field(12.0, gt=0, le=120)
     scheme: Literal["swe", "inertial"] = "swe"
     manning_n: float = Field(0.035, ge=0.01, le=0.2)
