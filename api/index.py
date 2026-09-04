@@ -203,6 +203,64 @@ def dam_states() -> dict:
     return {"states": states}
 
 
+# --------------------------------------------------------------------------
+# River index
+#
+# The console's River tab called these and got 404 here, because the endpoints
+# were added to the real backend and not to this one. That is the tab answering
+# "any River" - the phrase in the problem statement's own title - so it broke on
+# the deployed build specifically.
+#
+# modules/01_geodata/rivers.py imports argparse, json, re, sys and pathlib and
+# nothing else, so it can be imported here as-is rather than reimplemented. A
+# second copy of the search semantics is exactly the kind of drift that ends
+# with the two builds disagreeing about what a river is.
+# --------------------------------------------------------------------------
+
+
+def _rivers():
+    import sys
+
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from importlib import import_module
+
+    try:
+        return import_module("modules.01_geodata.rivers")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"river index unavailable: {exc}")
+
+
+@app.get("/api/rivers", tags=["rivers"])
+def river_search(q: str | None = None, state: str | None = None,
+                 min_points: int = 1, limit: int = 200) -> dict:
+    rv = _rivers()
+    rows = rv.search(q=q, state=state, min_points=min_points, limit=limit)
+    return {
+        "count": len(rows),
+        "rivers": rows,
+        "source": rv.SOURCE,
+        "note": (
+            "Grouped on river name AND basin. Indian river names repeat across "
+            "the country, and name-only grouping merged unrelated rivers - one "
+            "'Ghataprabha' spanned 13 basins from Kerala to Kashmir."
+        ),
+    }
+
+
+@app.get("/api/rivers/states", tags=["rivers"])
+def river_states() -> dict:
+    return {"states": _rivers().states()}
+
+
+@app.get("/api/rivers/{river_id}", tags=["rivers"])
+def river_detail(river_id: str) -> dict:
+    r = _rivers().get(river_id)
+    if r is None:
+        raise HTTPException(404, f"unknown river_id {river_id!r}")
+    return r
+
+
 @app.get("/api/dams/cities", tags=["dams"])
 def dam_cities(state: str) -> dict:
     cities = sorted({d.get("nearest_city") for d in _dams()

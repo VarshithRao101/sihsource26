@@ -29,7 +29,12 @@ data/observed/
 data/surrogate/
 data/labels/
 data/roads/
-data/rivers/
+# data/rivers/* rather than data/rivers/ - a bare directory exclusion cannot
+# be undone by a negation beneath it, the same rule that silently dropped
+# the demo run from git. rivers.json is 1.5 MB and the console's River tab
+# is dead without it.
+data/rivers/*
+!data/rivers/rivers.json
 data/roughness/
 data/damage/
 data/exposure/
