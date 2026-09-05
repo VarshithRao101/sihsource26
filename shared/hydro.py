@@ -364,8 +364,20 @@ Methods for Free-Surface Shallow Flows", Wiley, section 5; the same coefficient
 appears as the free-outflow limit in USACE HEC-RAS, "Dam Breach Outflow"."""
 
 DAMBREAK_SIDE_C_SI = 1.1 * (8.0 / 27.0 * math.sqrt(GRAVITY)) / 1.7
-"""Side-slope term for the same critical-flow control, scaled from the weir
-side coefficient 1.1 by the same ratio as the floor term. ~0.597."""
+"""Side-slope term for the same critical-flow control. ~0.597.
+
+DERIVED, NOT CITED, and it is the only coefficient in this file that is. It is
+the broad-crested weir side coefficient 1.1 - Fread (1988) BREACH, the same
+source as the 1.7 floor coefficient in _breach_discharge - scaled by the ratio
+between critical-flow and weir control on the floor term, 0.9225 / 1.7.
+
+The assumption being made is that the two controls stand in the same ratio on
+the sloping sides as they do on the flat floor. That is plausible and it is not
+something anybody has measured, which is why it is said here rather than
+presented as a published value. It matters least of the coefficients in this
+file: on the two events it drives (St Francis, Malpasset) the floor term
+carries slightly more of the discharge than the sides do, so an error of 20% in
+this constant moves the peak by under 10%."""
 
 
 def _dambreak_discharge(
