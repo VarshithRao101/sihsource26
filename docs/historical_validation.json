@@ -1,0 +1,356 @@
+{
+ "source": "data/observed/historical_dam_failures.pdf - 'HISTORICAL DAM FAILURES: FIELD PARAMETERS & IMPACT DATA', supplied reference document",
+ "summary": {
+  "events": 7,
+  "within_factor_1_25": 1,
+  "within_factor_2": 5,
+  "within_factor_3": 6,
+  "outside_factor_3": 1,
+  "median_abs_pct_error": 57.8,
+  "mean_abs_pct_error": 107.7,
+  "geometric_mean_ratio": 1.515,
+  "bias": "runs high",
+  "blind_events": 4,
+  "blind_within_factor_2": 2,
+  "reported_inside_our_envelope": 5
+ },
+ "rows": [
+  {
+   "event": {
+    "no": 1,
+    "name": "Machchhu Dam II",
+    "place": "Morbi, Gujarat, India",
+    "date": "11 August 1979",
+    "dam_type": "Earthen bund with central masonry spillway",
+    "height_m": 26.3,
+    "crest_length_m": 4015.0,
+    "storage_mcm": 110.0,
+    "reported_peak_cumecs": 16307.0,
+    "reported_peak_qualifier": "stated exactly",
+    "mechanism": "Massive overtopping. 600 mm in 24 h produced an inflow of 16,300 m3/s against a design spillway capacity of 5,660 m3/s. Water overtopped the earthen flanks by 0.6 m and scoured away 2,100 m of embankment.",
+    "our_mode": "overtopping",
+    "mode_because": "The document names overtopping and gives the depth over the flanks. This is the textbook case for the mode.",
+    "params": {
+     "inflow_cumecs": 16300.0
+    },
+    "in_regression_dataset": false,
+    "distance_km": 60.0,
+    "reported_depth_m": "6 to 9 m wall, 6-10 m in Morbi city",
+    "deaths": "2,000 to 10,000+"
+   },
+   "result": {
+    "peak_cumecs": 32206.38502849394,
+    "ratio": 1.975003681148828,
+    "pct_error": 97.5003681148828,
+    "log_error": 0.29556790943140726,
+    "released_mcm": 779.2188746041434,
+    "inflow_volume_mcm": 704.16,
+    "stored_mcm": 110.0,
+    "time_of_peak_min": 135.0,
+    "envelope_low_cumecs": 8090.055517734006,
+    "envelope_high_cumecs": 29044.77233513804,
+    "reported_in_envelope": true,
+    "independent_regressions": {
+     "froehlich1995": 8244.1,
+     "usbr1982": 8090.1,
+     "hagen1982": 29044.8,
+     "costa1985": 9235.0
+    },
+    "breach_width_m": 149.7,
+    "formation_time_hr": 2.236,
+    "regression_used": "froehlich2008",
+    "grade": "good"
+   }
+  },
+  {
+   "event": {
+    "no": 2,
+    "name": "Banqiao Dam",
+    "place": "Henan Province, China",
+    "date": "8 August 1975",
+    "dam_type": "Clay-core earthen embankment",
+    "height_m": 118.0,
+    "crest_length_m": 2028.0,
+    "storage_mcm": 492.0,
+    "reported_peak_cumecs": 78800.0,
+    "reported_peak_qualifier": "stated exactly",
+    "mechanism": "Catastrophic overtopping driven by Typhoon Nina, 1,060 mm in 24 h. Sluice gates could not open fully due to siltation blockages, triggering a chain-reaction collapse of 62 dams.",
+    "our_mode": "spillway_blockage",
+    "mode_because": "The document is explicit that the gates could not open. That is not ordinary overtopping - the reservoir had no relief capacity while the inflow arrived, which is the mode's definition.",
+    "params": {
+     "inflow_cumecs": 13000.0,
+     "residual_spillway_frac": 0.25,
+     "design_spillway_cumecs": 1742.0,
+     "blockage_start_level_frac": 0.8
+    },
+    "params_note": "Inflow 13,000 m3/s and a design capacity of 1,742 m3/s are the commonly cited figures for Banqiao and are NOT in the reference document. They are inputs we supplied, and the peak below therefore depends on them.",
+    "in_regression_dataset": false,
+    "distance_km": 110.0,
+    "reported_depth_m": "6 to 10 m wall at ~50 km/h",
+    "deaths": "171,000 to 230,000"
+   },
+   "result": {
+    "peak_cumecs": 181978.46760174702,
+    "ratio": 2.309371416265825,
+    "pct_error": 130.93714162658253,
+    "log_error": 0.3634937861275598,
+    "released_mcm": 1051.754549545302,
+    "inflow_volume_mcm": 561.6,
+    "stored_mcm": 492.0,
+    "time_of_peak_min": 39.0,
+    "envelope_low_cumecs": 32545.038797701363,
+    "envelope_high_cumecs": 130111.98868666946,
+    "reported_in_envelope": true,
+    "independent_regressions": {
+     "froehlich1995": 82499.6,
+     "usbr1982": 130021.5,
+     "hagen1982": 130112.0,
+     "costa1985": 32545.0
+    },
+    "time_to_overtop_hr": 4.933,
+    "overtopped": true,
+    "breach_width_m": 256.8,
+    "regression_used": "froehlich2008 (post-overtopping breach)",
+    "grade": "acceptable"
+   }
+  },
+  {
+   "event": {
+    "no": 3,
+    "name": "Teton Dam",
+    "place": "Idaho, United States",
+    "date": "5 June 1976",
+    "dam_type": "Zoned earthfill",
+    "height_m": 93.0,
+    "crest_length_m": 945.0,
+    "storage_mcm": 356.0,
+    "reported_peak_cumecs": 65120.0,
+    "reported_peak_qualifier": "stated exactly",
+    "mechanism": "Internal erosion and piping. Fractured volcanic rhyolite in the right abutment let reservoir water bypass the grout curtain and wash out the silt core during first filling.",
+    "our_mode": "piping",
+    "mode_because": "The document names piping and describes the conduit.",
+    "params": {},
+    "in_regression_dataset": true,
+    "distance_km": 130.0,
+    "reported_depth_m": "2.5-3 m in residential zones; 45 m wide breach",
+    "deaths": "11 to 14"
+   },
+   "result": {
+    "peak_cumecs": 102735.9322657088,
+    "ratio": 1.5776402374955283,
+    "pct_error": 57.76402374955283,
+    "log_error": 0.1980079743589412,
+    "released_mcm": 356.0920699677785,
+    "inflow_volume_mcm": 0.0,
+    "stored_mcm": 356.0,
+    "time_of_peak_min": 45.0,
+    "envelope_low_cumecs": 25706.37537050203,
+    "envelope_high_cumecs": 98256.26086921892,
+    "reported_in_envelope": true,
+    "independent_regressions": {
+     "froehlich1995": 55819.4,
+     "usbr1982": 83700.3,
+     "hagen1982": 98256.3,
+     "costa1985": 25706.4
+    },
+    "breach_width_m": 176.4,
+    "formation_time_hr": 1.137,
+    "regression_used": "froehlich2008",
+    "grade": "good"
+   }
+  },
+  {
+   "event": {
+    "no": 4,
+    "name": "St. Francis Dam",
+    "place": "California, United States",
+    "date": "12 March 1928",
+    "dam_type": "Curved concrete gravity",
+    "height_m": 62.5,
+    "crest_length_m": 213.0,
+    "storage_mcm": 47.0,
+    "reported_peak_cumecs": 48000.0,
+    "reported_peak_qualifier": "~ approximate in the source",
+    "mechanism": "Geological abutment failure. Gypsum veins in the western abutment dissolved when saturated; the eastern abutment slipped along lubricated Pelona schist fault planes.",
+    "our_mode": "foundation_failure",
+    "mode_because": "A concrete gravity dam displaced off its foundation. No embankment eroded, so no embankment regression applies - this is the case the mode was written for.",
+    "params": {
+     "foundation_breach_frac": 0.8,
+     "collapse_time_min": 2.0
+    },
+    "in_regression_dataset": true,
+    "distance_km": 87.0,
+    "reported_depth_m": "43 m initial wave in the canyon",
+    "deaths": "431 to 450+"
+   },
+   "result": {
+    "peak_cumecs": 35776.990023939565,
+    "ratio": 0.7453539588320742,
+    "pct_error": -25.46460411679257,
+    "log_error": 0.127637437504805,
+    "released_mcm": 45.82621789226796,
+    "inflow_volume_mcm": 0.0,
+    "stored_mcm": 47.0,
+    "time_of_peak_min": 3.0,
+    "envelope_low_cumecs": 9294.364813698552,
+    "envelope_high_cumecs": 40124.663135733295,
+    "reported_in_envelope": false,
+    "independent_regressions": {
+     "froehlich1995": 18765.0,
+     "usbr1982": 40124.7,
+     "hagen1982": 29267.3,
+     "costa1985": 9294.4
+    },
+    "opening_top_width_m": 170.4,
+    "opening_bottom_width_m": 42.6,
+    "regression_used": "none - see FoundationCollapse.basis",
+    "grade": "good"
+   }
+  },
+  {
+   "event": {
+    "no": 5,
+    "name": "South Fork Dam (Johnstown)",
+    "place": "Pennsylvania, United States",
+    "date": "31 May 1889",
+    "dam_type": "Earthen embankment",
+    "height_m": 22.0,
+    "crest_length_m": 280.0,
+    "storage_mcm": 18.0,
+    "reported_peak_cumecs": 8500.0,
+    "reported_peak_qualifier": "~ approximate in the source",
+    "mechanism": "Crest lowering and debris clogs. The crest had been lowered for a carriage road and iron fish screens across the spillway blocked floating debris, leaving zero capacity in a record storm.",
+    "our_mode": "spillway_blockage",
+    "mode_because": "Screens across the spillway and a lowered crest. The relief capacity was gone before the storm arrived, which is the mode.",
+    "params": {
+     "inflow_cumecs": 300.0,
+     "residual_spillway_frac": 0.05,
+     "design_spillway_cumecs": 280.0,
+     "blockage_start_level_frac": 0.9
+    },
+    "params_note": "The inflow and the spillway capacity are not in the reference document; both are supplied here and the peak depends on them.",
+    "in_regression_dataset": true,
+    "distance_km": 23.0,
+    "reported_depth_m": "12 m wall at 65 km/h",
+    "deaths": "2,209"
+   },
+   "result": {
+    "peak_cumecs": 5859.7164500316,
+    "ratio": 0.6893784058860706,
+    "pct_error": -31.062159411392937,
+    "log_error": 0.1615423245709508,
+    "released_mcm": 30.921195594680093,
+    "inflow_volume_mcm": 12.96,
+    "stored_mcm": 18.0,
+    "time_of_peak_min": 45.0,
+    "envelope_low_cumecs": 3873.452229769156,
+    "envelope_high_cumecs": 10745.864320751496,
+    "reported_in_envelope": true,
+    "independent_regressions": {
+     "froehlich1995": 3873.5,
+     "usbr1982": 5814.5,
+     "hagen1982": 10745.9,
+     "costa1985": 4005.9
+    },
+    "time_to_overtop_hr": 4.333,
+    "overtopped": true,
+    "breach_width_m": 83.3,
+    "regression_used": "froehlich2008 (post-overtopping breach)",
+    "grade": "good"
+   }
+  },
+  {
+   "event": {
+    "no": 6,
+    "name": "Malpasset Dam",
+    "place": "Frejus, France",
+    "date": "2 December 1959",
+    "dam_type": "Ultra-thin concrete arch",
+    "height_m": 66.5,
+    "crest_length_m": 222.0,
+    "storage_mcm": 50.0,
+    "reported_peak_cumecs": 8000.0,
+    "reported_peak_qualifier": "~ approximate in the source",
+    "mechanism": "Foundation shearing under hydrostatic uplift. First filling exposed unmapped tectonic fault planes in the gneiss beneath the left arch thrust block.",
+    "our_mode": "foundation_failure",
+    "mode_because": "An arch dam that lost its thrust block. Nothing eroded; the arch was found displaced substantially intact.",
+    "params": {
+     "foundation_breach_frac": 0.8,
+     "collapse_time_min": 2.0
+    },
+    "in_regression_dataset": false,
+    "distance_km": 12.0,
+    "reported_depth_m": "40 m wall at 70 km/h",
+    "deaths": "421"
+   },
+   "result": {
+    "peak_cumecs": 40698.14354830031,
+    "ratio": 5.0872679435375385,
+    "pct_error": 408.72679435375386,
+    "log_error": 0.7064846122795333,
+    "released_mcm": 48.65305794154823,
+    "inflow_volume_mcm": 0.0,
+    "stored_mcm": 50.0,
+    "time_of_peak_min": 3.0,
+    "envelope_low_cumecs": 9790.874870565658,
+    "envelope_high_cumecs": 45004.23782588509,
+    "reported_in_envelope": false,
+    "independent_regressions": {
+     "froehlich1995": 20638.8,
+     "usbr1982": 45004.2,
+     "hagen1982": 31137.9,
+     "costa1985": 9790.9
+    },
+    "opening_top_width_m": 177.6,
+    "opening_bottom_width_m": 44.4,
+    "regression_used": "none - see FoundationCollapse.basis",
+    "grade": "poor"
+   }
+  },
+  {
+   "event": {
+    "no": 7,
+    "name": "Tiware Dam",
+    "place": "Ratnagiri, Maharashtra, India",
+    "date": "2 July 2019",
+    "dam_type": "Small earthen bund",
+    "height_m": 13.5,
+    "crest_length_m": 308.0,
+    "storage_mcm": 2.4,
+    "reported_peak_cumecs": 1200.0,
+    "reported_peak_qualifier": "~ approximate in the source",
+    "mechanism": "Neglected piping and wall fissures. Over 400 mm in a day exploited unaddressed seepages reported by villagers; the central bund collapsed at 21:30.",
+    "our_mode": "piping",
+    "mode_because": "The document names piping and pre-existing seepage paths.",
+    "params": {},
+    "in_regression_dataset": false,
+    "distance_km": 18.0,
+    "reported_depth_m": "fast mountain torrent, depth not stated",
+    "deaths": "23"
+   },
+   "result": {
+    "peak_cumecs": 1168.9639593804036,
+    "ratio": 0.974136632817003,
+    "pct_error": -2.5863367182997004,
+    "log_error": 0.01138012452094442,
+    "released_mcm": 2.399184069457289,
+    "inflow_volume_mcm": 0.0,
+    "stored_mcm": 2.4,
+    "time_of_peak_min": 27.0,
+    "envelope_low_cumecs": 1166.7152655730347,
+    "envelope_high_cumecs": 3073.733885683665,
+    "reported_in_envelope": true,
+    "independent_regressions": {
+     "froehlich1995": 1166.7,
+     "usbr1982": 2355.9,
+     "hagen1982": 3073.7,
+     "costa1985": 1399.9
+    },
+    "breach_width_m": 33.0,
+    "formation_time_hr": 0.643,
+    "regression_used": "froehlich2008",
+    "grade": "excellent"
+   }
+  }
+ ]
+}

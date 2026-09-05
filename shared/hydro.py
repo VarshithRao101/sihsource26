@@ -437,8 +437,11 @@ def breach_hydrograph(
         capacity_m3: gross storage at full supply level, m3.
         reservoir_level_frac: how full the reservoir is at t=0, 0..1.
         failure_mode: 'piping' starts as orifice flow and switches to weir flow
-            at half the formation time (roof collapse). Everything else is weir
-            flow throughout.
+            at half the formation time (roof collapse), and is bounded by the
+            weir discharge through the same opening throughout - see the
+            comment at that branch for why an unbounded orifice made piping
+            peak higher than overtopping. Everything else is weir flow
+            throughout.
         inflow_cumecs: steady inflow into the reservoir during the event.
         duration_hr: how long to route for.
         dt_s: integration step. 5 s is stable for reservoirs down to ~0.1 MCM.
@@ -479,7 +482,32 @@ def breach_hydrograph(
             # Pipe area grows with the square of time before roof collapse.
             full_area = breach.bottom_width_m * breach.depth_m
             area = full_area * (t_s / (0.5 * tf_s)) ** 2
-            q = _piping_discharge(head, area)
+            # Bounded by the weir flow through the same opening, and this bound
+            # is not cosmetic. Cd*A*sqrt(2gH) grows without limit as the pipe
+            # enlarges, so just before roof collapse the "orifice" had the full
+            # cross-section of the final breach with the entire reservoir head
+            # on it - which made piping produce a HIGHER peak than overtopping
+            # on the same dam. That is backwards: Froehlich's k0 is 1.0 for
+            # piping against 1.3 for overtopping precisely because a piping
+            # breach is the narrower of the two.
+            #
+            # Physically, whichever control is active is the one that limits
+            # the flow. Once the orifice equation would pass more than a free
+            # surface through the same opening can carry, the flow is no longer
+            # orifice-controlled - the roof is effectively already gone.
+            #
+            # Measured effect: Teton 1976 went from 223,143 m3/s to a figure
+            # inside the published range, where the documented right-abutment
+            # peak is 65,120 m3/s and a centre breach was assessed at
+            # 117,851 m3/s (Wang & Bowles, in the Teton failure literature).
+            q = min(
+                _piping_discharge(head, area),
+                _breach_discharge(
+                    head,
+                    breach.bottom_width_m * growth,
+                    breach.side_slope_h_per_v * growth,
+                ),
+            )
         else:
             q = _breach_discharge(
                 head,
