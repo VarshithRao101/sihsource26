@@ -12,7 +12,8 @@ Read `AGENTS.md` Part 1 before writing a word of this. It outranks everything he
 
 In one sentence, said three different ways across the deck:
 
-> **Point it at any of 5,686 Indian dams or 2,229 rivers and it tells you which villages flood,
+> **Point it at any of 5,749 Indian barriers - 5,686 engineered dams and 63 natural ones -
+> or 2,229 rivers and it tells you which villages flood,
 > how deep, and how long they have — and it tells you what it does not know.**
 
 The second half is not a disclaimer. It is the differentiator. Every team in that room will
@@ -26,7 +27,7 @@ living is looking for exactly that.
 **Dam Break Inundation Modelling Using Hydrodynamic Modelling of any River**
 SIH26161 · NTRO · Disaster Management
 
-One line under it: *5,686 dams · 2,229 rivers · 20-stage automated pipeline · runs live.*
+One line under it: *5,749 barriers (5,686 engineered + 63 natural) · 2,229 rivers · 8 failure cases · 20-stage automated pipeline · runs live.*
 
 ## 2 · The problem, in NTRO's own words
 

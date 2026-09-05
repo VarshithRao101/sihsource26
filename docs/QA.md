@@ -217,7 +217,8 @@ becomes a real supervised problem in an afternoon.
 
 ### "Can it really run on any Indian dam, or just your demos?"
 
-5,686 dams from the CWC National Register of Large Dams, parsed from the source PDF by
+5,686 engineered dams from the CWC National Register of Large Dams, plus 63 natural dams
+(`modules/01_geodata/natural_dams.py`), parsed from the source PDFs by
 `modules/01_geodata/dams.py`. Demonstrated on dams we had never run before: **Hirakud** on the
 Mahanadi and **Annamayya** in Andhra Pradesh, both first try, both 0.000% mass error.
 

@@ -1,0 +1,75 @@
+{
+ "run_id": "cheyyeruprojectannamayya_overtop_fast_010",
+ "site": "cheyyeruprojectannamayya",
+ "grid": [
+  93,
+  125
+ ],
+ "cellsize_m": 89.67,
+ "forcing": {
+  "peak_cumecs": 11324.9,
+  "end_hr": 2.0,
+  "manning": 0.035,
+  "wet_threshold_m": 0.05,
+  "dem": "COP30"
+ },
+ "ours": {
+  "engine": "HLL shallow water, explicit (this project)",
+  "wet_cells": 849,
+  "flood_area_km2": 6.83,
+  "max_depth_m": 19.36
+ },
+ "delft3d": {
+  "engine": "Delft3D-FLOW (Delft3D 4, structured, implicit ADI)",
+  "installed": true,
+  "ok": true,
+  "kernel": "D:\\Delft3D\\install_d3d4-suite\\bin\\d_hydro.exe",
+  "wet_cells": 958,
+  "flood_area_km2": 7.7,
+  "max_depth_m": 17.06,
+  "dt_minutes": 0.1,
+  "runtime_s": 7.3
+ },
+ "case": {
+  "engine": "Delft3D-FLOW (Delft3D 4, structured)",
+  "case_dir": "D:\\TRNT BEE\\BEE SOCIETY\\hck\\outputs\\cheyyeruprojectannamayya_overtop_fast_010\\delft3d",
+  "run_id": "sih",
+  "our_grid": [
+   93,
+   125
+  ],
+  "mnkmax": [
+   95,
+   127,
+   1
+  ],
+  "dx_m": 89.675,
+  "end_hr": 2.0,
+  "dt_minutes": 0.1,
+  "manning": 0.035,
+  "source_mn": [
+   61,
+   35
+  ],
+  "peak_discharge_cumecs": 11324.9,
+  "boundary_edge": "east",
+  "boundary_level_m": 153.297,
+  "boundary_mn": [
+   94,
+   71,
+   94,
+   74
+  ],
+  "dryflc_m": 0.05,
+  "verified": true,
+  "note": "Verified end to end: a case written by this module solved on a locally built Delft3D 4 kernel and read back with the bed matching our DEM to within a centimetre, first on a synthetic channel and then on a real 223 x 161 blockage scenario with 277 m of relief. Comparing two engines bounds the numerics; neither has been validated against a measured flood."
+ },
+ "agreement": {
+  "both_wet": 790,
+  "ours_only": 59,
+  "delft3d_only": 168,
+  "csi": 0.7768,
+  "agreement_pct": 77.7
+ },
+ "reading": "Two independent engines, identical terrain, grid, forcing and wet threshold. They are NOT expected to agree exactly: ours is an explicit finite-volume shallow-water solver, Delft3D is an implicit ADI finite-difference one, and they treat the wet/dry front differently. Agreement bounds the numerics; it is not validation against a measured flood, and neither engine has been checked against one on this reach."
+}

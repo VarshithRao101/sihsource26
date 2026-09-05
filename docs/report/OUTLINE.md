@@ -15,7 +15,8 @@ and matters more, because a report is read slowly.
 Problem statement ID, title, organisation, team. One paragraph of abstract, which should be the
 same sentence the deck opens with:
 
-> Point it at any of 5,686 Indian dams or 2,229 rivers and it tells you which villages flood, how
+> Point it at any of 5,749 Indian barriers - 5,686 engineered dams and 63 natural ones - or
+> 2,229 rivers and it tells you which villages flood, how
 > deep, and how long they have — and it states what it does not know.
 
 ## 1 · The problem, and what NTRO actually asked for
@@ -94,7 +95,9 @@ hydrological input is modelled rather than measured.
 
 ## 7 · Deliverable (v) — any Indian river and dam
 
-The CWC register (5,686 dams, 29 states), the river index (2,229 rivers, 3,109 points, grouped on
+The CWC register (5,686 dams, 29 states), the natural-dam catalogue (63 moraine and debris
+impoundments across 8 Himalayan states, no storage capacity carried for any of them because
+none is published), the river index (2,229 rivers, 3,109 points, grouped on
 name **and basin** — explain the Ghataprabha collision, it is a good paragraph), and D8 tracing,
 which is what makes "any river" true: no pre-built river network is needed.
 

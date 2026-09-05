@@ -1,0 +1,75 @@
+{
+ "run_id": "godavariatgangapur_blockage_fast_001",
+ "site": "godavariatgangapur",
+ "grid": [
+  223,
+  161
+ ],
+ "cellsize_m": 90.19,
+ "forcing": {
+  "peak_cumecs": 85151.6,
+  "end_hr": 3.0,
+  "manning": 0.035,
+  "wet_threshold_m": 0.05,
+  "dem": "COP30"
+ },
+ "ours": {
+  "engine": "HLL shallow water, explicit (this project)",
+  "wet_cells": 3929,
+  "flood_area_km2": 31.96,
+  "max_depth_m": 27.82
+ },
+ "delft3d": {
+  "engine": "Delft3D-FLOW (Delft3D 4, structured, implicit ADI)",
+  "installed": true,
+  "ok": true,
+  "kernel": "D:\\Delft3D\\install_d3d4-suite\\bin\\d_hydro.exe",
+  "wet_cells": 4081,
+  "flood_area_km2": 33.19,
+  "max_depth_m": 32.35,
+  "dt_minutes": 0.1,
+  "runtime_s": 42.6
+ },
+ "case": {
+  "engine": "Delft3D-FLOW (Delft3D 4, structured)",
+  "case_dir": "D:\\TRNT BEE\\BEE SOCIETY\\hck\\outputs\\godavariatgangapur_blockage_fast_001\\delft3d",
+  "run_id": "sih",
+  "our_grid": [
+   223,
+   161
+  ],
+  "mnkmax": [
+   225,
+   163,
+   1
+  ],
+  "dx_m": 90.187,
+  "end_hr": 3.0,
+  "dt_minutes": 0.1,
+  "manning": 0.035,
+  "source_mn": [
+   68,
+   92
+  ],
+  "peak_discharge_cumecs": 85151.6,
+  "boundary_edge": "east",
+  "boundary_level_m": 552.494,
+  "boundary_mn": [
+   224,
+   35,
+   224,
+   37
+  ],
+  "dryflc_m": 0.05,
+  "verified": true,
+  "note": "The case format is verified: a case written by this module solved on a locally built Delft3D 4 kernel and read back with the bed matching our DEM to within a centimetre. That was a synthetic channel; these two engines have NOT yet been compared on a real scenario."
+ },
+ "agreement": {
+  "both_wet": 3401,
+  "ours_only": 528,
+  "delft3d_only": 680,
+  "csi": 0.7379,
+  "agreement_pct": 73.8
+ },
+ "reading": "Two independent engines, identical terrain, grid, forcing and wet threshold. They are NOT expected to agree exactly: ours is an explicit finite-volume shallow-water solver, Delft3D is an implicit ADI finite-difference one, and they treat the wet/dry front differently. Agreement bounds the numerics; it is not validation against a measured flood, and neither engine has been checked against one on this reach."
+}

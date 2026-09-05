@@ -114,7 +114,8 @@ is there, not to read it out.
 
 **0:45 — "Name any dam in India." Then press PLAY.**
 Open with the question nobody else in the room can take. Use the dam picker: State → dam, from the
-CWC National Register of Large Dams, 5,686 entries. PLAY runs the real pipeline: each box turns
+CWC National Register of Large Dams, 5,686 entries, plus 63 natural dams. PLAY runs the real
+pipeline: each box turns
 amber then green as its stage actually finishes, carrying the backend's own words — *"breach 268 m
 wide in 5.45 hr, peak 33,865 m³/s"*, *"58 settlements, 363 road segments"*. The solver box streams
 simulated time, wet cells and the volume ledger while it works.
