@@ -86,6 +86,30 @@ Check any of them:
 .venv\Scripts\python.exe -m shared.validate outputs\latatapovanntpc_blockage_fast_001
 ```
 
+### The four the console cycles
+
+**Load a stored run** on the console cycles four curated runs, one per click, and tells you which
+is next before you press it. They are real runs on COP30 through the same code path as anything
+you solve live — not recordings — and each one is there because it shows something the other
+three cannot:
+
+| Click | Run | Shows |
+|---|---|---|
+| 1 | Machchhu II, 1979 — overtopping | A real Indian dam break with a **documented outcome**. The one case in the set where "is this right" has an answer — see [`HISTORICAL_VALIDATION.md`](HISTORICAL_VALIDATION.md) |
+| 2 | Lower Manair — spillway blocked | The **time to overtop**: 35.8 hours between the outlets failing and the first water over the crest. No other case produces that number |
+| 3 | South Lhonak, 2023 — moraine outburst | A natural dam with no published storage. Also the honest bit: the DEM finds 0.34 MCM behind that moraine against ~25.7 MCM that actually drained, and `meta.json` publishes both |
+| 4 | Idukki — foundation failure | A 169 m arch dam, the one class of structure the breach regressions **do not describe**. `meta.json` says no regression was applied |
+
+Rebuild them on a machine with network access:
+
+```bash
+.venv\Scripts\python.exe -u -m integration.build_demo_runs
+```
+
+The manifest (`data/demo_runs.json`) is committed; the run folders are not, because they are large
+and regenerable. `GET /api/demo-runs` returns only what is actually on disk, so on a fresh clone the
+button falls back to loading the newest run rather than offering four ids that 404.
+
 ---
 
 ## 4. The demo, in order

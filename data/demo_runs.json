@@ -1,0 +1,36 @@
+{
+ "runs": [
+  {
+   "key": "machhu_overtopping",
+   "run_id": "machhuii_overtop_fast_002",
+   "label": "Machchhu II, 1979 - overtopping",
+   "why": "Morbi, Gujarat, 11 August 1979. 600 mm in 24 hours produced an inflow near three times the spillway's design capacity, the water passed the earthen flanks and 2,100 m of embankment went. This is the one case in the set with a documented outcome to argue with.",
+   "failure_mode": "overtopping",
+   "site": "Machhu II",
+   "validates": true,
+   "runtime_s": 1222.14
+  },
+  {
+   "key": "manair_spillway_blockage",
+   "run_id": "lowermanairdam_spillblock_fast_001",
+   "label": "Lower Manair - spillway blocked",
+   "why": "The outlets are gone and the inflow keeps arriving. The number this case produces and no other case can is the time to overtop: the hours between the blockage and the first water over the crest, which is the warning the operator actually has.",
+   "failure_mode": "spillway_blockage",
+   "site": "Lower Manair Dam",
+   "validates": true,
+   "runtime_s": 445.87
+  },
+  {
+   "key": "lhonak_glof",
+   "run_id": "southlhonaklake2023_glof_fast_001",
+   "label": "South Lhonak, 2023 - moraine outburst",
+   "why": "North Sikkim, 3-4 October 2023. The lake grew from 1.12 to 1.63 km2 between 2016 and 2023 and then drained into the Teesta. A natural dam: no published storage exists, so the impounded volume comes from the 2023 lake area through Huggel et al. (2002) - because a 30 m DEM cannot resolve this basin, finding 0.34 MCM behind the moraine against the ~25.7 MCM that actually drained. Both numbers are in meta.json. The breach stops at the bedrock sill rather than cutting through the whole ridge.",
+   "failure_mode": "glof_moraine",
+   "site": "South Lhonak Lake (2023)",
+   "validates": true,
+   "runtime_s": 1.82
+  }
+ ],
+ "built_by": "python -m integration.build_demo_runs",
+ "note": "Real runs through runner.run_scenario on COP30 terrain, not recordings. The run folders are regenerable and are not committed; rebuild them with the command above."
+}
