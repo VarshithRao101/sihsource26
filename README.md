@@ -1,7 +1,8 @@
 # SIH26161 — Dam Break Inundation Modelling
 
-Point it at any of 5,686 Indian dams and it tells you which villages flood, how deep, and **how
-long they have**.
+Point it at any of 5,749 Indian barriers - 5,686 engineered dams from the CWC register and 63
+natural ones, moraine-dammed lakes and debris impoundments - and it tells you which villages
+flood, how deep, and **how long they have**.
 
 Double-click **`start_console.bat`**, or from a terminal:
 
@@ -79,7 +80,7 @@ So there are two deployments, and they are different programs:
 
 | | what it is | what it does |
 |---|---|---|
-| `api/index.py` | the **read-only** build Vercel serves | both pages, the processing graph, the 5,686-dam register, and the runs committed to the repo. Anything that would have to compute returns **501 with the reason**. `/health` reports `mode: readonly` so PLAY greys out and says why |
+| `api/index.py` | the **read-only** build Vercel serves | both pages, the processing graph, the 5,749-barrier catalogue, and the runs committed to the repo. Anything that would have to compute returns **501 with the reason**. `/health` reports `mode: readonly` so PLAY greys out and says why |
 | `modules/04_backend/api.py` | the **real** backend | solves |
 
 Deployed alone, the read-only build loses PLAY, the live WebSocket, the 3D scene, the
@@ -190,6 +191,39 @@ spec = ScenarioSpec(site=site, failure_mode="blockage_breach",
 A 60 m blockage on the Teesta impounds 5.95 MCM over 0.17 km², breaches 312 m wide in 10 minutes,
 and takes 27.5 hours to fill — that fill time is the warning a blockage gives and a dam break does
 not. Recorded under `meta.json` → `blockage`.
+
+---
+
+## The eight ways the water gets out
+
+Each one is a different calculation, not a label on the same hydrograph. Which inputs matter is
+per-mode and comes from `shared/contract.py` → `FAILURE_MODE_INFO`, so the console shows the boxes a
+case reads and hides the rest.
+
+| Mode | What is different about it | Written against |
+|---|---|---|
+| `overtopping` | Progressive erosion, Froehlich k₀ = 1.3 | Machchhu II, 1979 |
+| `piping` | Orifice flow to roof collapse, bounded by weir flow through the same opening | Teton, 1976 |
+| `foundation_failure` | **No breach regression at all.** The regressions describe soil erosion; a concrete monolith does not erode. Trapezoidal gorge opening under critical-flow (Ritter) control | St Francis 1928, Malpasset 1959 |
+| `spillway_blockage` | Reservoir mass balance **first** — produces the hours between the outlets failing and the first water over the crest, which no other mode can | Banqiao 1975, South Fork 1889 |
+| `gated_release` | The dam does not fail. Gate curve into orifice discharge | routine drawdown |
+| `blockage_breach` | Storage read off the DEM; no natural dam has a published capacity | Phuktal, 2015 |
+| `glof_moraine` | Breach capped at the **erodible moraine depth** — the bedrock sill below does not go | South Lhonak, 2023 |
+| `river_flood` | No barrier, nothing fails. NRCS hydrograph injected into a reach; the DEM decides where it goes | any ungauged reach |
+
+Five need a structure and are refused on a river reach; a natural dam narrows further to the two
+that do not assume a published storage. The validator enforces that, not just the form.
+
+**How accurate is it?** Against the seven documented failures in
+[`docs/HISTORICAL_VALIDATION.md`](docs/HISTORICAL_VALIDATION.md): **5/7 within a factor of 2, 6/7
+within a factor of 3, median absolute error 57.8%** on peak breach outflow. A factor of two is a
+good result on this quantity — Wahl (2004) found the standard regressions carry prediction intervals
+of roughly −0.5 to +1 order of magnitude.
+
+```bash
+.venv\Scripts\python.exe -m integration.historical_validation --md
+.venv\Scripts\python.exe -m integration.check_all_modes
+```
 
 ---
 
