@@ -27,8 +27,18 @@
    "why": "North Sikkim, 3-4 October 2023. The lake grew from 1.12 to 1.63 km2 between 2016 and 2023 and then drained into the Teesta. A natural dam: no published storage exists, so the impounded volume comes from the 2023 lake area through Huggel et al. (2002) - because a 30 m DEM cannot resolve this basin, finding 0.34 MCM behind the moraine against the ~25.7 MCM that actually drained. Both numbers are in meta.json. The breach stops at the bedrock sill rather than cutting through the whole ridge.",
    "failure_mode": "glof_moraine",
    "site": "South Lhonak Lake (2023)",
-   "validates": false,
-   "runtime_s": 648.2
+   "validates": true,
+   "runtime_s": 645.98
+  },
+  {
+   "key": "idukki_foundation",
+   "run_id": "idukki_foundation_fast_001",
+   "label": "Idukki - foundation failure of an arch dam",
+   "why": "A 169 m double-curvature arch dam in Kerala. This is the one class of structure the breach regressions in shared/hydro.py do not describe - Froehlich, Von Thun and MacDonald are all fitted to earthfill embankments, and an arch dam that loses its foundation is displaced whole rather than eroded. The opening here is geometry under critical-flow control, and meta.json says no regression was applied. READ THE WARNING ON THIS ONE: the run validates, but its peak velocity of 30.2 m/s is above the ~20 m/s the validator considers plausible for a dam-break front. A 169 m head into a Kerala gorge is where you would expect to find such a number, and it is also where a wet/dry front treatment is most likely to be flattering itself. Quote the depths and the extent; treat the velocity as an upper bound.",
+   "failure_mode": "foundation_failure",
+   "site": "Idukki",
+   "validates": true,
+   "runtime_s": 1797.18
   }
  ],
  "built_by": "python -m integration.build_demo_runs",

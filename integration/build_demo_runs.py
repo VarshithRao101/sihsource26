@@ -137,7 +137,13 @@ DEMOS = [
             "to earthfill embankments, and an arch dam that loses its "
             "foundation is displaced whole rather than eroded. The opening "
             "here is geometry under critical-flow control, and meta.json says "
-            "no regression was applied."
+            "no regression was applied. READ THE WARNING ON THIS ONE: the run "
+            "validates, but its peak velocity of 30.2 m/s is above the ~20 m/s "
+            "the validator considers plausible for a dam-break front. A 169 m "
+            "head into a Kerala gorge is where you would expect to find such a "
+            "number, and it is also where a wet/dry front treatment is most "
+            "likely to be flattering itself. Quote the depths and the extent; "
+            "treat the velocity as an upper bound."
         ),
         "dam_id": "KL29VH0027",
         "failure_mode": "foundation_failure",
