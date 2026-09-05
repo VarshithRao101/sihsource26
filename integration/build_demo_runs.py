@@ -105,8 +105,11 @@ DEMOS = [
             "North Sikkim, 3-4 October 2023. The lake grew from 1.12 to "
             "1.63 km2 between 2016 and 2023 and then drained into the Teesta. "
             "A natural dam: no published storage exists, so the impounded "
-            "volume is read off the DEM, and the breach stops at the bedrock "
-            "sill rather than cutting through the whole ridge."
+            "volume comes from the 2023 lake area through Huggel et al. "
+            "(2002) - because a 30 m DEM cannot resolve this basin, finding "
+            "0.34 MCM behind the moraine against the ~25.7 MCM that actually "
+            "drained. Both numbers are in meta.json. The breach stops at the "
+            "bedrock sill rather than cutting through the whole ridge."
         ),
         "dam_id": "HISTSOUTHLHONAK2023",
         "failure_mode": "glof_moraine",
@@ -115,6 +118,13 @@ DEMOS = [
             "end_hr": 12.0,
             "moraine_height_m": 40.0,
             "glof_breach_width_m": 25.0,
+            # The 2023 lake area. Supplying it is a deliberate statement that
+            # the DEM has not seen this lake: at the published coordinate a
+            # 30 m DEM holds 0.34 MCM behind the moraine, against roughly
+            # 25.7 MCM that the outburst actually released. Both figures are
+            # published in meta.json under glof_moraine so the disagreement is
+            # visible. Neither is a measurement of this lake.
+            "lake_area_km2": 1.63,
         },
     },
     {

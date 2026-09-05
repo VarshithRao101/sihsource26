@@ -587,11 +587,27 @@ def run_scenario(
         # breach exists at all.
         from shared.hydro import BreachParams, glof_hydrograph
 
-        # Prefer the volume the terrain actually holds; fall back on the
-        # area-volume scaling only when the DEM cannot see the lake.
-        lake_volume_m3 = 0.0
+        # Where the lake volume comes from, and why the order is this way.
+        #
+        # Normally the terrain wins: blockage.py fills the valley behind the
+        # barrier and that is a measurement rather than a correlation. But a
+        # 30 m DEM frequently cannot see a moraine-dammed lake at all - the
+        # basin is small, the moraine crest is a few cells wide, and D8 on
+        # conditioned terrain routes straight through it. South Lhonak is the
+        # worked example: at the published coordinate the DEM finds 0.34 MCM
+        # behind a 40 m barrier, against roughly 25.7 MCM that the 2023
+        # outburst actually released. Routing 0.34 MCM and presenting it as
+        # that event would be worse than useless.
+        #
+        # So an operator-supplied lake AREA takes precedence, because supplying
+        # it is an explicit statement that the lake has been measured off
+        # imagery and the DEM has not seen it. Both numbers are published in
+        # meta.json either way, so the disagreement is visible rather than
+        # resolved silently.
+        dem_volume_m3 = 0.0
         if blockage_block is not None:
-            lake_volume_m3 = float(blockage_block.get("impounded_volume_mcm", 0.0)) * 1e6
+            dem_volume_m3 = float(blockage_block.get("impounded_volume_mcm", 0.0)) * 1e6
+        lake_volume_m3 = 0.0 if spec.lake_area_km2 else dem_volume_m3
 
         t_hr, q_cumecs, moraine = glof_hydrograph(
             lake_volume_m3=lake_volume_m3,
@@ -611,6 +627,17 @@ def run_scenario(
             output_step_hr=min(spec.output_step_hr, 0.05),
         )
         glof_block = moraine.as_dict()
+        glof_block["dem_impounded_volume_m3"] = round(dem_volume_m3, 1)
+        if spec.lake_area_km2 and dem_volume_m3 > 0:
+            ratio = moraine.lake_volume_m3 / dem_volume_m3
+            glof_block["dem_vs_used_note"] = (
+                f"The DEM holds {dem_volume_m3 / 1e6:,.3f} MCM behind this "
+                f"barrier; this run used {moraine.lake_volume_m3 / 1e6:,.3f} MCM "
+                f"from the supplied lake area, {ratio:,.1f}x larger. A 30 m DEM "
+                f"often cannot resolve a moraine-dammed basin, and that "
+                f"disagreement is published rather than resolved silently. "
+                f"Neither number is a measurement of this lake."
+            )
         release_width_m = max(moraine.breach_bottom_width_m, grid.cellsize_m())
         breach = BreachParams(
             bottom_width_m=moraine.breach_bottom_width_m,

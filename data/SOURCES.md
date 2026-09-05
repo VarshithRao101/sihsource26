@@ -21,6 +21,29 @@ Check keys with:  python -m shared.creds
 | `exposure/`  | GHSL built-up                    | ghsl.jrc.ec.europa.eu   | no   |
 | `exposure/`  | Google Open Buildings            | sites.research.google   | no   |
 | `roads/`     | OSM road graph (India extract)   | geofabrik.de / Overpass | no   |
+| `dams/`      | CWC National Register of Large Dams 2019 | damsafety.in    | no   |
+| `dams/`      | Natural dam / lake coordinates and heights (56 Himalayan moraine and debris impoundments) | supplied reference PDF - see below | no |
+| `observed/`  | Historical dam failures: field parameters and impact data (7 events) | supplied reference PDF - see below | no |
+
+### The two supplied reference PDFs
+
+Both are **gitignored** (`data/**/*.pdf`), like every other large reference download in this
+repository. What IS committed is what was parsed out of them:
+
+| PDF | goes in | parsed by | committed output |
+|---|---|---|---|
+| `natural_dam_coordinates_heights.pdf` | `data/dams/` | `python -m modules.01_geodata.natural_dams build` | `data/dams/natural_dams.json` (63 records) |
+| `historical_dam_failures.pdf` | `data/observed/historical_dam_failures.pdf` | transcribed into `integration/historical_validation.py::EVENTS` | `docs/HISTORICAL_VALIDATION.md`, `docs/historical_validation.json` |
+
+Provenance matters more than usual for the first one. Its 56 lakes split into two tiers and they are
+**not** equally solid: 8 are ground-surveyed and 48 are satellite-mapped with heights the source
+document itself calls "assumed/estimated". Every record carries `height_source` saying which, that
+flag reaches `meta.json`, and the dam card in the console shows it. A barrier height sets the
+impounded volume, so a run built on an estimated one is an order-of-magnitude answer and says so.
+
+None of the 63 carries a storage capacity. No natural dam has a published one, and inventing a
+number that feeds the breach regression directly would be the single worst thing this dataset could
+do. The volume is read off the DEM at run time instead.
 
 
 ## Labels and targets (WAS MISSING - four ML models need these)

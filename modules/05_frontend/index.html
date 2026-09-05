@@ -117,8 +117,13 @@
   .srctab:not(.on):hover { background: var(--panel); color: var(--fg); }
 
   /* --- the two slots above Run ------------------------------------- */
-  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 0; }
-  .slot { position: relative; }
+  /* The panels are anchored to the SLOTS ROW, not to the individual slot.
+     Anchored to the slot, the right-hand panel put its right edge at the right
+     of a 156 px half-column and its 330 px body ran off the left of the
+     screen. */
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 0;
+           position: relative; }
+  .slot { position: static; }
   .slotbtn { width: 100%; padding: 7px 6px; font-size: 12px; font-weight: 600;
              background: #fff; color: var(--accent); border: 1px solid var(--accent);
              border-radius: 3px; cursor: pointer; }
@@ -130,7 +135,10 @@
          width: 330px; max-width: 92vw; max-height: 66vh; overflow-y: auto; z-index: 40;
          background: #fff; border: 1px solid var(--accent); border-radius: 5px;
          padding: 10px 12px; box-shadow: 0 10px 32px #0b1c3326; }
-  .pop.pop-right { left: auto; right: 0; }
+  /* Right-anchored, and capped at the width of the sidebar so it opens inward
+     instead of off the edge. The Advanced panel is left-anchored and may
+     overspill to the RIGHT, over the results column, where there is room. */
+  .pop.pop-right { left: auto; right: 0; width: 100%; }
   .pop.open { display: block; }
   .pophead { font-size: 12px; font-weight: 700; margin-bottom: 6px;
              padding-bottom: 5px; border-bottom: 1px solid var(--line); line-height: 1.45; }
@@ -138,8 +146,8 @@
   .pop .popclose { width: 100%; margin-top: 10px; }
   /* An invisible bridge across the 6 px gap, so moving the pointer from the
      button to the panel does not pass over the page and shut it. */
-  .slot::after { content: ""; position: absolute; left: 0; right: 0;
-                 bottom: 100%; height: 8px; }
+  .slot:hover::after { content: ""; position: absolute; left: 0; right: 0;
+                       bottom: 100%; height: 8px; }
   @media (max-width: 900px) { .pop { width: 100%; } }
   .ctl { margin-top: 2px; }
   #modewhy summary::-webkit-details-marker { color: var(--muted); }
