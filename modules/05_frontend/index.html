@@ -816,17 +816,33 @@ function setSource(src) {
    their labels, their help text and WHICH INPUTS EACH ONE READS all come from
    shared/contract.py, so the panel cannot offer a case the validator refuses
    or show a box the solver ignores. */
+const NATURAL_MODES = ["glof_moraine", "blockage_breach"];
+
 function buildModes() {
   if (!ENUMS || !ENUMS.failure_mode_info) return;
-  const legal = SRC === "river"
+  let legal = SRC === "river"
     ? (ENUMS.river_failure_modes || [])
     : (ENUMS.dam_failure_modes || []);
+  /* A natural dam narrows the list again. A moraine has no embankment to
+     overtop, no body to pipe through, no foundation in the engineering sense
+     and no gates - and it has no published storage, which is what the other
+     five cases are driven by. The API refuses those combinations with a 422;
+     this stops the operator reaching one rather than letting them submit and
+     be told no. */
+  if (naturalSelected()) {
+    legal = legal.filter(m => NATURAL_MODES.includes(m));
+  }
   const info = ENUMS.failure_mode_info;
   const keep = $("mode").value;
   $("mode").innerHTML = legal.map(m =>
     `<option value="${m}">${esc((info[m] || {}).label || m)}</option>`).join("");
-  // Keep the operator's choice across a tab switch when it is still legal.
+  // Keep the operator's choice across a tab switch when it is still legal;
+  // otherwise take the barrier's own default, which for a moraine-dammed lake
+  // is the outburst and for a debris barrier is the blockage breach.
   if (legal.includes(keep)) $("mode").value = keep;
+  else if (DAM && legal.includes(DAM.default_failure_mode)) {
+    $("mode").value = DAM.default_failure_mode;
+  }
   applyMode();
 }
 
