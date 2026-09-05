@@ -514,20 +514,28 @@ NODES: list[dict[str, Any]] = [
         "emitted_by": "engine probe",
         "engine": "delft3d",
         "does": (
-            "The problem statement names Delft3D explicitly. The kernel is not "
-            "built on this machine, so this node is a filesystem probe and "
-            "nothing else. It reports what it searched and what it found. It "
-            "never estimates a Delft3D result, never borrows another engine's "
-            "numbers, and never turns green on a machine without the kernel. "
-            "SFINCS above is a different Deltares model and is labelled as one. "
-            "The reason is a BUILD, not a licence: Delft3D 4 (Delft3D-FLOW, the "
-            "structured model this statement means) is GPLv3 and its source is "
-            "public, but Deltares ships the kernels as source only - d_hydro and "
-            "flow2d3d have to be compiled. Delft3D FM, the newer unstructured "
-            "suite, is the one that needs the licence we were not granted."
+            "The problem statement names Delft3D explicitly, and Delft3D-FLOW "
+            "now solves our scenarios: modules/03_delft3d/case.py writes the "
+            "case from the same conditioned DEM, grid, breach hydrograph, "
+            "Manning value and wet threshold our own solver used, and "
+            "integration/compare_delft3d.py runs the kernel and compares the "
+            "two extents cell by cell. Godavari at Gangapur, 223 x 161 at 90 m: "
+            "extent CSI 0.7379. Annamayya, 93 x 125: 0.7768. It runs OFFLINE, "
+            "after a run exists, not inside a live request - which is why this "
+            "node is a probe during a PLAY and reports what it found on disk. "
+            "It never estimates a Delft3D result and never borrows another "
+            "engine's numbers; SFINCS above is a different Deltares model and "
+            "is labelled as one. The kernel was a BUILD, not a licence: "
+            "Delft3D 4 is GPLv3 with public source but ships as source only, so "
+            "d_hydro and flow2d3d were compiled here. Delft3D FM, the newer "
+            "unstructured suite, is the one needing the licence we were not "
+            "granted."
         ),
-        "inputs": ["-"],
-        "outputs": ["installed true / false, which flavour, and the paths searched"],
+        "inputs": ["a finished run folder: conditioned DEM, hydrograph.csv, max_depth.tif"],
+        "outputs": [
+            "which kernel is installed and where",
+            "Delft3D max depth and wet extent on our grid, and the CSI between the two engines",
+        ],
         "sources": [
             "Delft3D 4 (GPLv3) - github.com/Deltares/Delft3D, build config d3d4-suite",
             "Delft3D FM / DIMR (licensed) - download.deltares.nl",

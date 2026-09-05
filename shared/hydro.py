@@ -24,7 +24,16 @@ import numpy as np
 
 from shared.contract import GRAVITY
 
-FailureMode = Literal["overtopping", "piping", "gated_release", "blockage_breach"]
+FailureMode = Literal[
+    "overtopping",
+    "piping",
+    "foundation_failure",
+    "spillway_blockage",
+    "gated_release",
+    "blockage_breach",
+    "glof_moraine",
+    "river_flood",
+]
 
 
 # ==========================================================================
@@ -337,6 +346,46 @@ def _breach_discharge(
     if head_m <= 0.0:
         return 0.0
     return 1.7 * bottom_width_m * head_m**1.5 + 1.1 * side_slope * head_m**2.5
+
+
+DAMBREAK_C_SI = 8.0 / 27.0 * math.sqrt(GRAVITY)
+"""Critical-flow discharge coefficient at an instantaneously opened breach,
+Q = (8/27) * sqrt(g) * B * H^1.5 = 0.9225 * B * H^1.5 in SI.
+
+This is the discharge at the breach section of the Ritter (1892) dam-break
+solution, and it is what controls a full-height opening that appears in
+seconds - the flow goes critical at the opening rather than passing over a
+crest. It is 54% of the broad-crested weir coefficient 1.7 used for a breach
+that erodes down from the crest, and using the weir value for a block failure
+over-predicts the peak by roughly a factor of two.
+
+Source: Ritter, A. (1892), as reproduced in Toro, E.F. (2001), "Shock-Capturing
+Methods for Free-Surface Shallow Flows", Wiley, section 5; the same coefficient
+appears as the free-outflow limit in USACE HEC-RAS, "Dam Breach Outflow"."""
+
+DAMBREAK_SIDE_C_SI = 1.1 * (8.0 / 27.0 * math.sqrt(GRAVITY)) / 1.7
+"""Side-slope term for the same critical-flow control, scaled from the weir
+side coefficient 1.1 by the same ratio as the floor term. ~0.597."""
+
+
+def _dambreak_discharge(
+    head_m: float, bottom_width_m: float, side_slope: float
+) -> float:
+    """Critical-flow discharge through a trapezoidal opening, m3/s.
+
+        Q = 0.9225 * B * H^1.5  +  0.597 * Z * H^2.5
+
+    Same trapezoid as _breach_discharge, different control. Use this when the
+    opening appears essentially instantaneously at full height - a foundation
+    or abutment failure - and _breach_discharge when it erodes down from the
+    crest.
+    """
+    if head_m <= 0.0:
+        return 0.0
+    return (
+        DAMBREAK_C_SI * bottom_width_m * head_m**1.5
+        + DAMBREAK_SIDE_C_SI * side_slope * head_m**2.5
+    )
 
 
 def _piping_discharge(
@@ -704,6 +753,643 @@ def hydraulic_geometry(discharge_cumecs: float) -> tuple[float, float]:
     """
     q = max(discharge_cumecs, 0.01)
     return 4.0 * q**0.5, 0.27 * q**0.39
+
+
+# ==========================================================================
+# Foundation / abutment failure - the structure goes as a block
+# ==========================================================================
+#
+# This mode exists because forcing a concrete dam through an embankment breach
+# regression is a category error, not a conservative approximation.
+#
+# Froehlich (2008), Von Thun & Gillette (1990) and MacDonald & Langridge-
+# Monopolis (1984) are all fitted to EARTHFILL and rockfill dams - Froehlich's
+# set is 74 embankment failures. Every one of them predicts how fast flowing
+# water ERODES a soil embankment. A concrete gravity or arch dam whose
+# foundation shears does not erode at all: the monoliths are displaced, or the
+# arch loses its thrust block and rotates out. There is no formation time in
+# the erosion sense, and running the regression on one produces a formation
+# time in hours for an event that observers timed in seconds.
+#
+# St Francis (1928) and Malpasset (1959) are the two best-documented cases and
+# both went in well under five minutes. The Malpasset arch was found displaced
+# essentially intact; nothing about it was eroded.
+
+
+@dataclass
+class FoundationCollapse:
+    """What was assumed about a block failure, recorded so it can be argued with.
+
+    A foundation failure has no measured regression to fall back on, so every
+    number here is either given by the operator or an assumption named out
+    loud. That is worse than having a regression and it is stated rather than
+    hidden behind one that does not apply.
+    """
+
+    opening_top_width_m: float
+    opening_bottom_width_m: float
+    opening_depth_m: float
+    side_slope_h_per_v: float
+    collapse_time_s: float
+    crest_length_m: float
+    breach_fraction_of_crest: float
+    basis: str
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def foundation_collapse_hydrograph(
+    dam_height_m: float,
+    capacity_m3: float,
+    crest_length_m: float,
+    reservoir_level_frac: float = 1.0,
+    breach_fraction_of_crest: float = 0.8,
+    base_width_ratio: float = 0.25,
+    collapse_time_s: float = 120.0,
+    inflow_cumecs: float = 0.0,
+    duration_hr: float = 12.0,
+    dt_s: float = 1.0,
+    output_step_hr: float = 0.05,
+    storage_exponent: float = 2.7,
+) -> tuple[np.ndarray, np.ndarray, FoundationCollapse]:
+    """Sudden structural collapse. Returns (time_hr, discharge_cumecs, params).
+
+    The routing is still level-pool continuity, because the reservoir still
+    empties through an opening and the storage curve still governs the head.
+    What differs from breach_hydrograph, and differs on purpose:
+
+      * The opening is GEOMETRIC, not eroded. Its depth is the full dam height
+        from the first moment the block goes, and nothing widens it afterwards.
+      * The opening is a TRAPEZOID, not a rectangle. A concrete gravity or arch
+        dam stands in a gorge, and the crest length is the width of that gorge
+        at the TOP - at the bed it is far narrower. An earlier version of this
+        function drained the reservoir through a rectangle as wide as the crest
+        and as deep as the dam, and over-predicted St Francis by a factor of
+        2.4. base_width_ratio is the bed width as a fraction of the top width.
+      * Discharge is under CRITICAL-FLOW control, not weir control. A
+        full-height opening that appears in seconds is the Ritter dam-break
+        problem, whose discharge at the breach section is 0.9225 * B * H^1.5 -
+        54% of the broad-crested weir value that applies to a breach eroding
+        down from a crest. Using the weir coefficient here was the other half
+        of that factor of 2.4.
+      * The opening time is a structural collapse time in SECONDS. The default
+        120 s is the order of magnitude reported for St Francis and Malpasset;
+        it is an assumption and FoundationCollapse.basis says so.
+      * Because the opening is full-depth and near-instantaneous, the first
+        seconds are a genuine dam-break wave rather than weir flow through a
+        notch. The peak is therefore much sharper and much earlier than any
+        embankment breach of the same reservoir, which is the entire
+        operational difference between the two: for an embankment there is
+        usually time to warn somebody, and for this there is not.
+
+    dt_s defaults to 1 s rather than 5 s because a 120 s opening resolved on a
+    5 s step is 24 points, and the peak lands between them.
+
+    Args:
+        dam_height_m: full structural height.
+        capacity_m3: gross storage at full supply level, m3.
+        crest_length_m: length of the dam along the crest. The opening is a
+            fraction of this.
+        reservoir_level_frac: how full the reservoir is at t=0, 0..1.
+        breach_fraction_of_crest: how much of the dam goes, measured at the
+            crest. 1.0 is the whole structure; 0.8 is the default because at St
+            Francis the centre section was left standing and at Malpasset the
+            abutment remained.
+        base_width_ratio: opening width at the bed as a fraction of its width
+            at the crest, i.e. how gorge-like the valley is. 0.25 is a steep
+            mountain gorge, which is where concrete dams get built. 1.0 makes
+            the opening rectangular and is almost certainly wrong.
+        collapse_time_s: seconds from first movement to the opening being fully
+            formed.
+        inflow_cumecs: steady inflow during the event.
+        duration_hr, dt_s, output_step_hr, storage_exponent: as elsewhere.
+
+    Returns:
+        (time_hr, discharge_cumecs, FoundationCollapse).
+
+    Raises:
+        ValueError: on non-physical inputs.
+    """
+    if not 0.0 <= reservoir_level_frac <= 1.0:
+        raise ValueError(f"reservoir_level_frac must be 0..1, got {reservoir_level_frac}")
+    if capacity_m3 <= 0 or dam_height_m <= 0:
+        raise ValueError("capacity_m3 and dam_height_m must be positive")
+    if crest_length_m <= 0:
+        raise ValueError("crest_length_m must be positive")
+    if not 0.0 < breach_fraction_of_crest <= 1.0:
+        raise ValueError("breach_fraction_of_crest must be in (0, 1]")
+    if not 0.0 < base_width_ratio <= 1.0:
+        raise ValueError("base_width_ratio must be in (0, 1]")
+
+    top_w = crest_length_m * breach_fraction_of_crest
+    bottom_w = top_w * base_width_ratio
+    side_slope = (top_w - bottom_w) / 2.0 / dam_height_m
+    params = FoundationCollapse(
+        opening_top_width_m=round(top_w, 1),
+        opening_bottom_width_m=round(bottom_w, 1),
+        opening_depth_m=round(dam_height_m, 2),
+        side_slope_h_per_v=round(side_slope, 3),
+        collapse_time_s=collapse_time_s,
+        crest_length_m=crest_length_m,
+        breach_fraction_of_crest=breach_fraction_of_crest,
+        basis=(
+            "No breach regression applied. Froehlich (2008), Von Thun & "
+            "Gillette (1990) and MacDonald & Langridge-Monopolis (1984) are "
+            "fitted to embankment EROSION and do not describe a concrete "
+            "structure displaced off its foundation. The opening is therefore "
+            "geometric - a stated fraction of the crest at full height - and "
+            "the collapse time is an assumption of the order reported for St "
+            "Francis (1928) and Malpasset (1959), both of which failed in "
+            "under five minutes. The opening is trapezoidal because the "
+            "crest length is the gorge width at the top and not at the bed, "
+            "and the discharge is under critical-flow (Ritter) control rather "
+            "than weir control because the opening is full-height from the "
+            "start."
+        ),
+    )
+
+    level = dam_height_m * reservoir_level_frac
+    storage = storage_from_level(level, dam_height_m, capacity_m3, storage_exponent)
+
+    n_steps = int(duration_hr * 3600.0 / dt_s)
+    times, flows = [0.0], [0.0]
+    next_out_s = output_step_hr * 3600.0
+
+    for step in range(1, n_steps + 1):
+        t_s = step * dt_s
+        # The block does not erode open, it drops out. Linear in area over the
+        # collapse time is the simplest defensible description of that and is
+        # stated as an assumption rather than dressed up as erosion.
+        growth = min(t_s / max(collapse_time_s, dt_s), 1.0)
+
+        # Invert at the dam base: this is a full-height opening from the start,
+        # which is exactly what makes it different from a crest breach.
+        head = max(level, 0.0)
+        q = _dambreak_discharge(head, bottom_w * growth, side_slope * growth)
+
+        storage = max(storage + (inflow_cumecs - q) * dt_s, 0.0)
+        level = level_from_storage(storage, dam_height_m, capacity_m3, storage_exponent)
+
+        if t_s >= next_out_s - 1e-9:
+            times.append(t_s / 3600.0)
+            flows.append(q)
+            next_out_s += output_step_hr * 3600.0
+
+    return (
+        np.asarray(times, dtype=np.float64),
+        np.asarray(flows, dtype=np.float64),
+        params,
+    )
+
+
+# ==========================================================================
+# Spillway or gate blockage - the reservoir cannot discharge
+# ==========================================================================
+#
+# The mechanism that destroyed Banqiao and South Fork, and it was invisible in
+# this model until now because it was being run as ordinary overtopping.
+#
+# It is not ordinary overtopping. Ordinary overtopping is a flood too big for a
+# working spillway. This is a flood arriving at a spillway that is not working,
+# and the two differ in the one quantity an operator actually needs: how long
+# they have. With a working spillway the reservoir absorbs the peak for hours.
+# With a blocked one the level climbs at the full inflow rate from the moment
+# the blockage forms.
+
+
+@dataclass
+class SpillwayBlockage:
+    """The filling phase, before anything failed.
+
+    time_to_overtop_hr is the number this mode exists to produce and no other
+    mode in this file can produce it.
+    """
+
+    residual_capacity_frac: float
+    design_spillway_cumecs: float | None
+    residual_capacity_cumecs: float
+    inflow_cumecs: float
+    starting_level_frac: float
+    time_to_overtop_hr: float | None
+    overtopped: bool
+    volume_gained_mcm: float
+    basis: str
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def fill_to_overtopping(
+    dam_height_m: float,
+    capacity_m3: float,
+    inflow_cumecs: float,
+    design_spillway_cumecs: float | None,
+    residual_capacity_frac: float = 0.0,
+    starting_level_frac: float = 0.85,
+    max_hours: float = 240.0,
+    dt_s: float = 60.0,
+    storage_exponent: float = 2.7,
+) -> SpillwayBlockage:
+    """How long until the water reaches the crest, given the outlets are gone.
+
+    Straight reservoir mass balance: dS/dt = inflow - residual outlet capacity,
+    integrated until the level reaches the dam height or max_hours runs out.
+
+    The residual capacity is deliberately a FRACTION of the design capacity
+    rather than an absolute number, because that is how the failures are
+    described - Banqiao's gates were partly silted, not removed; South Fork's
+    spillway was screened, not sealed. residual_capacity_frac = 0.0 is a
+    complete blockage.
+
+    Returns a SpillwayBlockage recording the fill phase, including
+    time_to_overtop_hr = None when the reservoir never reaches the crest -
+    which is the correct and useful answer to "the gates are jammed, do we have
+    a problem", and one worth being able to get back.
+    """
+    if capacity_m3 <= 0 or dam_height_m <= 0:
+        raise ValueError("capacity_m3 and dam_height_m must be positive")
+    if not 0.0 <= residual_capacity_frac <= 1.0:
+        raise ValueError("residual_capacity_frac must be 0..1")
+    if not 0.0 <= starting_level_frac <= 1.0:
+        raise ValueError("starting_level_frac must be 0..1")
+
+    if design_spillway_cumecs and design_spillway_cumecs > 0:
+        residual = design_spillway_cumecs * residual_capacity_frac
+        basis = (
+            f"Residual outlet capacity is {residual_capacity_frac:.0%} of the "
+            f"design spillway discharge {design_spillway_cumecs:,.0f} m3/s "
+            f"from the CWC register."
+        )
+    else:
+        residual = 0.0
+        basis = (
+            "The register carries no design spillway discharge for this "
+            "structure, so the residual outlet capacity is taken as zero. "
+            "That is an ASSUMPTION and it makes this run the worst case: a "
+            "structure with some working outlet capacity fills more slowly "
+            "than this says."
+        )
+
+    level = dam_height_m * starting_level_frac
+    storage = storage_from_level(level, dam_height_m, capacity_m3, storage_exponent)
+    start_storage = storage
+    net = inflow_cumecs - residual
+
+    t_s = 0.0
+    overtopped = False
+    if net > 0:
+        limit_s = max_hours * 3600.0
+        while t_s < limit_s:
+            t_s += dt_s
+            storage = min(storage + net * dt_s, capacity_m3)
+            level = level_from_storage(
+                storage, dam_height_m, capacity_m3, storage_exponent
+            )
+            if level >= dam_height_m - 1e-6:
+                overtopped = True
+                break
+
+    return SpillwayBlockage(
+        residual_capacity_frac=residual_capacity_frac,
+        design_spillway_cumecs=design_spillway_cumecs,
+        residual_capacity_cumecs=round(residual, 1),
+        inflow_cumecs=inflow_cumecs,
+        starting_level_frac=starting_level_frac,
+        time_to_overtop_hr=round(t_s / 3600.0, 3) if overtopped else None,
+        overtopped=overtopped,
+        volume_gained_mcm=round((storage - start_storage) / 1e6, 4),
+        basis=basis
+        + (
+            ""
+            if overtopped
+            else f" The reservoir did not reach the crest within {max_hours:.0f} h "
+            f"at an inflow of {inflow_cumecs:,.0f} m3/s, so no breach follows."
+        ),
+    )
+
+
+# ==========================================================================
+# Glacial lake outburst through a moraine
+# ==========================================================================
+#
+# A moraine dam is not a small landslide dam and modelling it as one gets the
+# breach depth wrong in the direction that matters.
+#
+# A landslide barrier is debris all the way down to the old river bed, so a
+# breach can cut through the whole thing. A moraine sits on a bedrock sill and
+# very often has a buried ice core; the loose till above that sill is the only
+# part that erodes. Once the breach reaches the sill it stops deepening and can
+# only widen. So the erodible depth is the moraine freeboard, which is
+# typically a fraction of the ridge height above the valley, and using the full
+# height instead over-predicts both the head and the released volume.
+#
+# The second difference is the trigger. South Lhonak in October 2023 was not a
+# slow overtopping: an ice/rock avalanche entered the lake and the displacement
+# wave went over the crest before any breach had formed. That arrives as a
+# short leading surge AHEAD of the breach hydrograph, not as a taller breach
+# peak, and it is why the first wave downstream can precede the failure.
+
+HUGGEL_A = 0.104
+HUGGEL_B = 1.42
+"""Volume-area scaling for moraine-dammed lakes: V = 0.104 * A^1.42, with A in
+m2 and V in m3.
+
+Source: Huggel, C., Kaab, A., Haeberli, W., Teysseire, P. & Paul, F. (2002),
+"Remote sensing based assessment of hazards from glacier lake outbursts: a case
+study in the Swiss Alps", Canadian Geotechnical Journal 39(2), 316-330.
+
+Used ONLY when the DEM cannot see the lake - a fallback with a factor-of-two
+scatter in the source, and meta.json records when it was used."""
+
+
+def lake_volume_from_area(area_m2: float) -> float:
+    """Moraine-lake volume from surface area, m3. Huggel et al. (2002).
+
+    >>> round(lake_volume_from_area(1.0e6) / 1e6, 1)
+    26.2
+    """
+    if area_m2 <= 0:
+        return 0.0
+    return HUGGEL_A * area_m2**HUGGEL_B
+
+
+@dataclass
+class MoraineBreach:
+    """A moraine failure, with the two things that make it not a landslide dam."""
+
+    moraine_height_m: float
+    erodible_depth_m: float
+    breach_bottom_width_m: float
+    side_slope_h_per_v: float
+    formation_time_hr: float
+    avalanche_surge_frac: float
+    surge_volume_m3: float
+    surge_duration_s: float
+    lake_volume_m3: float
+    volume_source: str
+    basis: str
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def glof_hydrograph(
+    lake_volume_m3: float,
+    moraine_height_m: float,
+    erodible_depth_m: float | None = None,
+    breach_width_m: float | None = None,
+    formation_time_hr: float = 0.5,
+    width_to_depth_ratio: float = 1.0,
+    avalanche_surge_frac: float = 0.0,
+    surge_duration_s: float = 600.0,
+    lake_area_m2: float | None = None,
+    inflow_cumecs: float = 0.0,
+    duration_hr: float = 12.0,
+    dt_s: float = 2.0,
+    output_step_hr: float = 0.05,
+    storage_exponent: float = 1.6,
+) -> tuple[np.ndarray, np.ndarray, MoraineBreach]:
+    """Moraine-dam outburst. Returns (time_hr, discharge_cumecs, params).
+
+    Differences from breach_hydrograph, all of them physical rather than
+    cosmetic:
+
+      * BREACH DEPTH IS CAPPED at the erodible depth of the moraine, not the
+        moraine height. Default is 0.6 of the ridge height, which is the middle
+        of the range reported for breached Himalayan moraines; below that is
+        the bedrock sill and any ice core, and the breach stops there. Passing
+        erodible_depth_m states it explicitly.
+      * THE STORAGE CURVE IS FLATTER. storage_exponent defaults to 1.6 here
+        rather than 2.7, because a moraine-dammed lake occupies a scoured
+        over-deepened basin with near-vertical walls, not a V-shaped river
+        valley. Using the valley exponent drains the lake far too fast at low
+        level.
+      * AN AVALANCHE SURGE CAN LEAD THE BREACH. avalanche_surge_frac is the
+        share of the lake displaced over the crest by an entering ice or rock
+        mass. It is released over surge_duration_s starting at t = 0, BEFORE
+        and independently of the breach, because that is the order the events
+        happened in at South Lhonak. It is added to the breach discharge, and
+        the volume it carries is removed from the lake so nothing is released
+        twice.
+
+        BE CAREFUL WITH IT. A surge is a volume divided by a duration, so it
+        sets the peak directly and will dominate the breach whenever it is more
+        than a few percent over a few minutes: 15% of a 25 MCM lake in 180 s is
+        21,000 m3/s on its own, four times the breach peak. It defaults to zero
+        for that reason, and any run that sets it should be read as two events
+        superimposed rather than as one hydrograph.
+
+    Args:
+        lake_volume_m3: the lake. Pass <= 0 with lake_area_m2 set to fall back
+            on Huggel et al. (2002) scaling.
+        moraine_height_m: ridge height above the downstream valley floor.
+        erodible_depth_m: how deep the breach can cut. None -> 0.6 * height.
+        breach_width_m: final bottom width. None -> width_to_depth_ratio times
+            the erodible depth.
+        width_to_depth_ratio: bottom width as a multiple of erodible depth when
+            breach_width_m is not given. 1.0 by default. This is the single
+            most sensitive parameter in the mode and the reason it is exposed:
+            the published South Lhonak scenario table spans 4,311 / 8,000 /
+            12,487 m3/s for 20 / 30 / 40 m breach widths on the same lake, a
+            factor of three from the breach width alone. An earlier default of
+            3.0 put the peak near 24,000 m3/s, well outside that range.
+        formation_time_hr: time to full breach. Non-cohesive till fails fast.
+        avalanche_surge_frac: fraction of the lake displaced by the trigger,
+            0..1. 0.0 means no trigger surge is modelled.
+        surge_duration_s: how long the displacement wave takes to pass.
+        lake_area_m2: used only if lake_volume_m3 <= 0.
+        inflow_cumecs, duration_hr, dt_s, output_step_hr: as elsewhere.
+        storage_exponent: k in the storage curve. See above for why it differs.
+
+    Returns:
+        (time_hr, discharge_cumecs, MoraineBreach).
+
+    Raises:
+        ValueError: on non-physical inputs.
+    """
+    if moraine_height_m <= 0:
+        raise ValueError("moraine_height_m must be positive")
+    if not 0.0 <= avalanche_surge_frac <= 1.0:
+        raise ValueError("avalanche_surge_frac must be 0..1")
+
+    volume_source = "given"
+    if lake_volume_m3 is None or lake_volume_m3 <= 0:
+        if not lake_area_m2 or lake_area_m2 <= 0:
+            raise ValueError(
+                "glof_hydrograph needs either lake_volume_m3 or lake_area_m2"
+            )
+        lake_volume_m3 = lake_volume_from_area(lake_area_m2)
+        volume_source = (
+            f"Huggel et al. (2002) V = 0.104 A^1.42 from a lake area of "
+            f"{lake_area_m2 / 1e6:.3f} km2. The source reports roughly a "
+            f"factor-of-two scatter about this relation."
+        )
+
+    erodible = erodible_depth_m if erodible_depth_m else 0.6 * moraine_height_m
+    erodible = min(max(erodible, 0.0), moraine_height_m)
+    bottom_w = breach_width_m if breach_width_m else width_to_depth_ratio * erodible
+
+    surge_volume = lake_volume_m3 * avalanche_surge_frac
+    params = MoraineBreach(
+        moraine_height_m=moraine_height_m,
+        erodible_depth_m=round(erodible, 2),
+        breach_bottom_width_m=round(bottom_w, 1),
+        side_slope_h_per_v=1.0,
+        formation_time_hr=formation_time_hr,
+        avalanche_surge_frac=avalanche_surge_frac,
+        surge_volume_m3=round(surge_volume, 1),
+        surge_duration_s=surge_duration_s if avalanche_surge_frac > 0 else 0.0,
+        lake_volume_m3=round(lake_volume_m3, 1),
+        volume_source=volume_source,
+        basis=(
+            f"Breach depth capped at the erodible moraine depth "
+            f"{erodible:.1f} m of a {moraine_height_m:.1f} m ridge - below "
+            f"that is the bedrock sill and any buried ice core, and the "
+            f"breach cannot cut through them. Storage exponent "
+            f"{storage_exponent} rather than the 2.7 used for a river valley, "
+            f"because a moraine-dammed basin is over-deepened and steep-sided."
+            + (
+                f" A leading surge of {avalanche_surge_frac:.0%} of the lake "
+                f"is released over {surge_duration_s:.0f} s from t = 0, ahead "
+                f"of the breach, representing an avalanche displacement wave."
+                if avalanche_surge_frac > 0
+                else ""
+            )
+        ),
+    )
+
+    # The breach can only ever release what sits above the sill, so the lake is
+    # treated as a body of depth `erodible` for routing purposes. Water below
+    # the sill does not leave.
+    routable = max(lake_volume_m3 - surge_volume, 0.0)
+    level = erodible
+    storage = routable
+    capacity = max(routable, 1.0)
+
+    tf_s = max(formation_time_hr * 3600.0, dt_s)
+    n_steps = int(duration_hr * 3600.0 / dt_s)
+    surge_q = surge_volume / surge_duration_s if surge_volume > 0 else 0.0
+
+    times, flows = [0.0], [surge_q]
+    next_out_s = output_step_hr * 3600.0
+
+    for step in range(1, n_steps + 1):
+        t_s = step * dt_s
+        growth = min(t_s / tf_s, 1.0)
+        head = max(level, 0.0)
+        q = _breach_discharge(head, bottom_w * growth, 1.0 * growth)
+
+        storage = max(storage + (inflow_cumecs - q) * dt_s, 0.0)
+        level = level_from_storage(storage, erodible, capacity, storage_exponent)
+
+        q_total = q + (surge_q if t_s <= surge_duration_s else 0.0)
+
+        if t_s >= next_out_s - 1e-9:
+            times.append(t_s / 3600.0)
+            flows.append(q_total)
+            next_out_s += output_step_hr * 3600.0
+
+    return (
+        np.asarray(times, dtype=np.float64),
+        np.asarray(flows, dtype=np.float64),
+        params,
+    )
+
+
+# ==========================================================================
+# River flood wave - no dam, no barrier, nothing fails
+# ==========================================================================
+#
+# Every other mode in this file starts with something giving way. This one does
+# not, and it is the mode a river needs.
+#
+# A river has no crest, no embankment, no foundation and no gates. Asking which
+# of those failed is meaningless on an open channel. What a river has is a
+# discharge that rises, peaks and falls, and the only questions worth asking
+# are how big the peak is, how fast it arrives, and where the water goes - and
+# the last of those is answered by the terrain, never by the operator.
+
+NRCS_RECESSION_RATIO = 1.67
+"""Fall time divided by rise time in the NRCS dimensionless unit hydrograph:
+total duration is 2.67 times the time to peak.
+
+Source: USDA Natural Resources Conservation Service, National Engineering
+Handbook Part 630, Chapter 16, "Hydrographs" (2007), Table 16-1."""
+
+
+def river_flood_hydrograph(
+    peak_discharge_cumecs: float,
+    time_to_peak_hr: float,
+    duration_hr: float = 12.0,
+    base_flow_cumecs: float = 0.0,
+    flood_duration_hr: float | None = None,
+    output_step_hr: float = 0.05,
+) -> tuple[np.ndarray, np.ndarray]:
+    """A flood wave entering the reach. Returns (time_hr, discharge_cumecs).
+
+    The shape is the NRCS dimensionless unit hydrograph: a curvilinear rise to
+    the peak and a recession 1.67 times as long, which is the standard synthetic
+    shape used when no gauge record exists for the site - which is the case for
+    every ungauged reach this tool will be pointed at.
+
+    The rise is modelled as q/qp = (t/tp)^2 * (3 - 2*t/tp), a smooth Hermite
+    ramp with zero gradient at both ends, and the recession as an exponential
+    decay fitted so the limb has fallen to 2% of the peak at the end of the
+    flood duration. Both are approximations of the NRCS curve, and neither is
+    dressed up as a routed result: this is the BOUNDARY CONDITION, and what
+    happens to it downstream is the solver's business.
+
+    There is no direction argument here and there deliberately is not one. Where
+    the water goes is a property of the ground, read off the DEM by the flow
+    tracer, and letting an operator point the flood at a compass bearing would
+    let them produce a flood that the terrain forbids.
+
+    Args:
+        peak_discharge_cumecs: the peak of the flood wave.
+        time_to_peak_hr: hours from the start of the rise to the peak.
+        duration_hr: how long to generate the series for.
+        base_flow_cumecs: discharge in the channel before and after the flood.
+        flood_duration_hr: total flood duration. None -> 2.67 * time_to_peak,
+            the NRCS ratio.
+        output_step_hr: spacing of the returned series.
+
+    Returns:
+        (time_hr, discharge_cumecs), time starting at exactly 0.0.
+
+    Raises:
+        ValueError: on non-physical inputs.
+    """
+    if peak_discharge_cumecs <= 0:
+        raise ValueError("peak_discharge_cumecs must be positive")
+    if time_to_peak_hr <= 0:
+        raise ValueError("time_to_peak_hr must be positive")
+    if base_flow_cumecs < 0:
+        raise ValueError("base_flow_cumecs cannot be negative")
+    if base_flow_cumecs >= peak_discharge_cumecs:
+        raise ValueError("base_flow_cumecs must be below the peak")
+
+    tp = time_to_peak_hr
+    total = flood_duration_hr if flood_duration_hr else (1.0 + NRCS_RECESSION_RATIO) * tp
+    if total <= tp:
+        raise ValueError("flood_duration_hr must exceed time_to_peak_hr")
+    fall = total - tp
+    # Decay constant chosen so the recession reaches 2% of the peak rise at the
+    # stated end of the flood, rather than being left as a free parameter.
+    decay = math.log(50.0) / fall
+
+    n = max(int(round(duration_hr / output_step_hr)), 1)
+    times = np.arange(n + 1, dtype=np.float64) * output_step_hr
+    rise_amp = peak_discharge_cumecs - base_flow_cumecs
+
+    q = np.full_like(times, base_flow_cumecs)
+    up = times <= tp
+    x = times[up] / tp
+    q[up] = base_flow_cumecs + rise_amp * (x**2 * (3.0 - 2.0 * x))
+    down = times > tp
+    q[down] = base_flow_cumecs + rise_amp * np.exp(-decay * (times[down] - tp))
+
+    return times, q
 
 
 def ritter_solution(x_m, t_s, h0_m, g: float = GRAVITY):

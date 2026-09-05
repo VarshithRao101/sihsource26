@@ -73,7 +73,265 @@ ENGINES = ("fast", "delft3d", "sph", "sphcoupled", "surrogate")
 (modules/07_ml). It is a prediction, not a simulation, and the frontend
 labels it as such."""
 
-FAILURE_MODES = ("overtopping", "piping", "gated_release", "blockage_breach")
+FAILURE_MODES = (
+    "overtopping",
+    "piping",
+    "foundation_failure",
+    "spillway_blockage",
+    "gated_release",
+    "blockage_breach",
+    "glof_moraine",
+    "river_flood",
+)
+"""Eight ways the water gets out, and each one is a DIFFERENT calculation -
+not a label on the same hydrograph.
+
+The first four were the whole list for most of this project, and that was a
+real limitation rather than a simplification: it meant every concrete-dam
+failure in the historical record had to be forced through an embankment
+erosion regression that was never calibrated on concrete, and it meant a
+blocked spillway - the mechanism that actually destroyed Banqiao and South
+Fork - was indistinguishable from ordinary overtopping.
+
+  overtopping         Water passes the crest and scours the embankment away.
+                      Progressive erosion, Froehlich k0 = 1.3.
+  piping              Internal erosion opens a conduit that enlarges and then
+                      collapses. Orifice flow first, weir flow after.
+  foundation_failure  The foundation or abutment shears and the structure goes
+                      as a block. There is no erosion phase at all, so no
+                      embankment regression applies - see
+                      shared.hydro.foundation_collapse_hydrograph.
+  spillway_blockage   The reservoir cannot discharge. Level rises on inflow
+                      until it reaches the crest, and only then does an
+                      overtopping breach begin. The extra quantity this mode
+                      computes and no other does is the time the operator had.
+  gated_release       Controlled release through the outlets. The dam does not
+                      fail.
+  blockage_breach     A landslide barrier across the river fails. No design
+                      capacity exists, so the DEM supplies the storage.
+  glof_moraine        A glacial lake bursts through its moraine. The erodible
+                      depth is the moraine, not the whole barrier height, and
+                      an avalanche wave can displace part of the lake before
+                      the breach has opened at all.
+  river_flood         No dam and no barrier: a flood wave routed down a river
+                      from an injected hydrograph. This is the only mode that
+                      does not begin with something failing.
+"""
+
+DAM_FAILURE_MODES = (
+    "overtopping",
+    "piping",
+    "foundation_failure",
+    "spillway_blockage",
+    "gated_release",
+    "blockage_breach",
+    "glof_moraine",
+)
+"""Modes selectable when the source is a structure with a reservoir behind it."""
+
+RIVER_FAILURE_MODES = ("river_flood", "blockage_breach", "glof_moraine")
+"""Modes selectable when the source is a river reach.
+
+A river has no crest to overtop, no embankment to pipe through, no foundation
+and no gates, so four of the eight modes are not merely unlikely on a river -
+they have no physical referent there and the validator rejects them.
+"""
+
+FAILURE_MODE_INFO = {
+    # label      : what the operator picks it by
+    # summary    : one line under the picker
+    # physics    : the calculation this mode runs that no other mode runs
+    # controls   : which basic inputs are meaningful, so the UI shows those and
+    #              hides the rest instead of greying out nine boxes
+    # reference  : a real failure this mode was written against, so the choice
+    #              can be checked rather than believed
+    "overtopping": {
+        "label": "Overtopping - water passes the crest",
+        "summary": (
+            "Inflow exceeds what the spillway can pass and the water cuts the "
+            "embankment away from the top down."
+        ),
+        "physics": (
+            "Progressive erosion. Froehlich (2008) with k0 = 1.3 and a 1:1 side "
+            "slope, weir flow through a trapezoid that widens and deepens over "
+            "the formation time."
+        ),
+        "controls": ["reservoir_level_frac"],
+        "reference": (
+            "Machchhu II, Morbi, 1979 - 600 mm in 24 h, inflow near three times "
+            "spillway capacity, 0.6 m over the flanks."
+        ),
+        "structure_types": ["embankment", "earthfill", "any"],
+    },
+    "piping": {
+        "label": "Piping - internal erosion through the body",
+        "summary": (
+            "Seepage opens a conduit inside the dam that enlarges until the "
+            "roof above it collapses."
+        ),
+        "physics": (
+            "Orifice flow while the pipe is submerged, switching to weir flow "
+            "at roof collapse (half the formation time). Froehlich k0 = 1.0, "
+            "0.7 side slope - a piping breach is narrower and steeper than an "
+            "overtopping one."
+        ),
+        "controls": ["reservoir_level_frac"],
+        "reference": (
+            "Teton, Idaho, 1976 - reservoir water bypassed the grout curtain "
+            "through fractured rhyolite on first filling."
+        ),
+        "structure_types": ["embankment", "earthfill", "any"],
+    },
+    "foundation_failure": {
+        "label": "Foundation or abutment failure - the structure goes as a block",
+        "summary": (
+            "The rock the dam stands on shears or dissolves and the structure "
+            "is displaced whole. Nothing erodes."
+        ),
+        "physics": (
+            "No erosion phase and NO embankment regression - Froehlich, Von "
+            "Thun and MacDonald are all fitted to earthfill dams and none of "
+            "them describes a concrete monolith being pushed off its "
+            "foundation. The opening is a stated fraction of the crest length "
+            "over the full dam height, formed in minutes, and the release is a "
+            "near-instantaneous dam-break wave."
+        ),
+        "controls": [
+            "reservoir_level_frac", "foundation_breach_frac", "collapse_time_min",
+        ],
+        "reference": (
+            "St Francis, California, 1928 (gypsum veins dissolved in the "
+            "western abutment) and Malpasset, France, 1959 (foundation shear "
+            "under hydrostatic uplift)."
+        ),
+        "structure_types": ["concrete gravity", "arch", "masonry"],
+    },
+    "spillway_blockage": {
+        "label": "Spillway or gates blocked - the reservoir cannot discharge",
+        "summary": (
+            "Debris, silt or a jammed gate takes the outlet capacity away. The "
+            "level climbs on inflow until it reaches the crest."
+        ),
+        "physics": (
+            "Two phases. First a reservoir mass balance at the residual outlet "
+            "capacity, which yields the one number no other mode produces - the "
+            "hours between the blockage and the first water over the crest, "
+            "which is the warning time the operator actually had. Then an "
+            "overtopping breach from a full reservoir with the inflow still "
+            "arriving, which is why peaks in this mode exceed what the stored "
+            "volume alone would give."
+        ),
+        "controls": [
+            "residual_spillway_frac", "inflow_cumecs", "reservoir_level_frac",
+        ],
+        "reference": (
+            "Banqiao, Henan, 1975 - sluice gates silted shut before 1,060 mm of "
+            "Typhoon Nina arrived. South Fork, Pennsylvania, 1889 - fish "
+            "screens across the spillway and a crest lowered for a carriage "
+            "road."
+        ),
+        "structure_types": ["any"],
+    },
+    "gated_release": {
+        "label": "Controlled release - gates opened, dam intact",
+        "summary": "The operator passes water on purpose. Nothing fails.",
+        "physics": (
+            "Gate-opening curve into orifice discharge, bounded by the design "
+            "spillway capacity from the CWC register where the structure has "
+            "one. No breach exists and meta.json says so."
+        ),
+        "controls": ["reservoir_level_frac", "gate_opening_frac"],
+        "reference": (
+            "Routine pre-monsoon drawdown; also the counterfactual against "
+            "which a failure run is read."
+        ),
+        "structure_types": ["any"],
+    },
+    "blockage_breach": {
+        "label": "Landslide dam across the river",
+        "summary": (
+            "A debris barrier blocks the channel, impounds a lake, and then "
+            "fails."
+        ),
+        "physics": (
+            "The storage is READ OFF THE TERRAIN by filling the valley behind "
+            "the barrier to the debris height, because no natural dam has a "
+            "published capacity. Breach through non-cohesive debris."
+        ),
+        "controls": ["blockage_height_m"],
+        "reference": (
+            "Phuktal / Tsarap Chu, Ladakh, 2015 - overtopped after 110 days "
+            "behind a reported 15 km lake."
+        ),
+        "structure_types": ["natural"],
+    },
+    "glof_moraine": {
+        "label": "Glacial lake outburst through a moraine",
+        "summary": (
+            "A moraine-dammed lake bursts, often after an avalanche or icefall "
+            "drops into it."
+        ),
+        "physics": (
+            "Two things separate this from a landslide dam. The erodible depth "
+            "is the MORAINE freeboard, not the whole barrier height - the ice "
+            "core and bedrock sill below it do not go - so the breach bottoms "
+            "out early. And an avalanche wave can displace part of the lake "
+            "over the crest before the breach has opened at all, which arrives "
+            "as a separate leading surge rather than as a taller breach peak. "
+            "Lake volume falls back on Huggel et al. (2002) V = 0.104 A^1.42 "
+            "when the DEM cannot see the lake."
+        ),
+        "controls": [
+            "moraine_height_m", "moraine_erodible_depth_m", "avalanche_surge_frac",
+        ],
+        "reference": (
+            "South Lhonak, Sikkim, October 2023 - lake grew 1.12 to 1.63 km2 "
+            "between 2016 and 2023, then drained into the Teesta and took "
+            "Teesta III with it."
+        ),
+        "structure_types": ["natural", "moraine"],
+    },
+    "river_flood": {
+        "label": "River flood wave - no dam involved",
+        "summary": (
+            "A flood hydrograph enters the reach and is routed downstream. "
+            "Nothing fails, because there is nothing there to fail."
+        ),
+        "physics": (
+            "The only mode with no barrier and no breach. The inflow is a "
+            "dimensionless hydrograph scaled to a peak discharge and a time to "
+            "peak (NRCS NEH-4 shape, recession 1.67x the rise), injected at the "
+            "chosen point. Where the water goes is decided entirely by the DEM "
+            "- the operator does not and cannot set a direction, because a "
+            "river's course is a property of the ground and not of the run."
+        ),
+        "controls": [
+            "peak_discharge_cumecs", "time_to_peak_hr", "flood_duration_hr",
+        ],
+        "reference": (
+            "The routing half of every event in the record; the mode to use "
+            "when the question is 'this much water arrives here, who is in the "
+            "way'."
+        ),
+        "structure_types": ["none"],
+    },
+}
+"""Per-mode metadata, in the contract so the API, the UI and the validator all
+read the same description. `controls` is what makes the input panel honest: a
+mode shows the inputs that change its answer and hides the ones that do
+nothing, rather than presenting nine boxes of which two matter."""
+
+
+BREACHING_MODES = (
+    "overtopping",
+    "piping",
+    "foundation_failure",
+    "spillway_blockage",
+    "blockage_breach",
+    "glof_moraine",
+)
+"""Modes in which a barrier actually fails, so a breach geometry exists.
+'gated_release' and 'river_flood' have no breach and meta.json says so."""
 
 # ASTER is here because NTRO's dataset link names it. Adding a source is
 # additive - an old run's meta.json still validates, because nothing that was
@@ -242,11 +500,18 @@ zero, never omit it."""
 RUN_ID_PATTERN = r"^[a-z0-9]+_[a-z0-9]+_[a-z0-9]+_\d{3}$"
 """{site}_{scenario}_{engine}_{nnn}, e.g. teesta_overtop_fast_001."""
 
-SCENARIO_SLUGS = ("overtop", "piping", "gated", "blockage")
+SCENARIO_SLUGS = (
+    "overtop", "piping", "foundation", "spillblock", "gated", "blockage",
+    "glof", "riverflood",
+)
 
 FAILURE_MODE_TO_SLUG = {
     "overtopping": "overtop",
     "piping": "piping",
+    "foundation_failure": "foundation",
+    "spillway_blockage": "spillblock",
     "gated_release": "gated",
     "blockage_breach": "blockage",
+    "glof_moraine": "glof",
+    "river_flood": "riverflood",
 }

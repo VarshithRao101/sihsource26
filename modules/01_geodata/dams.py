@@ -241,7 +241,24 @@ _CACHE: list[dict] | None = None
 
 
 def load_catalogue() -> list[dict]:
-    """Every dam, from the built catalogue. Cached in process."""
+    """Every dam - engineered AND natural - from the built catalogues.
+
+    The CWC register is the engineered half. The natural half comes from
+    modules/01_geodata/natural_dams.py: moraine-dammed glacial lakes, debris
+    impoundments, and the historic natural-dam failures. They are one list
+    because they are one question - there is water above a valley and it may
+    come down - and because splitting them made the operator choose a picker
+    before they could choose a dam.
+
+    Every row carries `kind`, "engineered" or "natural", and the two are not
+    interchangeable downstream: a natural dam has no gross storage and no
+    design spillway, so a scenario built on one reads its volume off the
+    terrain instead. Anything that treats the two alike is a bug.
+
+    A missing natural catalogue is not fatal. The engineered register is the
+    thing this tool cannot work without; the natural list is additive, and
+    losing it must not take the dam picker down with it.
+    """
     global _CACHE
     if _CACHE is None:
         if not CATALOGUE_JSON.exists():
@@ -249,8 +266,38 @@ def load_catalogue() -> list[dict]:
                 f"{CATALOGUE_JSON} not built yet. Run:\n"
                 f"  python -m modules.01_geodata.dams build"
             )
-        _CACHE = json.loads(CATALOGUE_JSON.read_text(encoding="utf-8"))["dams"]
+        rows = json.loads(CATALOGUE_JSON.read_text(encoding="utf-8"))["dams"]
+        for d in rows:
+            d.setdefault("kind", "engineered")
+            d.setdefault("height_source", "CWC NRLD 2019")
+            d.setdefault("default_failure_mode", "overtopping")
+        try:
+            from . import natural_dams
+
+            rows = rows + natural_dams.load_catalogue()
+        except Exception as exc:  # noqa: BLE001
+            print(f"natural-dam catalogue unavailable: {exc}", file=sys.stderr)
+        _CACHE = rows
     return _CACHE
+
+
+def is_simulatable(d: dict) -> bool:
+    """Can a scenario be built on this row at all?
+
+    Coordinates and a barrier height are required of everything - without them
+    there is no place to put the dam and no head to drive the breach.
+
+    Storage is required only of an ENGINEERED dam, and that asymmetry is the
+    whole point of carrying `kind`. Requiring gross_storage_mcm of everything
+    was what silently hid all 63 natural dams from the picker: none of them has
+    a published capacity, because no such number exists for a moraine. Their
+    volume is read off the DEM at run time instead.
+    """
+    if not (d.get("has_coords") and d.get("height_m")):
+        return False
+    if d.get("kind") == "natural":
+        return True
+    return bool(d.get("gross_storage_mcm"))
 
 
 def states() -> list[str]:
@@ -262,9 +309,11 @@ def cities(state: str) -> list[str]:
     """Nearest-city values within a state, for the second filter level."""
     return sorted(
         {
-            d["nearest_city"].strip()
+            (d.get("nearest_city") or "").strip()
             for d in load_catalogue()
-            if d["state"] == state and d["nearest_city"].strip() and d["has_coords"]
+            if d["state"] == state
+            and (d.get("nearest_city") or "").strip()
+            and d["has_coords"]
         }
     )
 
@@ -274,6 +323,7 @@ def search(
     city: str | None = None,
     q: str | None = None,
     simulatable_only: bool = True,
+    kind: str | None = None,
     limit: int = 500,
 ) -> list[dict]:
     """Filter the catalogue.
@@ -282,19 +332,29 @@ def search(
         state: exact state name.
         city: exact nearest-city name.
         q: case-insensitive substring across name, river and city.
-        simulatable_only: keep only dams with coordinates, a height and a
-            storage capacity - the three things a scenario cannot run without.
+        simulatable_only: keep only rows a scenario can actually be built on -
+            see is_simulatable(), which asks less of a natural dam than of an
+            engineered one because less is published about one.
+        kind: 'engineered' or 'natural' to see one half on its own. None
+            returns both, which is the default because the operator's question
+            is about the water, not about who built the barrier.
         limit: cap the result size.
 
     Returns:
-        Matching dams, largest reservoir first, so the interesting ones are on
-        top rather than whichever happened to be listed first.
+        Matching dams, largest reservoir first. Natural dams have no published
+        capacity, so they sort after every engineered dam that has one rather
+        than being ranked on a zero we invented for them.
     """
     rows = load_catalogue()
+    if kind:
+        rows = [d for d in rows if d.get("kind", "engineered") == kind]
     if state:
         rows = [d for d in rows if d["state"] == state]
     if city:
-        rows = [d for d in rows if d["nearest_city"].strip().lower() == city.strip().lower()]
+        rows = [
+            d for d in rows
+            if (d.get("nearest_city") or "").strip().lower() == city.strip().lower()
+        ]
     if q:
         needle = q.lower()
         rows = [
@@ -302,12 +362,13 @@ def search(
             for d in rows
             if needle in d["name"].lower()
             or needle in (d["river"] or "").lower()
-            or needle in (d["nearest_city"] or "").lower()
+            or needle in (d.get("nearest_city") or "").lower()
+            or needle in (d.get("state") or "").lower()
         ]
     if simulatable_only:
-        rows = [d for d in rows if d["has_coords"] and d["height_m"] and d["gross_storage_mcm"]]
+        rows = [d for d in rows if is_simulatable(d)]
 
-    rows = sorted(rows, key=lambda d: -(d["gross_storage_mcm"] or 0.0))
+    rows = sorted(rows, key=lambda d: -(d.get("gross_storage_mcm") or 0.0))
     return rows[:limit]
 
 

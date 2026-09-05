@@ -144,6 +144,19 @@ def impounded_volume(
     cell_area = grid.cell_area_m2()
     volume = float(depth.sum() * cell_area)
 
+    # Where the crest sits inside the valley, for context. This is NOT the
+    # sensitivity that matters - see prepare_blockage, which perturbs the DEM
+    # itself. Moving the crest a centimetre changes this volume by a fraction
+    # of a percent on the Tsarap Chu, while a QUARTER OF A MILLIMETRE of
+    # elevation noise changes it eighteenfold, because the noise reroutes the
+    # drainage tree rather than raising the water.
+    def _volume_at(c: float) -> float:
+        m = up & (z < c)
+        m[r0, c0] = False
+        return float(np.where(m, c - z, 0.0).sum() * cell_area)
+
+    v_lo, v_hi = _volume_at(crest - 0.01), _volume_at(crest + 0.01)
+
     touches_edge = bool(
         lake[0, :].any() or lake[-1, :].any() or lake[:, 0].any() or lake[:, -1].any()
     )
@@ -158,6 +171,8 @@ def impounded_volume(
         "bed_elev_m": round(bed, 2),
         "max_depth_m": round(float(depth.max()), 2),
         "lake": lake,
+        "volume_mcm_crest_minus_1cm": round(v_lo / 1e6, 4),
+        "volume_mcm_crest_plus_1cm": round(v_hi / 1e6, 4),
         "truncated_by_domain": touches_edge,
         "note": (
             "Volume is a LOWER BOUND - the lake reaches the edge of the model "
@@ -302,6 +317,15 @@ class BlockageResult:
     breach_source: str
     time_to_overtop_hr: float | None
     inflow_cumecs: float | None
+    # How hard the volume holds. See impounded_volume - on some barriers a
+    # centimetre of crest is worth an order of magnitude, and a run that does
+    # not say so is quoting a number it cannot defend.
+    volume_mcm_crest_minus_1cm: float
+    volume_mcm_crest_plus_1cm: float
+    volume_mcm_under_perturbed_dem: float
+    volume_swing_pct: float
+    volume_is_knife_edge: bool
+    sensitivity_note: str
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -343,6 +367,37 @@ def prepare_blockage(
         direction = tr.d8_flow_direction(dem, grid.cellsize_m())
 
     lake = impounded_volume(dem, grid, rc, blockage_height_m, direction)
+
+    # IS THIS VOLUME IDENTIFIABLE AT ALL? Measured, not assumed, because on one
+    # of our own reaches it is not.
+    #
+    # The lake is the catchment of the barrier flooded to the crest, and the
+    # catchment comes from D8 flow directions. On conditioned terrain - pit
+    # filled, channel carved - large areas are nearly flat, and there the
+    # direction of a cell is decided by differences far below the DEM's own
+    # accuracy. Rounding the Tsarap Chu's conditioned DEM to float32, a change
+    # of 0.00024 m, flipped 428 of 123,256 directions and moved the impounded
+    # volume from 46.10 MCM to 2.51 MCM. Eighteen times, from a quarter of a
+    # millimetre. A tributary joins or leaves the catchment; nothing about the
+    # water changes.
+    #
+    # So the same perturbation is applied deliberately and the answer published
+    # beside the headline. A run whose volume moves by more than 10% under it
+    # is quoting a number this terrain cannot support, and says so.
+    z32 = np.asarray(dem, np.float64).astype(np.float32).astype(np.float64)
+    try:
+        lake_p = impounded_volume(
+            z32, grid, rc, blockage_height_m,
+            tr.d8_flow_direction(z32, grid.cellsize_m()),
+        )
+        v_pert = lake_p["volume_mcm"]
+    except ValueError:
+        # The perturbed terrain impounds nothing at all, which is the most
+        # extreme form of the same finding.
+        v_pert = 0.0
+    v0 = lake["volume_mcm"]
+    swing = abs(v_pert - v0) / v0 if v0 > 0 else 0.0
+
     breach = blockage_breach(lake["volume_m3"], blockage_height_m, material)
     overtop = time_to_overtop(lake["volume_m3"], inflow_cumecs or 0.0)
 
@@ -358,5 +413,19 @@ def prepare_blockage(
         breach_source=breach.source,
         time_to_overtop_hr=overtop.get("hours"),
         inflow_cumecs=inflow_cumecs,
+        volume_mcm_crest_minus_1cm=lake["volume_mcm_crest_minus_1cm"],
+        volume_mcm_crest_plus_1cm=lake["volume_mcm_crest_plus_1cm"],
+        volume_mcm_under_perturbed_dem=v_pert,
+        volume_swing_pct=round(100.0 * swing, 1),
+        volume_is_knife_edge=bool(swing > 0.10),
+        sensitivity_note=(
+            f"NOT IDENTIFIABLE: rounding the DEM by a quarter of a millimetre "
+            f"moves this lake from {v0:g} to {v_pert:g} MCM, because it reroutes "
+            f"the drainage that defines the catchment. Treat the volume, and "
+            f"every discharge derived from it, as an order of magnitude."
+            if swing > 0.10 else
+            f"Stable: a quarter-millimetre DEM perturbation moves the volume "
+            f"{100.0 * swing:.1f}%."
+        ),
     )
     return breach, result

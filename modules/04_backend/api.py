@@ -38,7 +38,14 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from shared.contract import ENGINES, FAILURE_MODES, SCHEMA_VERSION
+from shared.contract import (
+    DAM_FAILURE_MODES,
+    ENGINES,
+    FAILURE_MODE_INFO,
+    FAILURE_MODES,
+    RIVER_FAILURE_MODES,
+    SCHEMA_VERSION,
+)
 from shared.io import RunFolder, list_runs, read_json, read_meta
 from shared.validate import validate_run
 
@@ -48,6 +55,13 @@ from .scenario import DEMO_SITES, ScenarioSpec, SiteSpec
 from .solver import warm_up_jit
 
 OUTPUTS = Path("outputs")
+
+LOCAL_DEM_DIR = Path("data") / "dem_local"
+"""Where a DEM the team downloaded by hand is dropped so a run can use it.
+
+FABDEM is CC BY-NC-SA tiles from Bristol and CartoDEM comes from Bhuvan -
+neither is fetchable from OpenTopography, so 'any other DEM' means a file
+already on this machine. Only filenames inside this folder are accepted."""
 
 
 # ==========================================================================
@@ -272,9 +286,39 @@ class RunRequest(BaseModel):
             "GET /api/rivers/{river_id}."
         ),
     )
+    event_id: str | None = Field(
+        None,
+        description=(
+            "A historic natural-dam failure, e.g. 'rishiganga2021'. Four of the "
+            "five events the problem statement names are natural dams on rivers "
+            "with no entry in the CWC register, so neither dam_id nor river_id "
+            "can reach them. This does: the coordinate and the debris height "
+            "come from the event record and the mode is forced to "
+            "'blockage_breach'. The figures are approximate and say so - see "
+            "GET /api/events."
+        ),
+    )
     failure_mode: Literal[
-        "overtopping", "piping", "gated_release", "blockage_breach"
-    ] = "overtopping"
+        "overtopping",
+        "piping",
+        "foundation_failure",
+        "spillway_blockage",
+        "gated_release",
+        "blockage_breach",
+        "glof_moraine",
+        "river_flood",
+    ] = Field(
+        "overtopping",
+        description=(
+            "How the water gets out. Eight modes, each a different calculation "
+            "- see GET /api/enums -> failure_mode_info for what each one "
+            "computes and which real failure it was written against. Four of "
+            "them need a structure (overtopping, piping, foundation_failure, "
+            "spillway_blockage, gated_release) and the validator rejects them "
+            "on a river reach, which has no crest, embankment, foundation or "
+            "gates."
+        ),
+    )
     reservoir_level_frac: float = Field(1.0, ge=0.0, le=1.0)
     breach_regression: Literal["froehlich2008", "vonthun1990", "macdonald1984"] = (
         "froehlich2008"
@@ -334,7 +378,239 @@ class RunRequest(BaseModel):
     """Use module 01's downloaded, conditioned DEM. False falls back to the
     synthetic valley, which is fast but marks the run is_fake and bars it from
     the demo."""
+
+    # --- input datasets, deliverable (ii) -------------------------------
+    dem_source: Literal[
+        "COP30", "SRTM", "NASADEM", "ALOS", "ASTER", "FABDEM", "CartoDEM"
+    ] = Field(
+        "COP30",
+        description=(
+            "Which elevation model to run on. NTRO's dataset link names "
+            "'ASTER/ STRM or any other DEM' and all of these are supported by "
+            "name. COP30, SRTM, NASADEM, ALOS and ASTER are fetched from "
+            "OpenTopography for any bbox; FABDEM and CartoDEM are not "
+            "redistributable, so they need local_dem pointing at a tile you "
+            "already hold. The choice is recorded in meta.json -> dem.source."
+        ),
+    )
+    local_dem: str | None = Field(
+        None,
+        description=(
+            "Filename of a DEM already on disk, inside data/dem_local/. This is "
+            "the 'any other DEM' entry point: FABDEM tiles, CartoDEM, a state "
+            "LiDAR product. Only a name is accepted, never a path - see "
+            "GET /api/enums -> local_dems for what is present."
+        ),
+    )
+    bathymetry: bool = Field(
+        True,
+        description=(
+            "Estimate a channel bed under the water surface the DEM measured, "
+            "instead of burning a flat trench. A 30 m DEM cannot see the bed, "
+            "so this is an assumption either way and meta.json says which one."
+        ),
+    )
+    manning_source: Literal["auto", "constant"] = Field(
+        "auto",
+        description=(
+            "'auto' derives per-cell roughness from ESA WorldCover land cover - "
+            "this is the satellite imagery feeding the model rather than only "
+            "the validation. 'constant' uses manning_n everywhere, which is "
+            "what to pick when the run must be reproducible offline."
+        ),
+    )
+
+    # --- resolution and routing, the knobs that move the numbers --------
+    corridor_width_km: float = Field(
+        12.0, gt=0, le=60,
+        description=(
+            "Width of the modelled corridor either side of the traced channel. "
+            "Widen it when the floodplain is broader than the domain; every "
+            "extra kilometre costs cells."
+        ),
+    )
+    output_step_hr: float = Field(
+        0.25, ge=0.02, le=2.0,
+        description=(
+            "Spacing of the saved output series. Finer resolves the arrival "
+            "and peak timing more sharply and writes more frames; the solver "
+            "timestep is unaffected."
+        ),
+    )
+    inflow_cumecs: float = Field(
+        0.0, ge=0.0, le=200000,
+        description=(
+            "Steady inflow into the reservoir or the impounded lake during the "
+            "event, m3/s. Left at 0 the reservoir only empties. For a landslide "
+            "dam this is what decides how long the lake takes to fill and "
+            "overtop - see blockage.time_to_overtop."
+        ),
+    )
+    storage_exponent: float = Field(
+        2.7, ge=1.0, le=5.0,
+        description=(
+            "k in the storage-elevation curve S = C * h^k. 2.7 is the default "
+            "for a valley reservoir; a broad flat reservoir is nearer 2.0 and a "
+            "narrow gorge nearer 3.5. It changes how fast the level falls."
+        ),
+    )
+
+    # --- foundation / abutment failure ----------------------------------
+    foundation_breach_frac: float = Field(
+        0.8, gt=0.0, le=1.0,
+        description=(
+            "Only for failure_mode='foundation_failure'. How much of the crest "
+            "goes when the structure is displaced. 0.8 by default because at "
+            "St Francis the centre section stood and at Malpasset an abutment "
+            "remained."
+        ),
+    )
+    foundation_base_width_ratio: float = Field(
+        0.25, gt=0.0, le=1.0,
+        description=(
+            "Opening width at the bed as a fraction of its width at the crest. "
+            "A concrete dam stands in a gorge, so the crest length is the "
+            "valley width at the TOP; 0.25 is a steep gorge and 1.0 would make "
+            "the opening rectangular, which over-predicts the peak badly."
+        ),
+    )
+    collapse_time_min: float = Field(
+        2.0, gt=0.0, le=120.0,
+        description=(
+            "Minutes from first movement to the opening fully formed. Minutes, "
+            "not hours - this is a structural collapse, not erosion."
+        ),
+    )
+
+    # --- spillway / gate blockage ---------------------------------------
+    residual_spillway_frac: float = Field(
+        0.0, ge=0.0, le=1.0,
+        description=(
+            "Only for failure_mode='spillway_blockage'. What fraction of the "
+            "design outlet capacity still works. 0.0 is a complete blockage; "
+            "Banqiao's gates were silted rather than removed, so intermediate "
+            "values are the realistic ones."
+        ),
+    )
+    blockage_start_level_frac: float = Field(
+        0.85, ge=0.0, le=1.0,
+        description=(
+            "How full the reservoir is when the outlets are lost. The filling "
+            "phase starts here; the level at failure is whatever it reaches."
+        ),
+    )
+
+    # --- glacial lake outburst ------------------------------------------
+    moraine_height_m: float = Field(
+        30.0, gt=0, le=300,
+        description=(
+            "Only for failure_mode='glof_moraine'. Height of the moraine ridge "
+            "above the downstream valley floor. As with a landslide dam, the "
+            "impounded volume is read off the DEM rather than assumed."
+        ),
+    )
+    moraine_erodible_depth_m: float | None = Field(
+        None, gt=0, le=300,
+        description=(
+            "How deep the breach can cut into the moraine. None means 0.6 of "
+            "the ridge height. Below this is the bedrock sill and any buried "
+            "ice core, and the breach stops there."
+        ),
+    )
+    glof_breach_width_m: float | None = Field(
+        None, gt=0, le=2000,
+        description=(
+            "Final breach bottom width. None means one times the erodible "
+            "depth. The most sensitive number in the mode: the published South "
+            "Lhonak scenarios span 4,311 / 8,000 / 12,487 m3/s for 20 / 30 / "
+            "40 m widths on the same lake."
+        ),
+    )
+    avalanche_surge_frac: float = Field(
+        0.0, ge=0.0, le=1.0,
+        description=(
+            "Fraction of the lake displaced over the crest by an entering ice "
+            "or rock mass, ahead of any breach. Zero by default: it is a "
+            "volume over a duration, so it sets the peak directly and will "
+            "dominate the breach at more than a few percent."
+        ),
+    )
+    avalanche_surge_duration_s: float = Field(600.0, gt=0, le=7200)
+    lake_area_km2: float | None = Field(
+        None, gt=0, le=500,
+        description=(
+            "Lake surface area, used only when the DEM cannot see the lake. "
+            "The volume then falls back on Huggel et al. (2002) "
+            "V = 0.104 A^1.42, which the source reports with roughly a "
+            "factor-of-two scatter."
+        ),
+    )
+
+    # --- river flood wave -----------------------------------------------
+    peak_discharge_cumecs: float = Field(
+        2000.0, gt=0, le=500000,
+        description=(
+            "Only for failure_mode='river_flood'. Peak of the flood wave "
+            "entering the reach. There is deliberately no direction parameter "
+            "anywhere in this mode - where the water goes is read off the DEM."
+        ),
+    )
+    time_to_peak_hr: float = Field(3.0, gt=0, le=240)
+    flood_duration_hr: float | None = Field(
+        None, gt=0, le=480,
+        description=(
+            "Total flood duration. None means 2.67 times the time to peak, the "
+            "NRCS dimensionless unit hydrograph ratio."
+        ),
+    )
+    base_flow_cumecs: float = Field(0.0, ge=0.0, le=200000)
+
     notes: str = ""
+
+    def terrain_options(self) -> dict:
+        """The module 01 provider settings this request asks for.
+
+        Kept out of ScenarioSpec because they describe how the terrain was
+        obtained, not what failed. `dem_source` is the exception - it belongs
+        in meta.json next to the result, so the spec carries it.
+        """
+        return {
+            "local_dem": self.resolved_local_dem(),
+            "bathymetry": self.bathymetry,
+            "manning_source": self.manning_source,
+            # manning_n only reaches the solver through the roughness raster,
+            # so a constant run has to hand it to the provider. With 'auto' it
+            # is ignored on purpose: land cover wins over a typed-in number.
+            "manning_constant": self.manning_n if self.manning_source == "constant" else None,
+        }
+
+    def resolved_local_dem(self) -> Path | None:
+        """The local DEM as a real path, or a 422 explaining why it is not one."""
+        if not self.local_dem:
+            if self.dem_source in ("FABDEM", "CartoDEM"):
+                raise HTTPException(
+                    422,
+                    f"dem_source {self.dem_source!r} is not redistributable and "
+                    f"cannot be downloaded. Put the tile in {LOCAL_DEM_DIR}/ and "
+                    f"pass local_dem with its filename, or pick one of "
+                    f"COP30, SRTM, NASADEM, ALOS, ASTER.",
+                )
+            return None
+        name = Path(self.local_dem).name
+        if name != self.local_dem:
+            # Only a filename. A path here would let a request read any file
+            # on the machine the API runs on.
+            raise HTTPException(
+                422, f"local_dem must be a filename inside {LOCAL_DEM_DIR}/, not a path"
+            )
+        path = LOCAL_DEM_DIR / name
+        if not path.is_file():
+            raise HTTPException(
+                404,
+                f"no DEM named {name!r} in {LOCAL_DEM_DIR}/. "
+                f"GET /api/enums lists what is there.",
+            )
+        return path
 
     def to_spec(self) -> ScenarioSpec:
         design_spillway: float | None = None
@@ -345,12 +621,37 @@ class RunRequest(BaseModel):
             dam = catalogue.get(self.dam_id)
             if dam is None:
                 raise HTTPException(404, f"unknown dam_id {self.dam_id!r}")
-            if not (dam["has_coords"] and dam["height_m"] and dam["gross_storage_mcm"]):
+            if not catalogue.is_simulatable(dam):
                 raise HTTPException(
                     422,
-                    f"{dam['name']} cannot be simulated: the register has no "
+                    f"{dam['name']} cannot be simulated: the catalogue has no "
                     f"coordinates, height or storage capacity for it.",
                 )
+            natural = dam.get("kind") == "natural"
+            if natural:
+                # A natural dam has no published storage and there is no honest
+                # way to invent one - it would feed the breach regression
+                # directly. The volume is read off the terrain instead, so the
+                # capacity here is a placeholder that runner.py replaces, and
+                # only the modes that do that are allowed.
+                if self.failure_mode not in ("blockage_breach", "glof_moraine"):
+                    raise HTTPException(
+                        422,
+                        f"{dam['name']} is a natural dam - a moraine or a debris "
+                        f"barrier. It has no embankment to overtop, no "
+                        f"foundation and no gates. Post "
+                        f"failure_mode='glof_moraine' or 'blockage_breach'.",
+                    )
+                default_h = type(self).model_fields["blockage_height_m"].default
+                if self.blockage_height_m == default_h:
+                    self.blockage_height_m = float(dam["height_m"])
+                default_m = type(self).model_fields["moraine_height_m"].default
+                if self.moraine_height_m == default_m:
+                    self.moraine_height_m = float(dam["height_m"])
+                capacity_mcm = 1.0
+            else:
+                capacity_mcm = float(dam["gross_storage_mcm"])
+
             site = SiteSpec(
                 name=dam["name"],
                 lat=dam["lat"],
@@ -358,13 +659,82 @@ class RunRequest(BaseModel):
                 river=dam["river"] or "",
                 state=dam["state"] or "",
                 dam_height_m=float(dam["height_m"]),
-                reservoir_capacity_mcm=float(dam["gross_storage_mcm"]),
-                source="CWC NRLD 2019",
+                reservoir_capacity_mcm=capacity_mcm,
+                source=dam.get("source") or "CWC NRLD 2019",
+                kind=dam.get("kind", "engineered"),
+                crest_length_m=(
+                    float(dam["length_m"]) if dam.get("length_m") else None
+                ),
+                height_source=dam.get("height_source", ""),
             )
             # The register carries the design discharge capacity for many dams.
             # It is a measured number and beats any assumption we could make
             # about how much water the outlet works can pass.
             design_spillway = dam.get("spillway_cumecs")
+            if natural:
+                reported = dam.get("reported_impoundment_mcm")
+                bits = [
+                    f"Natural dam. Barrier height {dam['height_m']:.0f} m "
+                    f"({dam.get('height_source') or 'unstated source'}). No "
+                    f"published storage exists for it; this run reads the "
+                    f"impounded volume off the DEM."
+                ]
+                if dam.get("mechanism"):
+                    bits.append(f"Reported mechanism: {dam['mechanism']}.")
+                if reported:
+                    bits.append(
+                        f"Reported impoundment {reported:g} MCM, carried for "
+                        f"comparison and NOT used to drive the run."
+                    )
+                note = " ".join(bits)
+                self.notes = f"{self.notes} {note}".strip() if self.notes else note
+        elif self.event_id:
+            # The entry point for the failures NTRO actually names. No register
+            # lists these rivers, so this is the only way to reach them.
+            from importlib import import_module
+
+            events = import_module("modules.01_geodata.events")
+            ev = events.get(self.event_id)
+            if ev is None:
+                raise HTTPException(404, f"unknown event_id {self.event_id!r}")
+            if self.failure_mode != "blockage_breach":
+                raise HTTPException(
+                    422,
+                    f"{ev['name']} ({ev['year']}) is a natural dam. Post "
+                    f"failure_mode='blockage_breach'; there is no embankment to "
+                    f"overtop and no gate to open.",
+                )
+            # The debris height is the event's unless the operator overrode it -
+            # which is the whole point of having a scenario tool rather than a
+            # replay: "what if the barrier had been 60 m instead of 30".
+            if self.blockage_height_m == type(self).model_fields["blockage_height_m"].default:
+                self.blockage_height_m = float(ev["blockage_height_m"])
+            site = SiteSpec(
+                name=f"{ev['name']} {ev['year']}",
+                lat=float(ev["lat"]),
+                lon=float(ev["lon"]),
+                river=ev["river"],
+                state=ev["state"],
+                # Both are placeholders in blockage mode, exactly as for a
+                # river point: runner.py replaces the height with
+                # blockage_height_m and the capacity with what the DEM holds
+                # behind the debris. The REPORTED volume is deliberately not
+                # used as the capacity - it is carried in notes so the run can
+                # be compared against it, not driven by it.
+                dam_height_m=self.blockage_height_m,
+                reservoir_capacity_mcm=1.0,
+                source=ev["source"],
+            )
+            reported = ev.get("reported_impoundment_mcm")
+            note = (
+                f"Historic event: {ev['name']} ({ev['year']}), {ev['mechanism']}. "
+                f"Coordinates and debris height are APPROXIMATE - {ev['source']}. "
+                f"Reported impoundment "
+                + (f"{reported:g} MCM" if reported else "not published")
+                + "; this run uses the volume read off the DEM. The trigger is "
+                "not modelled and no observed extent has been compared."
+            )
+            self.notes = f"{self.notes} {note}".strip() if self.notes else note
         elif self.river_id:
             # The problem statement asks for "any River" and for river blockage,
             # and four of the five events it names are natural dams rather than
@@ -382,16 +752,19 @@ class RunRequest(BaseModel):
                     f"{river['name']} has {river['point_count']} point(s); "
                     f"river_point_index {self.river_point_index} is out of range.",
                 )
-            if self.failure_mode != "blockage_breach":
-                # A river has no gates and no embankment to overtop. Silently
-                # switching the mode would run a scenario the operator did not
-                # ask for, so this refuses and says which mode applies.
+            if self.failure_mode not in RIVER_FAILURE_MODES:
+                # A river has no crest, no embankment, no foundation and no
+                # gates. Silently switching the mode would run a scenario the
+                # operator did not ask for, so this refuses and says which
+                # modes apply.
                 raise HTTPException(
                     422,
-                    f"failure_mode {self.failure_mode!r} needs a dam. A river "
-                    "entry point models a natural blockage - post "
-                    "failure_mode='blockage_breach' with blockage_height_m, or "
-                    "pick a dam_id instead.",
+                    f"failure_mode {self.failure_mode!r} needs a dam. On a "
+                    f"river reach the water either arrives as a flood wave or "
+                    f"is released by something natural failing across the "
+                    f"channel. Post one of: "
+                    f"{', '.join(RIVER_FAILURE_MODES)}, or pick a dam_id "
+                    f"instead.",
                 )
             site = SiteSpec(
                 name=f"{river['name']} at {pt['name']}",
@@ -407,6 +780,7 @@ class RunRequest(BaseModel):
                 dam_height_m=self.blockage_height_m,
                 reservoir_capacity_mcm=1.0,
                 source=river["source"],
+                kind="natural",
             )
         elif self.site_key:
             site = DEMO_SITES.get(self.site_key)
@@ -427,11 +801,35 @@ class RunRequest(BaseModel):
             breach_width_m=self.breach_width_m,
             formation_time_hr=self.formation_time_hr,
             reach_length_km=self.reach_length_km,
+            corridor_width_km=self.corridor_width_km,
             cellsize_m=self.cellsize_m,
             end_hr=self.end_hr,
+            output_step_hr=self.output_step_hr,
             scheme=self.scheme,
             manning_n=self.manning_n,
+            inflow_cumecs=self.inflow_cumecs,
+            storage_exponent=self.storage_exponent,
+            # A run that says COP30 in meta.json must have been solved on
+            # COP30, so the requested source travels with the scenario rather
+            # than being decided again further down.
+            dem_source=self.dem_source if self.real_terrain else "SYNTHETIC",
             blockage_height_m=self.blockage_height_m,
+            foundation_breach_frac=self.foundation_breach_frac,
+            foundation_base_width_ratio=self.foundation_base_width_ratio,
+            collapse_time_min=self.collapse_time_min,
+            residual_spillway_frac=self.residual_spillway_frac,
+            blockage_start_level_frac=self.blockage_start_level_frac,
+            moraine_height_m=self.moraine_height_m,
+            moraine_erodible_depth_m=self.moraine_erodible_depth_m,
+            glof_breach_width_m=self.glof_breach_width_m,
+            avalanche_surge_frac=self.avalanche_surge_frac,
+            avalanche_surge_duration_s=self.avalanche_surge_duration_s,
+            lake_area_km2=self.lake_area_km2,
+            peak_discharge_cumecs=self.peak_discharge_cumecs,
+            time_to_peak_hr=self.time_to_peak_hr,
+            flood_duration_hr=self.flood_duration_hr,
+            base_flow_cumecs=self.base_flow_cumecs,
+            source_kind="river" if self.river_id else "dam",
             gate_opening_frac=self.gate_opening_frac,
             gate_open_time_hr=self.gate_open_time_hr,
             design_spillway_cumecs=(
@@ -693,13 +1091,45 @@ def enums() -> dict:
     """Everything the UI needs to build its dropdowns without hardcoding."""
     from shared.contract import HAZARD_CLASSES, WET_THRESHOLD_M
 
+    # What is on disk right now, not what we wish were there. An empty list
+    # means nobody has downloaded a FABDEM or CartoDEM tile yet, and the UI
+    # says so instead of offering a source that cannot run.
+    local_dems: list[str] = []
+    if LOCAL_DEM_DIR.is_dir():
+        local_dems = sorted(
+            p.name
+            for p in LOCAL_DEM_DIR.iterdir()
+            if p.is_file() and p.suffix.lower() in (".tif", ".tiff", ".hgt", ".asc")
+        )
+
     return {
         "engines": list(ENGINES),
         "failure_modes": list(FAILURE_MODES),
+        # Which modes are legal against which kind of source, and what each one
+        # actually computes. The UI builds its case list from this rather than
+        # carrying a second copy that can drift out of step with the validator.
+        "dam_failure_modes": list(DAM_FAILURE_MODES),
+        "river_failure_modes": list(RIVER_FAILURE_MODES),
+        "failure_mode_info": FAILURE_MODE_INFO,
         "breach_regressions": ["froehlich2008", "vonthun1990", "macdonald1984"],
         "schemes": ["swe", "inertial"],
         "hazard_classes": list(HAZARD_CLASSES),
         "wet_threshold_m": WET_THRESHOLD_M,
+        # NTRO's dataset link is "ASTER/ STRM or any other DEM". These are the
+        # ones the tool can actually run on, split by whether we can fetch them.
+        "dem_sources_fetchable": ["COP30", "SRTM", "NASADEM", "ALOS", "ASTER"],
+        "dem_sources_local": ["FABDEM", "CartoDEM"],
+        "local_dems": local_dems,
+        "local_dem_dir": str(LOCAL_DEM_DIR),
+        "manning_sources": ["auto", "constant"],
+        # Every scalar default the solver runs on, read off the request model
+        # itself. The dashboard renders its advanced controls from this, so a
+        # default can never drift between the two.
+        "run_defaults": {
+            name: f.default
+            for name, f in RunRequest.model_fields.items()
+            if isinstance(f.default, (int, float, str, bool)) or f.default is None
+        },
     }
 
 
@@ -789,6 +1219,38 @@ def river_detail(river_id: str) -> dict:
     return r
 
 
+@app.get("/api/events", tags=["events"])
+def events() -> dict:
+    """The historic natural-dam failures, as run-able entry points.
+
+    Four of the five failures the problem statement names are natural dams on
+    rivers the CWC register does not list, so neither the dam picker nor the
+    river index can reach them. Every figure here is approximate and every
+    record says so.
+    """
+    from importlib import import_module
+
+    ev = import_module("modules.01_geodata.events")
+    rows = ev.all_events()
+    return {
+        "events": rows,
+        "count": len(rows),
+        "named_by_ntro": sum(1 for r in rows if r["named_in_problem_statement"]),
+        "source": ev.SOURCE,
+    }
+
+
+@app.get("/api/events/{event_id}", tags=["events"])
+def event_detail(event_id: str) -> dict:
+    from importlib import import_module
+
+    ev = import_module("modules.01_geodata.events")
+    row = ev.get(event_id)
+    if row is None:
+        raise HTTPException(404, f"unknown event_id {event_id!r}")
+    return row
+
+
 @app.get("/api/dams/states", tags=["dams"])
 def dam_states() -> dict:
     """Every state with at least one simulatable dam."""
@@ -827,6 +1289,44 @@ def dam_search(
     except FileNotFoundError as exc:
         raise HTTPException(503, str(exc))
     return {"count": len(rows), "dams": rows, "source": "CWC NRLD 2019"}
+
+
+@app.get("/api/dams/kinds", tags=["dams"])
+def dam_kinds() -> dict:
+    """How the catalogue splits, and what each half can be asked for.
+
+    The two are one list in the picker on purpose - the operator's question is
+    about the water, not about who built the barrier - but they are not
+    interchangeable, and this says how.
+    """
+    cat = _catalogue()
+    rows = cat.load_catalogue()
+    natural = [d for d in rows if d.get("kind") == "natural"]
+    return {
+        "engineered": {
+            "count": sum(1 for d in rows if d.get("kind") != "natural"),
+            "source": "CWC National Register of Large Dams, 2019",
+            "has_storage": True,
+            "failure_modes": list(DAM_FAILURE_MODES),
+        },
+        "natural": {
+            "count": len(natural),
+            "source": (
+                "supplied natural-dam coordinate dataset, plus the historic "
+                "natural-dam failures"
+            ),
+            "has_storage": False,
+            "why_no_storage": (
+                "No natural dam has a published capacity. The impounded volume "
+                "is read off the DEM at run time instead of being invented."
+            ),
+            "failure_modes": ["glof_moraine", "blockage_breach"],
+            "height_sources": sorted(
+                {d.get("height_source", "") for d in natural if d.get("height_source")}
+            ),
+            "historic": sum(1 for d in natural if d.get("historic")),
+        },
+    }
 
 
 @app.get("/api/dams/{dam_id}", tags=["dams"])
@@ -870,6 +1370,9 @@ def create_run(req: RunRequest, background: BackgroundTasks) -> dict:
     errs = spec.validate()
     if errs:
         raise HTTPException(422, {"invalid_scenario": errs})
+    # Raises 422/404 here, before a run_id exists, rather than forty seconds
+    # into a background solve that was never going to find the file.
+    terrain_opts = req.terrain_options()
 
     from shared.io import make_run_id, next_sequence
 
@@ -877,7 +1380,9 @@ def create_run(req: RunRequest, background: BackgroundTasks) -> dict:
     run_id = make_run_id(spec.site_slug, spec.scenario_slug, spec.engine, seq)
 
     REGISTRY.start(run_id, spec)
-    background.add_task(_execute, run_id, spec, req.keep_frames, req.real_terrain)
+    background.add_task(
+        _execute, run_id, spec, req.keep_frames, req.real_terrain, terrain_opts
+    )
 
     return {
         "run_id": run_id,
@@ -888,7 +1393,7 @@ def create_run(req: RunRequest, background: BackgroundTasks) -> dict:
     }
 
 
-def _prepare_real(spec: ScenarioSpec, run_id: str):
+def _prepare_real(spec: ScenarioSpec, run_id: str, terrain_opts: dict | None = None):
     """Trace the river, fetch terrain, download exposure. Returns (terrain, exposure).
 
     Every step here can fail on a network hiccup, and none of them should take
@@ -930,18 +1435,24 @@ def _prepare_real(spec: ScenarioSpec, run_id: str):
     REGISTRY.publish(
         run_id, {"stage": "fetching terrain", "pct": 0, "node": "terrain"}
     )
+    opts = terrain_opts or {}
+    source = spec.dem_source if spec.dem_source != "SYNTHETIC" else "COP30"
     try:
         terrain = gd.RealTerrain(
             site=site_slug,
-            source=spec.dem_source if spec.dem_source != "SYNTHETIC" else "COP30",
+            source=source,
+            local_dem=opts.get("local_dem"),
+            bathymetry=opts.get("bathymetry", True),
+            manning_source=opts.get("manning_source", "auto"),
+            manning_constant=opts.get("manning_constant"),
             dam_lonlat=plan.dam_lonlat if plan else (spec.site.lon, spec.site.lat),
             reach_length_km=spec.reach_length_km,
         )
         REGISTRY.finish_node(
             run_id,
             "terrain",
-            f"{spec.dem_source if spec.dem_source != 'SYNTHETIC' else 'COP30'} "
-            f"fetched and conditioned",
+            f"{source} fetched and conditioned"
+            + (f" from {Path(opts['local_dem']).name}" if opts.get("local_dem") else ""),
         )
     except Exception as exc:
         terrain = SyntheticTerrain()
@@ -990,7 +1501,11 @@ def _gated_progress(run_id: str):
 
 
 def _execute(
-    run_id: str, spec: ScenarioSpec, keep_frames: bool, real_terrain: bool = True
+    run_id: str,
+    spec: ScenarioSpec,
+    keep_frames: bool,
+    real_terrain: bool = True,
+    terrain_opts: dict | None = None,
 ) -> None:
     """Runs on the background thread. Never raises into the request."""
     try:
@@ -1007,7 +1522,7 @@ def _execute(
         )
 
         if real_terrain:
-            terrain, exposure = _prepare_real(spec, run_id)
+            terrain, exposure = _prepare_real(spec, run_id, terrain_opts)
         else:
             terrain, exposure = SyntheticTerrain(), None
             # Synthetic terrain means module 01 did not run. Say that on the
@@ -1183,7 +1698,67 @@ class SurrogateRequest(BaseModel):
     reservoir_level_frac: float = Field(1.0, ge=0.0, le=1.0)
     capacity_mcm: float = Field(5.0, gt=0)
     dam_height_m: float = Field(60.0, gt=0)
-    formation_time_hr: float = Field(0.5, gt=0)
+    formation_time_hr: float | None = Field(
+        None,
+        gt=0,
+        description=(
+            "Leave None and the breach regression computes it from the height, "
+            "capacity and level, exactly as a real run would. Setting it asks "
+            "the emulator about a breach that forms at a time you chose."
+        ),
+    )
+    breach_regression: Literal["froehlich2008", "vonthun1990", "macdonald1984"] = (
+        "froehlich2008"
+    )
+
+
+@app.get("/api/surrogate/meta", tags=["ml"])
+def surrogate_meta() -> dict:
+    """What the emulator is, where it applies, and how wrong it is.
+
+    The UI reads this to decide whether a preview is even meaningful for the
+    site on screen. The emulator is trained per site - one fixed terrain - so
+    offering it everywhere would be the most convincing wrong answer we could
+    put in front of a juror.
+    """
+    from importlib import import_module
+
+    sg = import_module("modules.07_ml.surrogate")
+    metrics_path = sg.MODEL_DIR / "surrogate_metrics.json"
+    metrics = (
+        read_json(sg.MODEL_DIR, "surrogate_metrics.json")
+        if metrics_path.exists()
+        else {}
+    )
+
+    return {
+        "available": sg.MODEL_PATH.exists(),
+        "is_emulated": True,
+        "what": (
+            "A U-Net trained on this repository's own shallow-water solver. It "
+            "emulates the solver, it does not model reality, and its error is "
+            "measured against the solver alone."
+        ),
+        "site": sg.SITE,
+        "site_latlon": list(sg.SITE_LATLON),
+        "trained_on": {
+            "reach_length_km": sg.REACH_KM,
+            "corridor_width_km": sg.CORRIDOR_KM,
+            "cellsize_m": sg.CELLSIZE_M,
+            "end_hr": sg.END_HR,
+            "dem_source": "COP30",
+        },
+        "responds_to": list(sg.PARAMS),
+        "param_ranges": {k: list(v) for k, v in sg.PARAM_RANGES.items()},
+        # Everything the operator can now set that the emulator never saw. It
+        # cannot answer these, so the UI has to stop claiming it did.
+        "ignores": [
+            "dem_source", "cellsize_m", "corridor_width_km", "manning_source",
+            "manning_n", "bathymetry", "failure_mode", "inflow_cumecs",
+            "storage_exponent", "reach_length_km", "end_hr",
+        ],
+        "metrics": metrics,
+    }
 
 
 @app.post("/api/surrogate", tags=["ml"])
@@ -1194,11 +1769,36 @@ def surrogate_predict(req: SurrogateRequest) -> dict:
     simulation. The response says so in `is_emulated`, and the UI must label it
     - anything exported or quoted has to be recomputed with the real solver.
     """
-    try:
-        from importlib import import_module
+    from importlib import import_module
 
-        sg = import_module("modules.07_ml.surrogate")
-        out = sg.predict(req.model_dump())
+    sg = import_module("modules.07_ml.surrogate")
+
+    params = req.model_dump()
+    regression = params.pop("breach_regression")
+    derived_formation = False
+    if params["formation_time_hr"] is None:
+        # The emulator learned formation time as it comes out of the breach
+        # regression, so a preview has to derive it the same way the run would.
+        # Inventing 0.5 hr here would answer a different question from the one
+        # the Run button is about to ask.
+        from shared.hydro import breach_parameter_ensemble
+
+        # Same arguments runner.resolve_breach uses: the water actually stored
+        # at the starting level - through the power-law storage curve, not a
+        # straight fraction of capacity - and the dam height as breach height.
+        k = ScenarioSpec.__dataclass_fields__["storage_exponent"].default
+        ens = breach_parameter_ensemble(
+            req.capacity_mcm * 1e6 * req.reservoir_level_frac**k,
+            req.dam_height_m,
+        )
+        bp = ens.get(regression)
+        if bp is None:
+            raise HTTPException(422, f"unknown breach_regression {regression!r}")
+        params["formation_time_hr"] = float(bp.formation_time_hr)
+        derived_formation = True
+
+    try:
+        out = sg.predict(params)
     except FileNotFoundError as exc:
         raise HTTPException(503, f"surrogate not trained: {exc}")
     except Exception as exc:  # noqa: BLE001
@@ -1206,19 +1806,92 @@ def surrogate_predict(req: SurrogateRequest) -> dict:
 
     depth = out["max_depth"]
     wet = depth >= 0.05
+    n_wet = int(wet.sum())
+    cell_km2 = (sg.CELLSIZE_M / 1000.0) ** 2
+
+    # Which of the asked-for values sit outside the box the network was trained
+    # in. Extrapolation is not an error, but answering it silently would be.
+    outside = []
+    for name, (lo, hi) in sg.PARAM_RANGES.items():
+        v = getattr(req, name)
+        if not lo <= v <= hi:
+            outside.append(f"{name}={v:g} outside trained {lo:g}-{hi:g}")
+
+    arrival = out["arrival_time"][wet] if n_wet else None
+
     return {
         "is_emulated": True,
         "engine": "surrogate",
+        "site": sg.SITE,
         "inference_ms": out["inference_ms"],
-        "wet_cells": int(wet.sum()),
+        "wet_cells": n_wet,
         "max_depth_m": round(float(depth.max()), 2),
-        "flood_area_km2": None,
+        "flood_area_km2": round(n_wet * cell_km2, 2),
+        "cellsize_m": sg.CELLSIZE_M,
+        "earliest_arrival_hr": (
+            round(float(arrival.min()), 2) if arrival is not None and arrival.size else None
+        ),
+        "formation_time_hr": round(params["formation_time_hr"], 3),
+        "formation_time_source": (
+            f"{regression} regression" if derived_formation else "operator override"
+        ),
+        "extrapolating": outside,
         "warning": (
             "Emulated by a U-Net trained on the fast solver. Extent CSI against "
             "the solver is 0.91 on held-out scenarios. Not a simulation, and "
             "not validated against observed floods."
         ),
     }
+
+
+@app.get("/api/analysis/health", tags=["ml"])
+def analysis_health() -> dict:
+    """Whether the AI briefing can run here, and why not if it cannot.
+
+    The console asks before it draws the panel. Every other part of this API
+    works with the network unplugged and keeps working when this says no.
+    """
+    from . import analysis
+
+    return analysis.availability()
+
+
+@app.post("/api/runs/{run_id}/analysis", tags=["ml"], status_code=200)
+def run_analysis(run_id: str, refresh: bool = False) -> dict:
+    """Claude reads this run's own output files and writes the briefing.
+
+    Structured: headline, severity with its basis, findings with the payload
+    keys each rests on, priority actions, an exposure note, and the limits.
+    Then `analysis.check_grounding` matches every number in what it wrote back
+    against the run folder and reports any it could not find. A briefing whose
+    `grounding.grounded` is false is shown as unsafe, not hidden.
+
+    Cached per run under derived/ - the same run briefed twice is the same
+    briefing, and a demo should not pay for it twice.
+    """
+    run_dir = _require_run(run_id)
+    cache = _derived(run_id) / "analysis.json"
+    if cache.exists() and not refresh:
+        out = read_json(cache.parent, cache.name)
+        out["cached"] = True
+        return out
+
+    from . import analysis
+
+    state = analysis.availability()
+    if not state["available"]:
+        raise HTTPException(503, f"AI briefing unavailable: {state['reason']}")
+
+    try:
+        out = analysis.analyse(run_dir)
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc))
+    except Exception as exc:  # noqa: BLE001 - the message is the product here
+        raise HTTPException(502, f"{type(exc).__name__}: {exc}")
+
+    cache.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    out["cached"] = False
+    return out
 
 
 @app.get("/api/runs/{run_id}/hydrograph", tags=["runs"])

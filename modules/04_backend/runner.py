@@ -256,6 +256,60 @@ def resolve_breach(spec: ScenarioSpec) -> tuple[BreachParams, dict[str, BreachPa
     return chosen, ensemble
 
 
+def _breach_node_text(spec, breach, q_cumecs, spillway_block, glof_block) -> str:
+    """The one line the progress log prints for the release stage.
+
+    Per-mode, because "breach 84 m wide" is a lie about a controlled release
+    and says nothing at all about a blocked spillway that never overtopped.
+    """
+    peak = float(q_cumecs.max())
+    mode = spec.failure_mode
+
+    if mode == "gated_release":
+        return (
+            f"gates {spec.gate_opening_frac:.0%} open, peak {peak:,.0f} m3/s, "
+            f"no breach regression used"
+        )
+    if mode == "river_flood":
+        return (
+            f"flood wave, peak {peak:,.0f} m3/s at "
+            f"{spec.time_to_peak_hr:.2f} hr - nothing failed"
+        )
+    if mode == "foundation_failure":
+        return (
+            f"foundation failure, {breach.average_width_m:.0f} m opening in "
+            f"{breach.formation_time_hr * 60:.1f} min, peak {peak:,.0f} m3/s "
+            f"(critical-flow control, no regression)"
+        )
+    if mode == "spillway_blockage" and spillway_block is not None:
+        if not spillway_block["overtopped"]:
+            return (
+                f"outlets at {spillway_block['residual_capacity_frac']:.0%} "
+                f"capacity - the reservoir did NOT reach the crest, no breach"
+            )
+        return (
+            f"crest reached after {spillway_block['time_to_overtop_hr']:.2f} hr "
+            f"of filling, then breach {breach.average_width_m:.0f} m wide, "
+            f"peak {peak:,.0f} m3/s"
+        )
+    if mode == "glof_moraine" and glof_block is not None:
+        surge = (
+            f", surge {glof_block['avalanche_surge_frac']:.0%} of the lake"
+            if glof_block["avalanche_surge_frac"] > 0
+            else ""
+        )
+        return (
+            f"moraine breach {breach.average_width_m:.0f} m wide cutting "
+            f"{glof_block['erodible_depth_m']:.0f} m of a "
+            f"{glof_block['moraine_height_m']:.0f} m ridge, peak "
+            f"{peak:,.0f} m3/s{surge}"
+        )
+    return (
+        f"breach {breach.average_width_m:.0f} m wide in "
+        f"{breach.formation_time_hr:.2f} hr, peak {peak:,.0f} m3/s"
+    )
+
+
 def find_inflow_cells(
     grid: Grid, dem: np.ndarray, lat: float, lon: float, width_m: float
 ) -> list[tuple[int, int]]:
@@ -345,7 +399,9 @@ def run_scenario(
     # flood routes like any other flood, because it is one.
     blockage_block = None
     effective_capacity_m3 = spec.capacity_m3
-    if spec.failure_mode == "blockage_breach":
+    # A moraine-dammed lake is read off the terrain for the same reason a
+    # landslide barrier is: nobody publishes the storage behind either of them.
+    if spec.failure_mode in ("blockage_breach", "glof_moraine"):
         from .blockage import prepare_blockage
 
         acc = None
@@ -357,14 +413,30 @@ def run_scenario(
             grid=grid,
             lat=spec.site.lat,
             lon=spec.site.lon,
-            blockage_height_m=spec.blockage_height_m,
+            blockage_height_m=(
+                spec.moraine_height_m
+                if spec.failure_mode == "glof_moraine"
+                else spec.blockage_height_m
+            ),
             accumulation=acc,
             inflow_cumecs=spec.inflow_cumecs or None,
         )
         blockage_block = blockage.as_dict()
         effective_capacity_m3 = blockage.impounded_volume_mcm * 1e6
 
+    # ---- which physics ------------------------------------------------
+    # One branch per failure mode, and they are genuinely different
+    # calculations rather than one hydrograph wearing eight labels. Each branch
+    # sets three things: the hydrograph (t_hr, q_cumecs), the width the water
+    # enters the channel over (release_width_m), and the meta block recording
+    # what was assumed. Everything below this point is common - a flood routes
+    # like a flood however it got out.
     release_block = None
+    foundation_block = None
+    spillway_block = None
+    glof_block = None
+    river_block = None
+
     if spec.failure_mode == "gated_release":
         # A controlled release is not a failure. The structure stays intact, so
         # no breach regression is used at all - the water leaves through the
@@ -389,6 +461,170 @@ def run_scenario(
         # The water enters the river over the spillway/outlet width, not over a
         # breach that never opened.
         release_width_m = max(spec.spillway_length_m, grid.cellsize_m())
+
+    elif spec.failure_mode == "river_flood":
+        # No dam, no barrier, nothing fails. A flood wave enters the reach and
+        # the terrain decides where it goes - which is why there is no bearing
+        # or direction anywhere in this branch.
+        from shared.hydro import river_flood_hydrograph
+
+        t_hr, q_cumecs = river_flood_hydrograph(
+            peak_discharge_cumecs=spec.peak_discharge_cumecs,
+            time_to_peak_hr=spec.time_to_peak_hr,
+            duration_hr=spec.end_hr,
+            base_flow_cumecs=spec.base_flow_cumecs,
+            flood_duration_hr=spec.flood_duration_hr,
+            output_step_hr=min(spec.output_step_hr, 0.05),
+        )
+        # The wave arrives along the channel, so it enters over the channel
+        # width implied by the peak discharge rather than over a breach.
+        from shared.hydro import hydraulic_geometry
+
+        channel_w, _ = hydraulic_geometry(spec.peak_discharge_cumecs)
+        release_width_m = max(channel_w, grid.cellsize_m())
+        river_block = {
+            "peak_discharge_cumecs": spec.peak_discharge_cumecs,
+            "time_to_peak_hr": spec.time_to_peak_hr,
+            "flood_duration_hr": spec.flood_duration_hr
+            or round(2.67 * spec.time_to_peak_hr, 3),
+            "base_flow_cumecs": spec.base_flow_cumecs,
+            "channel_width_m": round(channel_w, 1),
+            "hydrograph_shape": (
+                "NRCS dimensionless unit hydrograph, NEH-4 Part 630 Chapter 16; "
+                "recession 1.67x the rise"
+            ),
+            "no_breach": (
+                "Nothing failed in this run. There is no dam, no barrier, no "
+                "breach geometry and no breach regression - the hydrograph is "
+                "an imposed boundary condition and the result is a routing "
+                "answer, not a failure prediction."
+            ),
+            "direction_note": (
+                "No flow direction was supplied or accepted. The path is traced "
+                "from the DEM."
+            ),
+        }
+
+    elif spec.failure_mode == "foundation_failure":
+        # The structure is displaced as a block. No erosion, so no embankment
+        # regression - see shared.hydro.foundation_collapse_hydrograph for why
+        # running Froehlich here would be a category error rather than a
+        # conservative approximation.
+        from shared.hydro import BreachParams, foundation_collapse_hydrograph
+
+        t_hr, q_cumecs, fnd = foundation_collapse_hydrograph(
+            dam_height_m=spec.site.dam_height_m,
+            capacity_m3=effective_capacity_m3,
+            crest_length_m=float(spec.site.crest_length_m),
+            reservoir_level_frac=spec.reservoir_level_frac,
+            breach_fraction_of_crest=spec.foundation_breach_frac,
+            base_width_ratio=spec.foundation_base_width_ratio,
+            collapse_time_s=spec.collapse_time_min * 60.0,
+            inflow_cumecs=spec.inflow_cumecs,
+            duration_hr=spec.end_hr,
+            output_step_hr=min(spec.output_step_hr, 0.05),
+            storage_exponent=spec.storage_exponent,
+        )
+        foundation_block = fnd.as_dict()
+        release_width_m = fnd.opening_top_width_m
+        # The opening is real geometry even though no regression produced it,
+        # so it is published in the same shape as a breach. `source` says where
+        # it came from so nothing downstream reads it as a regression result.
+        breach = BreachParams(
+            bottom_width_m=fnd.opening_bottom_width_m,
+            average_width_m=round(
+                (fnd.opening_top_width_m + fnd.opening_bottom_width_m) / 2.0, 1
+            ),
+            side_slope_h_per_v=fnd.side_slope_h_per_v,
+            depth_m=fnd.opening_depth_m,
+            formation_time_hr=fnd.collapse_time_s / 3600.0,
+            source="structural collapse geometry; NO breach regression applied",
+        )
+
+    elif spec.failure_mode == "spillway_blockage":
+        # Two phases. The fill phase is the reason this mode exists: it is the
+        # only one that answers "how long between the outlets going and the
+        # first water over the crest".
+        from shared.hydro import fill_to_overtopping
+
+        fill = fill_to_overtopping(
+            dam_height_m=spec.site.dam_height_m,
+            capacity_m3=effective_capacity_m3,
+            inflow_cumecs=spec.inflow_cumecs,
+            design_spillway_cumecs=spec.design_spillway_cumecs,
+            residual_capacity_frac=spec.residual_spillway_frac,
+            starting_level_frac=spec.blockage_start_level_frac,
+            storage_exponent=spec.storage_exponent,
+        )
+        spillway_block = fill.as_dict()
+        release_width_m = breach.average_width_m
+        if fill.overtopped:
+            # Phase two is an overtopping breach from a FULL reservoir with the
+            # inflow still arriving, which is why peaks here exceed what the
+            # stored volume alone would give.
+            t_hr, q_cumecs = breach_hydrograph(
+                breach,
+                dam_height_m=spec.site.dam_height_m,
+                capacity_m3=effective_capacity_m3,
+                reservoir_level_frac=1.0,
+                failure_mode="overtopping",
+                inflow_cumecs=spec.inflow_cumecs,
+                duration_hr=spec.end_hr,
+                output_step_hr=min(spec.output_step_hr, 0.05),
+                storage_exponent=spec.storage_exponent,
+            )
+        else:
+            # The reservoir never reached the crest. That is a real and useful
+            # answer - the blockage did not cause a failure at this inflow -
+            # and it is reported as a run with no flood rather than as an
+            # error or as a flood that did not happen.
+            t_hr = np.array([0.0, spec.end_hr], dtype=np.float64)
+            q_cumecs = np.array([0.0, 0.0], dtype=np.float64)
+
+    elif spec.failure_mode == "glof_moraine":
+        # A moraine is not a small landslide dam: the breach bottoms out on the
+        # bedrock sill, and the trigger can put water downstream before the
+        # breach exists at all.
+        from shared.hydro import BreachParams, glof_hydrograph
+
+        # Prefer the volume the terrain actually holds; fall back on the
+        # area-volume scaling only when the DEM cannot see the lake.
+        lake_volume_m3 = 0.0
+        if blockage_block is not None:
+            lake_volume_m3 = float(blockage_block.get("impounded_volume_mcm", 0.0)) * 1e6
+
+        t_hr, q_cumecs, moraine = glof_hydrograph(
+            lake_volume_m3=lake_volume_m3,
+            moraine_height_m=spec.moraine_height_m,
+            erodible_depth_m=spec.moraine_erodible_depth_m,
+            breach_width_m=spec.glof_breach_width_m,
+            formation_time_hr=(
+                spec.formation_time_hr if spec.formation_time_hr is not None else 0.5
+            ),
+            avalanche_surge_frac=spec.avalanche_surge_frac,
+            surge_duration_s=spec.avalanche_surge_duration_s,
+            lake_area_m2=(
+                spec.lake_area_km2 * 1e6 if spec.lake_area_km2 else None
+            ),
+            inflow_cumecs=spec.inflow_cumecs,
+            duration_hr=spec.end_hr,
+            output_step_hr=min(spec.output_step_hr, 0.05),
+        )
+        glof_block = moraine.as_dict()
+        release_width_m = max(moraine.breach_bottom_width_m, grid.cellsize_m())
+        breach = BreachParams(
+            bottom_width_m=moraine.breach_bottom_width_m,
+            average_width_m=round(
+                moraine.breach_bottom_width_m
+                + moraine.side_slope_h_per_v * moraine.erodible_depth_m,
+                1,
+            ),
+            side_slope_h_per_v=moraine.side_slope_h_per_v,
+            depth_m=moraine.erodible_depth_m,
+            formation_time_hr=moraine.formation_time_hr,
+            source="moraine breach geometry; depth capped at the erodible sill",
+        )
+
     else:
         release_width_m = breach.average_width_m
         t_hr, q_cumecs = breach_hydrograph(
@@ -433,14 +669,7 @@ def run_scenario(
         progress,
         "breach",
         COMPLETE,
-        (
-            f"gates {spec.gate_opening_frac:.0%} open, peak "
-            f"{float(q_cumecs.max()):,.0f} m3/s, no breach regression used"
-            if spec.failure_mode == "gated_release"
-            else f"breach {breach.average_width_m:.0f} m wide in "
-            f"{breach.formation_time_hr:.2f} hr, peak "
-            f"{float(q_cumecs.max()):,.0f} m3/s"
-        ),
+        _breach_node_text(spec, breach, q_cumecs, spillway_block, glof_block),
     )
 
     # ---- 3. solve ------------------------------------------------------
@@ -636,6 +865,14 @@ def run_scenario(
         meta["blockage"] = blockage_block
     if release_block is not None:
         meta["gated_release"] = release_block
+    if foundation_block is not None:
+        meta["foundation_failure"] = foundation_block
+    if spillway_block is not None:
+        meta["spillway_blockage"] = spillway_block
+    if glof_block is not None:
+        meta["glof_moraine"] = glof_block
+    if river_block is not None:
+        meta["river_flood"] = river_block
     if sph_block is not None:
         # The engine coupling, on the record: which SPH run, where the handover
         # is, and how far the two engines disagreed at it.

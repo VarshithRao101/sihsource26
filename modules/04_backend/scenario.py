@@ -16,9 +16,24 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from shared.contract import DEM_SOURCES, ENGINES, FAILURE_MODES
+from shared.contract import (
+    DAM_FAILURE_MODES,
+    DEM_SOURCES,
+    ENGINES,
+    FAILURE_MODES,
+    RIVER_FAILURE_MODES,
+)
 
-FailureMode = Literal["overtopping", "piping", "gated_release", "blockage_breach"]
+FailureMode = Literal[
+    "overtopping",
+    "piping",
+    "foundation_failure",
+    "spillway_blockage",
+    "gated_release",
+    "blockage_breach",
+    "glof_moraine",
+    "river_flood",
+]
 
 
 @dataclass
@@ -34,6 +49,29 @@ class SiteSpec:
     reservoir_capacity_mcm: float = 5.0
     source: str = "user"
     """Where the site record came from: 'GRanD v1.3', 'CWC NRLD', 'user'."""
+
+    kind: str = "engineered"
+    """'engineered' or 'natural'. Decides what may be assumed about the site.
+
+    An engineered dam has a published height, a gross storage and often a
+    design spillway discharge. A natural one - a moraine, a landslide barrier -
+    has a height somebody estimated off a satellite image and nothing else, so
+    its impounded volume is read off the terrain instead. Treating the two
+    alike is how an invented capacity ends up driving a breach regression."""
+
+    crest_length_m: float | None = None
+    """Length of the dam along its crest, m. From the CWC register's length
+    column where it has one.
+
+    Only failure_mode='foundation_failure' reads it, and that mode needs it:
+    the opening left by a displaced block is a fraction of the crest, and there
+    is no regression to fall back on if the crest length is unknown."""
+
+    height_source: str = ""
+    """How the barrier height was obtained - 'CWC NRLD 2019', 'surveyed',
+    'estimated', 'reported'. Travels into meta.json so a result computed from
+    a satellite-estimated height is never mistaken for one computed from a
+    surveyed one."""
 
     def validate(self) -> list[str]:
         errs = []
@@ -122,6 +160,38 @@ class ScenarioSpec:
     spillway_length_m: float = 60.0
     """Crest length of the uncontrolled spillway."""
 
+    # --- foundation / abutment failure, 'foundation_failure' ------------
+    foundation_breach_frac: float = 0.8
+    """How much of the crest goes when the foundation shears, 0..1.
+
+    0.8 rather than 1.0 because at St Francis the centre section was left
+    standing and at Malpasset one abutment remained."""
+
+    foundation_base_width_ratio: float = 0.25
+    """Opening width at the bed as a fraction of its width at the crest.
+
+    A concrete dam stands in a gorge, so the crest length is the valley width
+    at the TOP. Treating the opening as a rectangle of crest width and dam
+    height over-predicted the St Francis peak by a factor of 2.4."""
+
+    collapse_time_min: float = 2.0
+    """Minutes from first movement to the opening fully formed. Minutes, not
+    hours: this is a structural collapse, not an erosion process."""
+
+    # --- spillway or gate blockage, 'spillway_blockage' -----------------
+    residual_spillway_frac: float = 0.0
+    """What fraction of the design outlet capacity still works, 0..1.
+
+    0.0 is a complete blockage. Banqiao's gates were silted, not removed, and
+    South Fork's spillway was screened, not sealed, so intermediate values are
+    the realistic ones."""
+
+    blockage_start_level_frac: float = 0.85
+    """How full the reservoir is when the outlets are lost. The fill phase
+    starts here, which is why this is separate from reservoir_level_frac -
+    that one describes a reservoir at the moment of failure, and in this mode
+    the level at failure is whatever the filling reached."""
+
     blockage_height_m: float = 40.0
     """Height of the landslide debris above the river bed, for
     failure_mode = 'blockage_breach'.
@@ -129,6 +199,64 @@ class ScenarioSpec:
     A natural dam has no published capacity, so this height plus the DEM is
     what determines the impounded volume - see modules/04_backend/blockage.py.
     Ignored for engineered-dam failure modes."""
+
+    # --- glacial lake outburst, 'glof_moraine' --------------------------
+    moraine_height_m: float = 30.0
+    """Height of the moraine ridge above the downstream valley floor."""
+
+    moraine_erodible_depth_m: float | None = None
+    """How deep the breach can cut into the moraine. None -> 0.6 of the ridge
+    height.
+
+    Below this is the bedrock sill and any buried ice core, and the breach
+    stops there. Using the full ridge height instead over-predicts both the
+    head and the released volume."""
+
+    glof_breach_width_m: float | None = None
+    """Final breach bottom width, m. None -> one times the erodible depth.
+
+    The most sensitive number in the mode: the published South Lhonak scenario
+    table spans 4,311 / 8,000 / 12,487 m3/s for 20 / 30 / 40 m widths on the
+    same lake."""
+
+    avalanche_surge_frac: float = 0.0
+    """Fraction of the lake displaced over the crest by an entering ice or rock
+    mass, ahead of any breach.
+
+    Zero by default. It is a volume over a duration, so it sets the peak
+    directly and will dominate the breach whenever it is more than a few
+    percent - which is a real effect and not a reason to leave it on."""
+
+    avalanche_surge_duration_s: float = 600.0
+    """How long the displacement wave takes to pass the crest."""
+
+    lake_area_km2: float | None = None
+    """Lake surface area. Used ONLY when the DEM cannot see the lake, in which
+    case the volume falls back on Huggel et al. (2002) V = 0.104 A^1.42 - a
+    relation with roughly a factor-of-two scatter, recorded as such."""
+
+    # --- river flood wave, 'river_flood' --------------------------------
+    peak_discharge_cumecs: float = 2000.0
+    """Peak of the flood wave entering the reach. The one number a river run
+    cannot be built without."""
+
+    time_to_peak_hr: float = 3.0
+    """Hours from the start of the rise to the peak."""
+
+    flood_duration_hr: float | None = None
+    """Total flood duration. None -> 2.67 times the time to peak, the NRCS
+    dimensionless unit hydrograph ratio."""
+
+    base_flow_cumecs: float = 0.0
+    """Discharge in the channel before the flood arrives and after it passes."""
+
+    source_kind: str = "dam"
+    """'dam' or 'river'. What the operator selected, which decides which
+    failure modes are legal.
+
+    A river has no crest, no embankment, no foundation and no gates, so four of
+    the eight modes have no physical referent on one. This is validated rather
+    than left to the UI, because the API is reachable without the UI."""
 
     domain_bbox: tuple[float, float, float, float] | None = None
     """Explicit model domain, normally from module 01's plan_domain(), which
@@ -163,8 +291,75 @@ class ScenarioSpec:
         errs = list(self.site.validate())
         if self.failure_mode not in FAILURE_MODES:
             errs.append(f"failure_mode {self.failure_mode!r} not in {FAILURE_MODES}")
+        elif self.source_kind == "river" and self.failure_mode not in RIVER_FAILURE_MODES:
+            errs.append(
+                f"failure_mode {self.failure_mode!r} needs a dam. A river reach "
+                f"has no crest to overtop, no embankment to pipe through, no "
+                f"foundation and no gates. Legal on a river: "
+                f"{', '.join(RIVER_FAILURE_MODES)}."
+            )
+        elif self.source_kind == "dam" and self.failure_mode not in DAM_FAILURE_MODES:
+            errs.append(
+                f"failure_mode {self.failure_mode!r} is a river mode; it models "
+                f"a flood arriving in a channel, not a structure failing. "
+                f"Legal on a dam: {', '.join(DAM_FAILURE_MODES)}."
+            )
+        if self.source_kind not in ("dam", "river"):
+            errs.append(f"source_kind {self.source_kind!r} must be 'dam' or 'river'")
         if not 0.0 <= self.reservoir_level_frac <= 1.0:
             errs.append("reservoir_level_frac must be between 0 and 1")
+        if self.failure_mode == "foundation_failure":
+            if not self.site.crest_length_m or self.site.crest_length_m <= 0:
+                errs.append(
+                    "foundation_failure needs site.crest_length_m - the opening "
+                    "is a fraction of the crest and no regression substitutes "
+                    "for it. The CWC register carries a length for most dams; "
+                    "enter one by hand for a structure it does not list."
+                )
+            if not 0.0 < self.foundation_breach_frac <= 1.0:
+                errs.append("foundation_breach_frac must be in (0, 1]")
+            if not 0.0 < self.foundation_base_width_ratio <= 1.0:
+                errs.append("foundation_base_width_ratio must be in (0, 1]")
+            if self.collapse_time_min <= 0:
+                errs.append("collapse_time_min must be positive")
+        if self.failure_mode == "spillway_blockage":
+            if not 0.0 <= self.residual_spillway_frac <= 1.0:
+                errs.append("residual_spillway_frac must be between 0 and 1")
+            if not 0.0 <= self.blockage_start_level_frac <= 1.0:
+                errs.append("blockage_start_level_frac must be between 0 and 1")
+            if self.inflow_cumecs <= 0:
+                errs.append(
+                    "spillway_blockage needs inflow_cumecs above zero - with no "
+                    "inflow the reservoir never rises and nothing overtops. "
+                    "That is the point of the mode."
+                )
+        if self.failure_mode == "glof_moraine":
+            if self.moraine_height_m <= 0:
+                errs.append("moraine_height_m must be positive")
+            if not 0.0 <= self.avalanche_surge_frac <= 1.0:
+                errs.append("avalanche_surge_frac must be between 0 and 1")
+            if (
+                self.moraine_erodible_depth_m is not None
+                and self.moraine_erodible_depth_m > self.moraine_height_m
+            ):
+                errs.append(
+                    "moraine_erodible_depth_m cannot exceed moraine_height_m - "
+                    "the breach cannot cut below the bedrock sill"
+                )
+        if self.failure_mode == "river_flood":
+            if self.peak_discharge_cumecs <= 0:
+                errs.append("river_flood needs peak_discharge_cumecs above zero")
+            if self.time_to_peak_hr <= 0:
+                errs.append("time_to_peak_hr must be positive")
+            if self.base_flow_cumecs < 0:
+                errs.append("base_flow_cumecs cannot be negative")
+            if self.base_flow_cumecs >= self.peak_discharge_cumecs:
+                errs.append("base_flow_cumecs must be below peak_discharge_cumecs")
+            if (
+                self.flood_duration_hr is not None
+                and self.flood_duration_hr <= self.time_to_peak_hr
+            ):
+                errs.append("flood_duration_hr must exceed time_to_peak_hr")
         if self.engine not in ENGINES:
             errs.append(f"engine {self.engine!r} not in {ENGINES}")
         if self.scheme not in ("swe", "inertial"):
@@ -265,19 +460,39 @@ class ScenarioSpec:
         return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
     def to_meta_scenario(self, breach) -> dict:
-        """The scenario block of meta.json."""
+        """The scenario block of meta.json.
+
+        The breach fields are written only for a mode in which something
+        actually breached. A controlled release opens no breach and a river
+        flood has no barrier to breach, so publishing a width for either would
+        be a number no part of the run computed - and the rule in this
+        repository is that blank beats invented.
+        """
+        from shared.contract import BREACHING_MODES
+
         block = {
             "failure_mode": self.failure_mode,
+            "source_kind": self.source_kind,
             "reservoir_level_frac": self.reservoir_level_frac,
-            "breach_width_m": round(breach.average_width_m, 1),
-            "breach_bottom_width_m": round(breach.bottom_width_m, 1),
-            "breach_side_slope": breach.side_slope_h_per_v,
-            "formation_time_hr": round(breach.formation_time_hr, 4),
-            "breach_param_source": breach.source,
             "storage_curve": f"power law, k = {self.storage_exponent}",
             "inflow_cumecs": self.inflow_cumecs,
             "fingerprint": self.fingerprint(),
         }
+        if self.failure_mode in BREACHING_MODES:
+            block.update(
+                {
+                    "breach_width_m": round(breach.average_width_m, 1),
+                    "breach_bottom_width_m": round(breach.bottom_width_m, 1),
+                    "breach_side_slope": breach.side_slope_h_per_v,
+                    "formation_time_hr": round(breach.formation_time_hr, 4),
+                    "breach_param_source": breach.source,
+                }
+            )
+        else:
+            block["breach"] = (
+                "none - nothing breached in this mode, so no breach geometry "
+                "and no breach regression exist for this run"
+            )
         if self.breach_width_m is not None:
             block["breach_width_overridden_by_user"] = True
         if self.formation_time_hr is not None:

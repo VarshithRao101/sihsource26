@@ -45,6 +45,7 @@ class RealTerrain:
         local_dem: str | Path | None = None,
         bathymetry: bool = True,
         manning_source: str = "auto",
+        manning_constant: float | None = None,
         cache: bool = True,
         dam_lonlat: tuple[float, float] | None = None,
         reach_length_km: float = 60.0,
@@ -58,6 +59,10 @@ class RealTerrain:
             bathymetry: estimate a channel bed rather than a flat burn.
             manning_source: 'auto' tries Earth Engine land cover and falls back
                 to a channel/floodplain split; 'constant' uses one value.
+            manning_constant: the value 'constant' uses. None means
+                DEFAULT_MANNING_N. It is only read when manning_source is
+                'constant' - the caller's n cannot quietly override a per-cell
+                roughness raster derived from land cover.
             cache: write conditioned arrays to data/dem/{site}/ for reuse.
         """
         self.site = site
@@ -65,6 +70,7 @@ class RealTerrain:
         self.local_dem = Path(local_dem) if local_dem else None
         self.bathymetry = bathymetry
         self.manning_source = manning_source
+        self.manning_constant = manning_constant
         self.cache = cache
         self.dam_lonlat = dam_lonlat
         self.reach_length_km = reach_length_km
@@ -80,10 +86,23 @@ class RealTerrain:
 
     def _cache_paths(self, grid: Grid) -> tuple[Path, Path]:
         dam = f"{self.dam_lonlat[0]:.4f}_{self.dam_lonlat[1]:.4f}" if self.dam_lonlat else "nodam"
+        # The v2 marks the float64 cache. Files written before it hold float32
+        # conditioning and are silently ignored rather than reused, because
+        # reusing one reproduces the 18x lake-volume disagreement it caused.
         key = (
-            f"{self.source}_{grid.nx}x{grid.ny}_{grid.bbox[0]:.4f}_{grid.bbox[1]:.4f}"
+            f"v2_{self.source}_{grid.nx}x{grid.ny}_{grid.bbox[0]:.4f}_{grid.bbox[1]:.4f}"
             f"_{dam}_r{self.reach_length_km:.0f}"
         )
+        # Conditioning and roughness are part of what is cached, so anything
+        # that changes them has to change the key - otherwise a run that asked
+        # for a constant n or a flat bed is served the arrays from a run that
+        # did not. Only non-default settings extend the key, which leaves every
+        # cache file written before these were selectable still valid.
+        if not self.bathymetry:
+            key += "_nobathy"
+        if self.manning_source != "auto":
+            n = self.manning_constant
+            key += f"_n{self.manning_source}" + (f"{n:g}" if n is not None else "")
         folder = CACHE_DIR / self.site
         folder.mkdir(parents=True, exist_ok=True)
         return folder / f"cond_{key}.npz", folder / f"cond_{key}.json"
@@ -152,10 +171,18 @@ class RealTerrain:
         manning = self._manning(grid, products)
 
         if self.cache:
+            # FLOAT64, NOT FLOAT32. Storing the conditioned DEM at single
+            # precision made a cached run disagree with a fresh one: rounding
+            # of 0.00024 m moved the impounded lake behind a 60 m barrier on
+            # the Tsarap Chu from 46.10 MCM to 2.51 MCM - eighteen times - by
+            # flipping cells across a flat filled basin that sits exactly at
+            # the crest. The knife edge is real terrain and is now measured and
+            # published by blockage.impounded_volume; the cache must not add
+            # its own. A run has to give the same answer the second time.
             np.savez_compressed(
                 npz_path,
-                dem=dem.astype(np.float32),
-                manning=manning.astype(np.float32),
+                dem=dem.astype(np.float64),
+                manning=manning.astype(np.float64),
                 channel=products["channel"],
                 accumulation=products["accumulation"].astype(np.float32),
             )
@@ -188,7 +215,19 @@ class RealTerrain:
         order effect on travel time.
         """
         if self.manning_source == "constant":
-            return np.full(grid.shape, DEFAULT_MANNING_N, dtype=np.float64)
+            # Asking for a constant and getting DEFAULT_MANNING_N instead of the
+            # value you passed is a silent lie about what was solved.
+            n = float(
+                self.manning_constant
+                if self.manning_constant is not None
+                else DEFAULT_MANNING_N
+            )
+            lo, hi = MANNING_N_BOUNDS
+            if not lo <= n <= hi:
+                raise ValueError(
+                    f"manning_constant {n} is outside the physical range {MANNING_N_BOUNDS}"
+                )
+            return np.full(grid.shape, n, dtype=np.float64)
 
         manning = None
         if self.manning_source == "auto":
@@ -236,6 +275,14 @@ class RealTerrain:
             "native_resolution_m": 30.0,
             "bathymetry": "estimated" if self.bathymetry else "none",
             "conditioning": self.conditioning or "none",
+            # Roughness is an input the operator can now choose, so the run has
+            # to say which one it was solved with.
+            "roughness": (
+                f"constant n = "
+                f"{self.manning_constant if self.manning_constant is not None else DEFAULT_MANNING_N:g}"
+                if self.manning_source == "constant"
+                else "per-cell, ESA WorldCover land cover (channel/floodplain split on failure)"
+            ),
         }
 
 

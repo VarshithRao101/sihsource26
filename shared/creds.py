@@ -40,6 +40,9 @@ REGISTRY: dict[str, tuple[int, str]] = {
     "BHUVAN_API_KEY": (2, "01_geodata"),
     "KAGGLE_USERNAME": (2, "07_ml training"),
     "KAGGLE_KEY": (2, "07_ml training"),
+    # The AI briefing over a finished run (modules/04_backend/analysis.py).
+    # Without it the console hides that panel and everything else still works.
+    "ANTHROPIC_API_KEY": (2, "04_backend analysis"),
     "DEPLOY_BACKEND_URL": (3, "demo"),
 }
 
