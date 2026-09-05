@@ -166,30 +166,45 @@ NODES: list[dict[str, Any]] = [
         "module": "shared/hydro.py",
         "emitted_by": "runner.run_scenario",
         "does": (
-            "Turns the scenario into water leaving the structure. For a dam "
-            "break, three independent empirical regressions size the breach and "
-            "a reservoir-depletion integration gives the outflow hydrograph; "
-            "all three are computed and none is averaged, because they disagree "
-            "by up to a factor of ten and hiding that would be dishonest. For a "
-            "controlled release no breach regression is used at all - the water "
-            "leaves through the gates and spillway the dam was built with."
+            "Turns the scenario into water leaving the structure. EIGHT "
+            "different calculations, not one wearing eight labels - which one "
+            "runs is decided by the failure mode.\n\n"
+            "Overtopping and piping erode an embankment: three independent "
+            "regressions size the breach and a reservoir-depletion integration "
+            "gives the hydrograph. All three are computed and none averaged, "
+            "because they disagree by up to a factor of ten and hiding that "
+            "would be dishonest.\n\n"
+            "Three modes use NO breach regression at all, and each for its own "
+            "reason. A controlled release opens no breach - the water leaves "
+            "through the gates the dam was built with. A foundation failure "
+            "displaces a concrete structure whole, and the regressions describe "
+            "soil erosion, so the opening is geometry under critical-flow "
+            "control instead. A river flood has no barrier to breach.\n\n"
+            "A blocked spillway runs a reservoir mass balance FIRST and "
+            "produces the hours to overtopping before any breach begins. A "
+            "moraine outburst caps the breach at the erodible depth, because "
+            "the bedrock sill below it does not go."
         ),
         "inputs": [
-            "dam height",
-            "storage volume",
-            "reservoir level, or gate opening",
-            "failure mode",
+            "dam height and crest length",
+            "storage volume, or the lake read off the DEM",
+            "reservoir level, gate opening, or flood peak",
+            "failure mode - one of eight",
         ],
         "outputs": [
-            "breach width and formation time",
+            "breach width and formation time, where a breach exists",
             "hydrograph.csv (time_hr, discharge_cumecs)",
             "the three-regression spread",
+            "time to overtop, for a blocked spillway",
         ],
         "sources": [
             "Froehlich (2008), ASCE J. Hydraul. Eng. 134(12)",
             "Von Thun and Gillette (1990)",
             "MacDonald and Langridge-Monopolis (1984)",
             "Fread (1988) orifice flow; broad-crested weir for the spillway",
+            "Ritter (1892) critical-flow control at an instantaneous opening",
+            "Huggel et al. (2002) moraine-lake volume from area",
+            "NRCS NEH-4 Part 630 Ch.16 dimensionless unit hydrograph",
         ],
     },
     {
