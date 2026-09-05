@@ -1337,6 +1337,51 @@ def dam_detail(dam_id: str) -> dict:
     return dam
 
 
+@app.get("/api/demo-runs", tags=["runs"])
+def demo_runs() -> dict:
+    """The curated stored runs the console cycles through.
+
+    A solve takes minutes on real terrain, which in front of a panel is the
+    whole demonstration gone. These are the answer, and the answer is not a
+    recording: they are ordinary contract-valid run folders produced by
+    runner.run_scenario on COP30, built by integration/build_demo_runs.py.
+    Loading one goes down exactly the same path as loading a run somebody
+    solved thirty seconds ago.
+
+    Only runs actually present on disk are returned. The manifest is committed
+    and the run folders are not - they are large and regenerable - so on a
+    fresh clone this correctly returns an empty list rather than four ids that
+    404 one click later.
+    """
+    manifest = Path("data") / "demo_runs.json"
+    if not manifest.is_file():
+        return {"runs": [], "count": 0,
+                "note": "no manifest; build with python -m integration.build_demo_runs"}
+
+    try:
+        rows = json.loads(manifest.read_text(encoding="utf-8"))["runs"]
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"demo manifest unreadable: {exc}")
+
+    present, missing = [], []
+    for r in rows:
+        if (OUTPUTS / r["run_id"] / "meta.json").is_file():
+            present.append(r)
+        else:
+            missing.append(r["run_id"])
+
+    return {
+        "runs": present,
+        "count": len(present),
+        "missing": missing,
+        "note": (
+            "Real runs through the same solver and the same code path as any "
+            "other run, not recordings. Rebuild with "
+            "python -m integration.build_demo_runs"
+        ),
+    }
+
+
 @app.get("/api/runs", tags=["runs"])
 def get_runs() -> dict:
     out = []

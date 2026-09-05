@@ -106,6 +106,44 @@
   .nav a.on { background: var(--panel); color: var(--fg); border-color: var(--line); }
   .nav a:hover { color: var(--accent); }
 
+
+  /* --- source tabs ------------------------------------------------- */
+  .srctabs { display: flex; gap: 0; margin-bottom: 12px; border: 1px solid var(--line);
+             border-radius: 4px; overflow: hidden; }
+  .srctab { flex: 1; padding: 7px 0; border: 0; border-radius: 0; background: #fff;
+            color: var(--muted); font-weight: 600; font-size: 13px; cursor: pointer; }
+  .srctab + .srctab { border-left: 1px solid var(--line); }
+  .srctab.on { background: var(--accent); color: #fff; }
+  .srctab:not(.on):hover { background: var(--panel); color: var(--fg); }
+
+  /* --- the two slots above Run ------------------------------------- */
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 0; }
+  .slot { position: relative; }
+  .slotbtn { width: 100%; padding: 7px 6px; font-size: 12px; font-weight: 600;
+             background: #fff; color: var(--accent); border: 1px solid var(--accent);
+             border-radius: 3px; cursor: pointer; }
+  .slotbtn.on { background: var(--accent); color: #fff; }
+  /* Opens UPWARD from the slot. The old advanced block was an accordion that
+     pushed the Run button further down the page every time it was opened, so
+     the operator lost the control they were heading for. */
+  .pop { display: none; position: absolute; bottom: calc(100% + 6px); left: 0;
+         width: 330px; max-width: 92vw; max-height: 66vh; overflow-y: auto; z-index: 40;
+         background: #fff; border: 1px solid var(--accent); border-radius: 5px;
+         padding: 10px 12px; box-shadow: 0 10px 32px #0b1c3326; }
+  .pop.pop-right { left: auto; right: 0; }
+  .pop.open { display: block; }
+  .pophead { font-size: 12px; font-weight: 700; margin-bottom: 6px;
+             padding-bottom: 5px; border-bottom: 1px solid var(--line); line-height: 1.45; }
+  .pophead .muted { font-weight: 400; }
+  .pop .popclose { width: 100%; margin-top: 10px; }
+  /* An invisible bridge across the 6 px gap, so moving the pointer from the
+     button to the panel does not pass over the page and shut it. */
+  .slot::after { content: ""; position: absolute; left: 0; right: 0;
+                 bottom: 100%; height: 8px; }
+  @media (max-width: 900px) { .pop { width: 100%; } }
+  .ctl { margin-top: 2px; }
+  #modewhy summary::-webkit-details-marker { color: var(--muted); }
+
   /* the flood map, its animated flow overlay and the hover readout */
   #mapwrap { position: relative; display: inline-block; line-height: 0; }
   /* The global canvas rule paints a white background; the overlay must not,
@@ -144,33 +182,40 @@
 <div class="wrap">
   <!-- ------------------------------------------------ controls -->
   <div class="side">
-    <fieldset>
-      <legend>1 · Which dam or river</legend>
 
-      <!-- The problem statement is titled "...of any River" and four of the five
-           events it names are natural dams, so a river has to be selectable in
-           its own right and not only as a dam's attribute. -->
-      <div style="display:flex;gap:14px;margin-bottom:6px;font-size:12px">
-        <label style="width:auto;display:flex;gap:5px;align-items:center">
-          <input type="radio" name="srcmode" id="srcdam" value="dam" checked style="width:auto"> Dam
-        </label>
-        <label style="width:auto;display:flex;gap:5px;align-items:center">
-          <input type="radio" name="srcmode" id="srcriver" value="river" style="width:auto"> River
-        </label>
-      </div>
+    <!-- Two sources, not three.
+
+         There used to be a third tab of historic natural-dam failures, sitting
+         beside the dam picker and the river picker. It is gone, and the events
+         are not: they are natural dams with coordinates and a barrier height,
+         which is what the dam catalogue holds, so they are in it. Making the
+         operator decide which PICKER a moraine belonged to before they could
+         pick it was an interface mistake.
+
+         A dam and a river are genuinely different questions and that is why
+         these two remain. A dam has a barrier that can fail in seven ways. A
+         river has no crest, no embankment, no foundation and no gates - it has
+         water arriving, and ground that decides where it goes. -->
+    <div class="srctabs">
+      <button type="button" class="srctab on" id="tab-dam" data-src="dam">Dam</button>
+      <button type="button" class="srctab" id="tab-river" data-src="river">River</button>
+    </div>
+
+    <fieldset>
+      <legend id="lg-pick">1 · Which dam</legend>
 
       <div id="dampick">
         <div class="muted" style="font-size:11px;margin-bottom:4px">
-          CWC National Register of Large Dams 2019 — <span id="damcount">…</span>
+          <span id="damcount">…</span>
         </div>
         <label>State</label>
         <select id="fstate"><option value="">— all states —</option></select>
-        <label>Nearest city <span class="muted">(NRLD has no district field)</span></label>
+        <label>Nearest city <span class="muted">(engineered dams only)</span></label>
         <select id="fcity"><option value="">— all cities —</option></select>
-        <label>Search name / river</label>
-        <input id="fq" placeholder="e.g. Hirakud, Teesta">
+        <label>Search name / river / state</label>
+        <input id="fq" placeholder="e.g. Hirakud, Teesta, Lhonak">
         <label>Dam</label>
-        <select id="fdam" size="6"></select>
+        <select id="fdam" size="7"></select>
         <div id="damcard" class="damcard muted">No dam selected — pick one above.</div>
       </div>
 
@@ -187,78 +232,283 @@
         <div id="rivcard" class="damcard muted">No river selected — pick one above.</div>
         <div class="muted" style="font-size:11px;margin-top:6px;line-height:1.45">
           This is an <b>index, not a river network</b>. It maps river names to points
-          whose coordinates we hold, and every one is a dam in the register — the
-          channel itself is traced from the DEM at run time. A river with no large
-          dam on it is not listed; use “Enter a site by hand” for those.
+          whose coordinates we hold. The channel itself is traced from the DEM at run
+          time, and <b>nothing here sets a flow direction</b> — where the water goes is
+          a property of the ground. A river with no indexed point is reached through
+          <b>Site by hand</b> below.
         </div>
       </div>
     </fieldset>
 
     <fieldset>
-      <legend>2 · What happened</legend>
-      <label>Scenario</label>
-      <select id="mode">
-        <option value="overtopping">Dam break — water over the crest</option>
-        <option value="piping">Dam break — internal erosion (piping)</option>
-        <option value="gated_release">Controlled release — gates opened, dam intact</option>
-        <option value="blockage_breach">River blockage — landslide dam</option>
-      </select>
-      <div class="muted" id="modehelp" style="font-size:11px;margin:4px 0 2px"></div>
+      <legend>2 · What happens</legend>
+      <label>Case</label>
+      <select id="mode"></select>
+      <div class="muted" id="modehelp" style="font-size:11px;margin:5px 0 2px"></div>
+      <details id="modewhy" style="margin:4px 0 2px">
+        <summary class="muted" style="font-size:11px;cursor:pointer">
+          what this case computes that the others do not
+        </summary>
+        <div class="muted" style="font-size:11px;line-height:1.5;padding:5px 0 2px">
+          <div id="modephysics"></div>
+          <div id="moderef" style="margin-top:5px;font-style:italic"></div>
+        </div>
+      </details>
 
-      <div id="grp-level">
-        <label>How full is the reservoir? <b id="levellab">100%</b></label>
+      <!-- Only the inputs this case actually reads. Which ones those are comes
+           from the API's own per-mode `controls` list, so a case can never show
+           a box the solver ignores. -->
+      <div id="ctl-reservoir_level_frac" class="ctl">
+        <label>How full is the reservoir? <b id="levellab">100%</b>
+          <span class="muted" id="levelvol"></span></label>
         <input id="level" type="range" min="0" max="100" step="5" value="100" style="width:100%">
       </div>
 
-      <div id="grp-gate" style="display:none">
+      <div id="ctl-gate_opening_frac" class="ctl">
         <label>How far are the gates opened? <b id="gatelab">100%</b></label>
         <input id="gate" type="range" min="5" max="100" step="5" value="100" style="width:100%">
-        <div class="muted" style="font-size:11px">Capacity comes from the register's design
-          spillway discharge where it has one.</div>
       </div>
 
-      <div id="grp-blockage" style="display:none">
-        <label>Height of the landslide dam (m)</label>
-        <input id="blockheight" type="number" step="5" min="5" max="200" value="40">
-        <div class="muted" style="font-size:11px">The impounded volume is read off the terrain —
-          nobody publishes a landslide dam's storage.</div>
+      <div id="ctl-blockage_height_m" class="ctl">
+        <label>Height of the barrier (m)</label>
+        <input id="blockheight" type="number" step="5" min="5" max="300" value="40">
+        <div class="muted" style="font-size:11px">The impounded volume is read off the
+          terrain — nobody publishes a natural dam's storage.</div>
+      </div>
+
+      <div id="ctl-foundation_breach_frac" class="ctl">
+        <label>How much of the dam goes? <b id="fndlab">80%</b></label>
+        <input id="fndfrac" type="range" min="10" max="100" step="5" value="80" style="width:100%">
+      </div>
+      <div id="ctl-collapse_time_min" class="ctl">
+        <label>Collapse time (minutes)</label>
+        <input id="collapsemin" type="number" step="0.5" min="0.5" max="120" value="2">
+        <div class="muted" style="font-size:11px">Minutes, not hours. St Francis and
+          Malpasset both went in under five.</div>
+      </div>
+
+      <div id="ctl-residual_spillway_frac" class="ctl">
+        <label>Outlet capacity still working <b id="reslab">0%</b></label>
+        <input id="residual" type="range" min="0" max="100" step="5" value="0" style="width:100%">
+        <div class="muted" style="font-size:11px">0% is a total blockage. Banqiao's gates
+          were silted, not removed.</div>
+      </div>
+      <div id="ctl-inflow_cumecs" class="ctl">
+        <label>Inflow arriving (m³/s)</label>
+        <input id="inflowbasic" type="number" step="100" min="0" value="1000">
+        <div class="muted" style="font-size:11px">With no inflow the level never rises and
+          nothing overtops — which is the whole point of this case.</div>
+      </div>
+
+      <div id="ctl-moraine_height_m" class="ctl">
+        <label>Moraine height (m)</label>
+        <input id="moraineh" type="number" step="5" min="5" max="300" value="30">
+      </div>
+      <div id="ctl-moraine_erodible_depth_m" class="ctl">
+        <label>Erodible depth (m) <span class="muted">blank = 0.6 × height</span></label>
+        <input id="morainee" type="number" step="1" min="1" max="300" placeholder="0.6 × height">
+        <div class="muted" style="font-size:11px">Below this is bedrock and any ice core.
+          The breach stops there.</div>
+      </div>
+      <div id="ctl-avalanche_surge_frac" class="ctl">
+        <label>Avalanche displacement <b id="avalab">0%</b> of the lake</label>
+        <input id="avafrac" type="range" min="0" max="40" step="1" value="0" style="width:100%">
+        <div class="muted" style="font-size:11px">Leave at 0 unless you mean it. A surge is
+          a volume over a duration, so it sets the peak directly.</div>
+      </div>
+
+      <div id="ctl-peak_discharge_cumecs" class="ctl">
+        <label>Peak of the flood wave (m³/s)</label>
+        <input id="peakq" type="number" step="100" min="1" value="2000">
+      </div>
+      <div id="ctl-time_to_peak_hr" class="ctl">
+        <label>Hours to the peak</label>
+        <input id="tpeak" type="number" step="0.5" min="0.1" value="3">
+      </div>
+      <div id="ctl-flood_duration_hr" class="ctl">
+        <label>Flood duration (hr) <span class="muted">blank = 2.67 × rise</span></label>
+        <input id="floodhr" type="number" step="0.5" min="0.2" placeholder="2.67 × rise">
       </div>
     </fieldset>
 
     <fieldset>
-      <legend>3 · How far, how long</legend>
+      <legend>3 · How much to simulate</legend>
       <div class="row2">
-        <div><label>Look downstream (km)</label><input id="reach" type="number" step="5" value="40"></div>
-        <div><label>Simulate (hours)</label><input id="endhr" type="number" step="1" value="8"></div>
+        <div><label>Area — look downstream (km)</label>
+          <input id="reach" type="number" step="5" value="40"></div>
+        <div><label>Time — simulate (hours)</label>
+          <input id="endhr" type="number" step="1" value="8"></div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px">
+        Everything else — elevation model, grid, roughness, breach regression — has a
+        measured default and lives under <b>Advanced</b>.
       </div>
     </fieldset>
 
-    <fieldset>
-      <legend>4 · A site the register does not list</legend>
-      <div class="muted" style="font-size:11px;margin-bottom:2px">
-        NTRO asks for <b>any</b> river. Tick this only when the structure is not in the
-        CWC register — a landslide dam, or a barrage the register missed.
+    <!-- The trained emulator, answering while the operator is still deciding.
+         It is a PREDICTION and the label never comes off. -->
+    <div id="preview" class="damcard" style="display:none;margin-bottom:8px">
+      <div><b>Instant preview — PREDICTION, not a simulation</b></div>
+      <div id="previewbody" class="muted" style="font-size:11px">—</div>
+    </div>
+
+    <!-- Two slots above Run. Both open upward as panels rather than pushing the
+         Run button down a growing accordion, which is what the old bottom
+         expander did every time it was opened. -->
+    <div class="slots">
+      <div class="slot" id="slot-adv">
+        <button type="button" class="slotbtn" id="btn-adv">Advanced ▴</button>
+        <div class="pop" id="pop-adv">
+          <div class="pophead">Advanced settings
+            <span class="muted">— every default here is measured, not chosen.
+            Only what you change is sent.</span></div>
+
+          <label>Elevation model</label>
+          <select id="demsrc"></select>
+          <div class="muted" id="demhelp" style="font-size:11px;margin:3px 0"></div>
+
+          <div id="grp-localdem" style="display:none">
+            <label>DEM file on disk</label>
+            <select id="localdem"></select>
+          </div>
+
+          <div class="row2">
+            <div><label>Cell size (m)</label>
+              <input id="cell" type="number" step="5" min="10" max="500"></div>
+            <div><label>Corridor width (km)</label>
+              <input id="corridor" type="number" step="1" min="1" max="60"></div>
+          </div>
+          <div class="muted" style="font-size:11px;margin:3px 0">
+            60 m is the coarsest grid that converged on two dams (docs/CONVERGENCE.md).
+            Gorges did not converge at any resolution we tried.
+          </div>
+
+          <div class="row2">
+            <div><label>Breach regression</label><select id="regression"></select></div>
+            <div><label>Numerical scheme</label><select id="schemesel"></select></div>
+          </div>
+
+          <div class="row2">
+            <div><label>Roughness from</label><select id="manningsrc"></select></div>
+            <div><label>Manning <i>n</i></label>
+              <input id="manning" type="number" step="0.005" min="0.01" max="0.2"></div>
+          </div>
+          <div class="muted" style="font-size:11px;margin:3px 0">
+            <b>auto</b> reads per-cell roughness off ESA WorldCover land cover.
+          </div>
+
+          <div class="row2">
+            <div><label>Output every (hr)</label>
+              <input id="outstep" type="number" step="0.05" min="0.02" max="2"></div>
+            <div><label>Inflow during event (m³/s)</label>
+              <input id="inflow" type="number" step="10" min="0"></div>
+          </div>
+
+          <div class="row2">
+            <div><label>Storage curve exponent</label>
+              <input id="kexp" type="number" step="0.1" min="1" max="5"></div>
+            <div><label>Channel bed</label>
+              <select id="bathy">
+                <option value="true">estimated under the water</option>
+                <option value="false">DEM surface as-is</option>
+              </select></div>
+          </div>
+
+          <div id="grp-gateadv" style="display:none">
+            <div class="row2">
+              <div><label>Gates open over (hr)</label>
+                <input id="gateopen" type="number" step="0.1" min="0.1" max="24"></div>
+              <div><label>Target release (m³/s)</label>
+                <input id="targetrel" type="number" step="100" min="1" placeholder="design capacity"></div>
+            </div>
+            <label>Spillway crest length (m)</label>
+            <input id="spillway" type="number" step="5" min="1" max="2000">
+          </div>
+
+          <div id="grp-fndadv" style="display:none">
+            <label>Opening width at the bed, as a fraction of the crest</label>
+            <input id="fndbase" type="number" step="0.05" min="0.05" max="1" value="0.25">
+            <div class="muted" style="font-size:11px">A concrete dam stands in a gorge, so
+              the crest length is the valley width at the top. 1.0 makes the opening
+              rectangular and over-predicts the peak badly.</div>
+          </div>
+
+          <div id="grp-glofadv" style="display:none">
+            <div class="row2">
+              <div><label>Breach width (m)</label>
+                <input id="glofw" type="number" step="5" min="1" placeholder="1 × erodible depth"></div>
+              <div><label>Surge duration (s)</label>
+                <input id="avadur" type="number" step="30" min="1" max="7200" value="600"></div>
+            </div>
+            <label>Lake area (km²) <span class="muted">only if the DEM cannot see the lake</span></label>
+            <input id="lakearea" type="number" step="0.01" min="0.01" placeholder="DEM supplies the volume">
+            <div class="muted" style="font-size:11px">Falling back on area gives
+              Huggel et al. (2002) V = 0.104·A<sup>1.42</sup>, which the source reports with
+              roughly a factor-of-two scatter.</div>
+          </div>
+
+          <div id="grp-riveradv" style="display:none">
+            <label>Base flow before the flood (m³/s)</label>
+            <input id="baseq" type="number" step="10" min="0" value="0">
+          </div>
+
+          <div id="grp-breachadv">
+            <div class="row2">
+              <div><label>Breach width (m)</label>
+                <input id="bwidth" type="number" step="5" min="1" placeholder="from regression"></div>
+              <div><label>Formation time (hr)</label>
+                <input id="btime" type="number" step="0.1" min="0.1" placeholder="from regression"></div>
+            </div>
+            <div class="muted" style="font-size:11px;margin:3px 0">
+              Fill either of these and meta.json records that a human overrode the
+              regression.
+            </div>
+          </div>
+
+          <button type="button" class="sec popclose">Close</button>
+        </div>
       </div>
-      <label><input type="checkbox" id="manual" style="width:auto"> Enter a site by hand</label>
-      <div id="grp-manual" style="display:none">
-        <label>Name</label><input id="name" value="">
-        <div class="row2">
-          <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value=""></div>
-          <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value=""></div>
-        </div>
-        <div class="row2">
-          <div><label>River</label><input id="river" value=""></div>
-          <div><label>State</label><input id="state" value=""></div>
-        </div>
-        <div class="row2">
-          <div><label>Dam height (m)</label><input id="height" type="number" step="1" value="60"></div>
-          <div><label>Capacity (MCM)</label><input id="cap" type="number" step="0.1" value="5"></div>
+
+      <div class="slot" id="slot-man">
+        <button type="button" class="slotbtn" id="btn-man">Site by hand ▴</button>
+        <div class="pop pop-right" id="pop-man">
+          <div class="pophead">Enter a location by hand
+            <span class="muted">— for a structure the catalogue does not list.
+            Ticking this overrides the picker.</span></div>
+          <label><input type="checkbox" id="manual" style="width:auto"> Use these coordinates</label>
+          <div id="grp-manual" style="display:none">
+            <label>Name</label><input id="name" value="">
+            <div class="row2">
+              <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value=""></div>
+              <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value=""></div>
+            </div>
+            <div class="row2">
+              <div><label>River</label><input id="river" value=""></div>
+              <div><label>State</label><input id="state" value=""></div>
+            </div>
+            <div class="row2">
+              <div><label>Barrier height (m)</label>
+                <input id="height" type="number" step="1" value="60"></div>
+              <div><label>Capacity (MCM)</label>
+                <input id="cap" type="number" step="0.1" value="5"></div>
+            </div>
+            <label>Crest length (m) <span class="muted">needed for foundation failure</span></label>
+            <input id="crestlen" type="number" step="5" min="1" placeholder="along the dam">
+            <div class="muted" style="font-size:11px;margin-top:5px;line-height:1.45">
+              Paste coordinates as decimal degrees. Nothing here is checked against a
+              register — a run from hand-entered numbers is only as good as they are, and
+              meta.json records that they were typed in.
+            </div>
+          </div>
+          <button type="button" class="sec popclose">Close</button>
         </div>
       </div>
-    </fieldset>
+    </div>
 
     <button id="run">Run simulation</button>
-    <button id="loadlast" class="sec" style="width:100%;margin-top:6px">Load most recent run</button>
+    <button id="loadlast" class="sec" style="width:100%;margin-top:6px">
+      Load a stored run</button>
+    <div class="muted" id="demohint" style="font-size:11px;margin-top:4px;text-align:center"></div>
   </div>
 
   <!-- ------------------------------------------------ results -->
@@ -277,6 +527,20 @@
         <h2>Provenance</h2>
         <dl class="kv" id="prov"></dl>
       </div>
+    </div>
+
+    <!-- AI briefing. Written by Claude from this run's own JSON, then every
+         number in it checked back against that JSON before it is shown. -->
+    <div class="panel" id="aipanel" style="display:none">
+      <h2>AI briefing — interpretation, not a result</h2>
+      <div class="muted" style="font-size:11px;margin-bottom:6px" id="aihint">
+        Claude reads this run's output files and writes the plain-language brief. It may
+        not use a number the run did not compute, and every number it writes is matched
+        back against the run before you see it.
+      </div>
+      <button id="aibrief" class="sec" style="width:auto">Brief this run</button>
+      <button id="airefresh" class="sec" style="width:auto;display:none">Rewrite</button>
+      <div id="aibody" style="margin-top:8px"></div>
     </div>
 
     <div class="panel">
@@ -516,23 +780,134 @@ function paintRiverCard() {
     warn;
 }
 
-/* A river has no gates and no embankment to overtop, so the backend rejects
-   any other failure mode with a river_id. Rather than let the operator submit
-   something that will be refused, the scenario is switched here and said out
-   loud. */
-function syncSourceMode() {
-  const river = $("srcriver").checked;
-  $("dampick").style.display = river ? "none" : "";
-  $("riverpick").style.display = river ? "" : "none";
-  if (river) {
-    $("mode").value = "blockage_breach";
-    $("mode").dispatchEvent(new Event("change"));
-    if (!RIVERS.length) loadRivers();
-  }
-  for (const o of $("mode").options) {
-    o.disabled = river && o.value !== "blockage_breach";
-  }
+/* ------------------------------------------------------------ source tabs
+   Two sources: a dam or a river. The historic-event picker is gone and its
+   events are in the dam catalogue, because a moraine is a dam and making the
+   operator pick a tab before picking a barrier helped nobody.
+
+   The two are not cosmetic. They decide which cases are legal, and the backend
+   validator enforces the same split - see contract.DAM_FAILURE_MODES and
+   RIVER_FAILURE_MODES. A river has no crest, no embankment, no foundation and
+   no gates, so five of the eight cases are not offered on one. */
+let SRC = "dam";
+
+function setSource(src) {
+  SRC = src;
+  $("tab-dam").classList.toggle("on", src === "dam");
+  $("tab-river").classList.toggle("on", src === "river");
+  $("lg-pick").textContent = src === "river" ? "1 · Which river" : "1 · Which dam";
+  $("dampick").style.display = src === "dam" ? "" : "none";
+  $("riverpick").style.display = src === "river" ? "" : "none";
+  if (src === "river" && !RIVERS.length) loadRivers();
+  buildModes();
+  previewMaybe();
 }
+
+/* ------------------------------------------------------------ cases
+   Built from GET /api/enums, never from a list in this file. The legal cases,
+   their labels, their help text and WHICH INPUTS EACH ONE READS all come from
+   shared/contract.py, so the panel cannot offer a case the validator refuses
+   or show a box the solver ignores. */
+function buildModes() {
+  if (!ENUMS || !ENUMS.failure_mode_info) return;
+  const legal = SRC === "river"
+    ? (ENUMS.river_failure_modes || [])
+    : (ENUMS.dam_failure_modes || []);
+  const info = ENUMS.failure_mode_info;
+  const keep = $("mode").value;
+  $("mode").innerHTML = legal.map(m =>
+    `<option value="${m}">${esc((info[m] || {}).label || m)}</option>`).join("");
+  // Keep the operator's choice across a tab switch when it is still legal.
+  if (legal.includes(keep)) $("mode").value = keep;
+  applyMode();
+}
+
+/* A natural dam has no embankment and no gates, so picking one narrows the
+   case list the same way choosing the river tab does. This is the same rule
+   the API applies in to_spec(); it is mirrored here so the form refuses before
+   the request rather than after it. */
+function naturalSelected() {
+  return SRC === "dam" && DAM && DAM.kind === "natural" && !$("manual").checked;
+}
+
+function applyMode() {
+  const m = $("mode").value;
+  const info = (ENUMS && ENUMS.failure_mode_info && ENUMS.failure_mode_info[m]) || {};
+  $("modehelp").textContent = info.summary || "";
+  $("modephysics").textContent = info.physics || "";
+  $("moderef").textContent = info.reference ? "Written against: " + info.reference : "";
+
+  // Show exactly the inputs this case reads, and nothing else. `controls` is
+  // the API's own list, so this cannot drift out of step with the solver.
+  const wanted = new Set(info.controls || []);
+  document.querySelectorAll(".ctl").forEach(el => {
+    el.style.display = wanted.has(el.id.replace(/^ctl-/, "")) ? "" : "none";
+  });
+
+  // The advanced panel narrows too - a breach override on a case that opens no
+  // breach would be recorded in meta.json as a decision that changed nothing.
+  $("grp-gateadv").style.display   = m === "gated_release" ? "" : "none";
+  $("grp-fndadv").style.display    = m === "foundation_failure" ? "" : "none";
+  $("grp-glofadv").style.display   = m === "glof_moraine" ? "" : "none";
+  $("grp-riveradv").style.display  = m === "river_flood" ? "" : "none";
+  $("grp-breachadv").style.display =
+    (m === "gated_release" || m === "river_flood") ? "none" : "";
+  paintLevelVolume();
+}
+
+/* The reservoir slider is a percentage of a capacity that varies from dam to
+   dam, so on its own it says nothing. This puts the actual volume beside it,
+   through the same storage curve the solver routes with, and blanks it when we
+   have no capacity to compute from - which is every natural dam. */
+function paintLevelVolume() {
+  const el = $("levelvol");
+  if (!el) return;
+  const frac = +$("level").value / 100;
+  let cap = null;
+  if ($("manual").checked) cap = +$("cap").value;
+  else if (SRC === "dam" && DAM) cap = DAM.gross_storage_mcm;
+  if (!cap || naturalSelected()) {
+    el.textContent = naturalSelected()
+      ? "— volume comes from the terrain" : "";
+    return;
+  }
+  const k = (ENUMS && ENUMS.run_defaults && ENUMS.run_defaults.storage_exponent) || 2.7;
+  el.textContent = `≈ ${(cap * Math.pow(frac, k)).toLocaleString(undefined,
+    {maximumFractionDigits: 1})} of ${cap.toLocaleString()} MCM`;
+}
+
+/* ------------------------------------------------------------ slot panels
+   Advanced settings and hand-entered coordinates, as panels that open over the
+   page rather than as an accordion that pushes Run down the screen. They open
+   on hover and on click; click also pins one open, because a panel that
+   vanishes when the pointer leaves it cannot be typed into. */
+function wireSlot(slotId, btnId, popId) {
+  const slot = $(slotId), btn = $(btnId), pop = $(popId);
+  let pinned = false;
+  const open = () => { pop.classList.add("open"); btn.classList.add("on"); };
+  const shut = () => {
+    if (pinned) return;
+    pop.classList.remove("open"); btn.classList.remove("on");
+  };
+  slot.addEventListener("mouseenter", open);
+  slot.addEventListener("mouseleave", shut);
+  btn.addEventListener("click", e => {
+    e.preventDefault();
+    pinned = !pinned;
+    if (pinned) open(); else { pop.classList.remove("open"); btn.classList.remove("on"); }
+  });
+  pop.querySelectorAll(".popclose").forEach(b => b.addEventListener("click", () => {
+    pinned = false; pop.classList.remove("open"); btn.classList.remove("on");
+  }));
+  // Escape closes a pinned panel; otherwise a pinned one can only be closed by
+  // finding the button again, which is worse the further down the page it is.
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && pinned) {
+      pinned = false; pop.classList.remove("open"); btn.classList.remove("on");
+    }
+  });
+}
+
 
 /* The operator picks a dam; every physical number comes from the register.
    Nobody types a latitude. The card is read-only on purpose - if a value is
@@ -541,36 +916,189 @@ function applyDam() {
   const d = DAMS.find(x => x.id === $("fdam").value);
   if (!d) return;
   DAM = d;
-  const cap = d.gross_storage_mcm != null ? d.gross_storage_mcm.toLocaleString() : "?";
+  const nat = d.kind === "natural";
   $("damcard").classList.remove("muted");
-  $("damcard").innerHTML =
-    `<b>${d.name}</b><br>` +
-    `${d.river || "?"} · ${d.state || "?"} · near ${d.nearest_city || "?"}<br>` +
-    `${d.height_m ?? "?"} m high · ${cap} MCM` +
-    (d.spillway_cumecs ? ` · spillway ${Number(d.spillway_cumecs).toLocaleString()} m³/s` : "") +
-    `<br><span class="muted">${d.dam_type || "?"}` +
-    (d.year ? ` · built ${d.year}` : "") + ` · ${d.id} · CWC NRLD 2019</span>`;
+
+  /* A natural dam carries no storage capacity and never will - none is
+     published for a moraine. Showing "0 MCM" or "?" beside a real height
+     invites the number to be read as small rather than as absent, so the card
+     says where the volume actually comes from instead. */
+  const line2 = nat
+    ? `${d.state || "?"}${d.river ? " · " + d.river : ""}` +
+      `<br>${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}`
+    : `${d.river || "?"} · ${d.state || "?"} · near ${d.nearest_city || "?"}`;
+  const line3 = nat
+    ? `${d.height_m ?? "?"} m barrier · <b>storage read off the terrain</b>`
+    : `${d.height_m ?? "?"} m high · ` +
+      `${d.gross_storage_mcm != null ? d.gross_storage_mcm.toLocaleString() : "?"} MCM` +
+      (d.spillway_cumecs
+        ? ` · spillway ${Number(d.spillway_cumecs).toLocaleString()} m³/s` : "") +
+      (d.length_m ? ` · ${Number(d.length_m).toLocaleString()} m crest` : "");
+
+  let tail = `<span class="muted">${d.dam_type || "?"}` +
+    (d.year ? ` · ${nat ? "" : "built "}${d.year}` : "") + ` · ${d.id}`;
+  if (nat) {
+    tail += ` · height ${d.height_source || "source unstated"}`;
+    if (d.historic) tail += ` · <b>this barrier is known to have failed</b>`;
+    tail += `</span>`;
+    if (d.mechanism) tail += `<br><span class="muted">${esc(d.mechanism)}</span>`;
+    if (d.height_source === "estimated") {
+      tail += `<br><span class="muted">Height is an estimate off satellite imagery, ` +
+              `not a survey. It sets the impounded volume, so treat the result as ` +
+              `an order of magnitude.</span>`;
+    }
+  } else {
+    tail += ` · CWC NRLD 2019</span>`;
+  }
+
+  $("damcard").innerHTML = `<b>${esc(d.name)}</b><br>${line2}<br>${line3}<br>${tail}`;
+  // A moraine has no embankment to overtop and no gates: narrow the case list.
+  buildModes();
+  paintLevelVolume();
+  previewMaybe();   // a new dam may or may not be the reach the emulator knows
 }
 
-const MODE_HELP = {
-  overtopping: "The reservoir overtops the crest and cuts a breach. The usual worst case.",
-  piping: "Internal erosion opens a pipe through the embankment, which then collapses.",
-  gated_release: "The operator opens the outlet gates. The dam does NOT fail — no breach is modelled.",
-  blockage_breach: "A landslide dams the river, water pond behind the debris, then the debris fails."
-};
+/* ----------------------------------------------------------- advanced
+   Everything in fieldset 4 is built from GET /api/enums, including its
+   starting values: they are the API's own defaults, read off RunRequest.
+   Nothing here is a second copy of a default that could drift out of step
+   with the backend. Only fields the operator actually changed are sent. */
+let DEFAULTS = {}, ENUMS = null;
 
-function applyMode() {
-  const m = $("mode").value;
-  $("modehelp").textContent = MODE_HELP[m] || "";
-  $("grp-gate").style.display     = m === "gated_release"   ? "" : "none";
-  $("grp-blockage").style.display = m === "blockage_breach" ? "" : "none";
-  // A blockage has no engineered reservoir to be "full"; the lake is whatever
-  // the terrain holds behind the debris.
-  $("grp-level").style.display    = m === "blockage_breach" ? "none" : "";
+function fill(sel, values, chosen) {
+  $(sel).innerHTML = values.map(v =>
+    `<option value="${v}"${v === chosen ? " selected" : ""}>${v}</option>`).join("");
 }
 
-$("srcdam").onchange = syncSourceMode;
-$("srcriver").onchange = syncSourceMode;
+async function loadEnums() {
+  try { ENUMS = await jget("/api/enums"); }
+  catch { log("could not read /api/enums — advanced options unavailable"); return; }
+  DEFAULTS = ENUMS.run_defaults || {};
+
+  // A source we cannot fetch is only offered when a tile for it is on disk.
+  const local = ENUMS.local_dems || [];
+  const sources = (ENUMS.dem_sources_fetchable || []).concat(
+    local.length ? (ENUMS.dem_sources_local || []) : []);
+  fill("demsrc", sources, DEFAULTS.dem_source);
+  fill("localdem", local, local[0]);
+  fill("regression", ENUMS.breach_regressions || [], DEFAULTS.breach_regression);
+  fill("schemesel", ENUMS.schemes || [], DEFAULTS.scheme);
+  fill("manningsrc", ENUMS.manning_sources || [], DEFAULTS.manning_source);
+
+  $("cell").value      = DEFAULTS.cellsize_m;
+  $("corridor").value  = DEFAULTS.corridor_width_km;
+  $("manning").value   = DEFAULTS.manning_n;
+  $("outstep").value   = DEFAULTS.output_step_hr;
+  $("inflow").value    = DEFAULTS.inflow_cumecs;
+  $("kexp").value      = DEFAULTS.storage_exponent;
+  $("gateopen").value  = DEFAULTS.gate_open_time_hr;
+  $("spillway").value  = DEFAULTS.spillway_length_m;
+  $("bathy").value     = String(DEFAULTS.bathymetry);
+  $("fndbase").value = DEFAULTS.foundation_base_width_ratio;
+  $("avadur").value  = DEFAULTS.avalanche_surge_duration_s;
+  $("baseq").value   = DEFAULTS.base_flow_cumecs;
+  $("collapsemin").value = DEFAULTS.collapse_time_min;
+  $("moraineh").value    = DEFAULTS.moraine_height_m;
+  $("peakq").value       = DEFAULTS.peak_discharge_cumecs;
+  $("tpeak").value       = DEFAULTS.time_to_peak_hr;
+  applyDemSource();
+  applyManningSource();
+  buildModes();   // the case list is the API's, not a copy kept in this file
+}
+
+function applyManningSource() {
+  // With 'auto' the solver uses the land-cover raster and this number is not
+  // read at all, so the box says so rather than pretending to matter.
+  const constant = $("manningsrc").value === "constant";
+  $("manning").disabled = !constant;
+  $("manning").title = constant ? "" : "auto derives n per cell from land cover; this is ignored";
+}
+
+function applyDemSource() {
+  const src = $("demsrc").value;
+  const needsLocal = (ENUMS && (ENUMS.dem_sources_local || []).includes(src));
+  $("grp-localdem").style.display = needsLocal ? "" : "none";
+  const notes = {
+    COP30:   "Copernicus GLO-30. The default and the best free global surface model.",
+    SRTM:    "SRTM GL1, 30 m, 2000 vintage. Has voids in steep terrain.",
+    NASADEM: "SRTM reprocessed with its voids filled. Try this when COP30 comes back full of holes.",
+    ALOS:    "JAXA AW3D30, 30 m.",
+    ASTER:   "ASTER GDEM v3, named in NTRO's dataset link. Stereo rather than radar, so noisier over water and vegetation.",
+    FABDEM:  "COP30 with buildings and canopy removed. Licensed CC BY-NC-SA, so it is read from disk, never downloaded.",
+    CartoDEM: "ISRO CartoDEM from Bhuvan. Read from disk.",
+  };
+  const missing = needsLocal && !(ENUMS.local_dems || []).length;
+  $("demhelp").textContent = (notes[src] || "")
+    + (missing ? ` No tile in ${ENUMS.local_dem_dir}/ yet — this run would be refused.` : "");
+}
+
+/** Only what differs from the API's own defaults, so the request says what
+    the operator decided and nothing else. */
+function advancedBody(mode) {
+  const b = {};
+  // Clicked before /api/enums answered: send nothing rather than send the
+  // empty boxes, and let the backend's own defaults stand.
+  if (!ENUMS) return b;
+  const num = (id, key) => {
+    const v = $(id).value;
+    if (v !== "" && +v !== DEFAULTS[key]) b[key] = +v;
+  };
+  const pick = (id, key) => { if ($(id).value !== DEFAULTS[key]) b[key] = $(id).value; };
+
+  pick("demsrc", "dem_source");
+  if ($("grp-localdem").style.display !== "none" && $("localdem").value) {
+    b.local_dem = $("localdem").value;
+  }
+  num("cell", "cellsize_m");
+  num("corridor", "corridor_width_km");
+  pick("regression", "breach_regression");
+  pick("schemesel", "scheme");
+  pick("manningsrc", "manning_source");
+  // Only when it is the number being solved with. Sending it alongside 'auto'
+  // would put a roughness in the request that the run does not use.
+  if ($("manningsrc").value === "constant") num("manning", "manning_n");
+  num("outstep", "output_step_hr");
+  num("inflow", "inflow_cumecs");
+  num("kexp", "storage_exponent");
+  if (($("bathy").value === "true") !== DEFAULTS.bathymetry) {
+    b.bathymetry = $("bathy").value === "true";
+  }
+  if (mode === "gated_release") {
+    num("gateopen", "gate_open_time_hr");
+    num("spillway", "spillway_length_m");
+    if ($("targetrel").value !== "") b.target_release_cumecs = +$("targetrel").value;
+  } else if (mode === "foundation_failure") {
+    num("fndbase", "foundation_base_width_ratio");
+  } else if (mode === "glof_moraine") {
+    num("avadur", "avalanche_surge_duration_s");
+    if ($("glofw").value !== "") b.glof_breach_width_m = +$("glofw").value;
+    if ($("lakearea").value !== "") b.lake_area_km2 = +$("lakearea").value;
+  } else if (mode === "river_flood") {
+    num("baseq", "base_flow_cumecs");
+  }
+  // A breach override only means something in a case that opens a breach.
+  // Sending one alongside a controlled release or a river flood would put a
+  // human decision in meta.json that changed nothing in the run.
+  if (mode !== "gated_release" && mode !== "river_flood") {
+    if ($("bwidth").value !== "") b.breach_width_m = +$("bwidth").value;
+    if ($("btime").value !== "") b.formation_time_hr = +$("btime").value;
+  }
+  return b;
+}
+
+$("tab-dam").onclick = () => setSource("dam");
+$("tab-river").onclick = () => setSource("river");
+wireSlot("slot-adv", "btn-adv", "pop-adv");
+wireSlot("slot-man", "btn-man", "pop-man");
+// Once the operator types a barrier height, picking another dam stops
+// overwriting it - "what if it had been 60 m" is the point of the tool.
+$("blockheight").oninput = () => { $("blockheight").dataset.touched = "1"; };
+$("fndfrac").oninput = () => { $("fndlab").textContent = $("fndfrac").value + "%"; };
+$("residual").oninput = () => { $("reslab").textContent = $("residual").value + "%"; };
+$("avafrac").oninput = () => { $("avalab").textContent = $("avafrac").value + "%"; };
+$("level").addEventListener("input", paintLevelVolume);
+$("cap").addEventListener("input", paintLevelVolume);
+$("manual").addEventListener("change", () => { buildModes(); paintLevelVolume(); });
 let rTimer;
 $("rq").oninput = () => { clearTimeout(rTimer); rTimer = setTimeout(loadRivers, 250); };
 $("friver").onchange = applyRiver;
@@ -589,46 +1117,236 @@ $("manual").onchange = () => {
   $("grp-manual").style.display = on ? "" : "none";
   if (on) DAM = null;
 };
+/* ------------------------------------------------------------ surrogate
+   The U-Net emulator answers in milliseconds, so it can respond while the
+   operator is still choosing. Three rules it is held to:
+     - it is trained on ONE reach, so it is offered on that reach and nowhere
+       else. A confident number for the wrong terrain is the worst thing this
+       page could show;
+     - it never loses the word PREDICTION;
+     - it says which of the knobs it cannot see. Cell size, DEM and roughness
+       are now operator choices and the emulator was never shown them. */
+let SGMETA = null, sgTimer = null;
+
+async function loadSurrogateMeta() {
+  try { SGMETA = await jget("/api/surrogate/meta"); } catch { return; }
+  if (SGMETA.available) previewMaybe();
+}
+
+/** True when the site on screen is the one reach the emulator was trained on. */
+function previewApplies() {
+  if (!SGMETA || !SGMETA.available) return false;
+  // Never on a river or a natural dam. The emulator was trained on dam-break
+  // scenarios parameterised by reservoir capacity and dam height; a natural dam
+  // has neither - its storage is whatever the terrain holds behind the debris,
+  // which the network has never seen. A number here would be confident and
+  // meaningless. Nor on a case it was never trained on: it learned breaches,
+  // not gate openings, block failures or flood routing.
+  if (SRC === "river" || naturalSelected()) return false;
+  if (!["overtopping", "piping"].includes($("mode").value)) return false;
+  const site = DAM || (($("manual").checked && $("lat").value !== "")
+    ? { lat: +$("lat").value, lon: +$("lon").value } : null);
+  if (!site) return false;
+  const [tlat, tlon] = SGMETA.site_latlon;
+  // Within about 20 km of the training dam. The emulator carries that terrain
+  // baked into its weights; a different valley is a different problem.
+  return Math.abs(site.lat - tlat) < 0.2 && Math.abs(site.lon - tlon) < 0.2;
+}
+
+function previewMaybe() {
+  clearTimeout(sgTimer);
+  sgTimer = setTimeout(previewNow, 200);
+}
+
+async function previewNow() {
+  const box = $("preview");
+  if (!previewApplies()) { box.style.display = "none"; return; }
+  box.style.display = "";
+  const site = DAM || { dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value };
+  const body = {
+    reservoir_level_frac: +$("level").value / 100,
+    dam_height_m: site.height_m ?? site.dam_height_m,
+    capacity_mcm: site.gross_storage_mcm ?? site.reservoir_capacity_mcm,
+    breach_regression: $("regression").value || undefined,
+  };
+  if ($("btime").value !== "") body.formation_time_hr = +$("btime").value;
+
+  let p;
+  try {
+    const r = await fetch(API + "/api/surrogate", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    });
+    p = await r.json();
+    if (!r.ok) throw new Error(p.detail || r.status);
+  } catch (e) {
+    $("previewbody").innerHTML = `<span class="err">emulator unavailable</span> — ${e.message}`;
+    return;
+  }
+
+  const ignored = (SGMETA.ignores || []).join(", ");
+  const extrap = (p.extrapolating || []).length
+    ? `<div class="err">outside what it was trained on: ${p.extrapolating.join("; ")}</div>` : "";
+  $("previewbody").innerHTML =
+    `<b>${p.max_depth_m} m</b> max depth · <b>${p.flood_area_km2} km²</b> wet ·
+     first water at <b>${p.earliest_arrival_hr ?? "—"} hr</b>
+     <span class="muted">(${p.inference_ms} ms)</span>${extrap}
+     <div>Breach forms in ${p.formation_time_hr} hr — ${p.formation_time_source}.</div>
+     <div>Emulated on the ${p.site} reach at ${p.cellsize_m} m,
+       CSI ${(SGMETA.metrics && SGMETA.metrics.extent_csi) ?? "—"} against our own solver.
+       It cannot see: ${ignored}. Press Run for the physics.</div>`;
+}
+
+/* ---------------------------------------------------------- AI briefing
+   The panel only appears when the backend says a briefing can be produced.
+   With no key, no package or no network the console is exactly what it was.  */
+let AIOK = false;
+
+async function loadAiHealth() {
+  let h;
+  try { h = await jget("/api/analysis/health"); } catch { return; }
+  AIOK = !!h.available;
+  $("aipanel").style.display = AIOK ? "" : "none";
+  if (AIOK) $("aihint").textContent += ` Written by ${h.model}.`;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+}
+
+async function brief(refresh) {
+  if (!RUN) { $("aibody").innerHTML = '<span class="err">load a run first</span>'; return; }
+  $("aibrief").disabled = $("airefresh").disabled = true;
+  $("aibody").innerHTML = '<span class="muted">reading the run and writing…</span>';
+  let d;
+  try {
+    const r = await fetch(`${API}/api/runs/${RUN}/analysis${refresh ? "?refresh=true" : ""}`,
+                          { method: "POST" });
+    d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.status);
+  } catch (e) {
+    $("aibody").innerHTML = `<span class="err">briefing failed</span> — ${esc(e.message)}`;
+    $("aibrief").disabled = $("airefresh").disabled = false;
+    return;
+  }
+  drawBrief(d);
+  $("aibrief").disabled = $("airefresh").disabled = false;
+  $("airefresh").style.display = "";
+}
+
+function drawBrief(d) {
+  const a = d.analysis, g = d.grounding;
+  // The grounding check is the point of the panel, so it is the first thing on
+  // it - in red when it failed, with the numbers that failed it named.
+  const bad = g.ungrounded_numbers || [];
+  const check = g.grounded
+    ? `<div style="color:var(--ok);font-weight:600">✓ grounded — all ${g.checked_values}
+         numbers matched against this run's own files</div>`
+    : `<div class="err">✗ NOT grounded — ${bad.length} of ${g.checked_values} numbers are not
+         in this run: ${esc(bad.map(b => b.value).join(", "))}. Treat this briefing as unsafe.</div>`;
+
+  $("aibody").innerHTML = `
+    ${check}
+    <p style="margin:8px 0 4px"><b>${esc(a.headline)}</b></p>
+    <p style="margin:0 0 8px">Severity <b>${esc(a.severity)}</b> —
+       <span class="muted">${esc(a.severity_basis)}</span></p>
+    <h3 style="font-size:12px;margin:8px 0 2px">What the run shows</h3>
+    <ul style="margin:0;padding-left:18px">
+      ${a.findings.map(f => `<li>${esc(f.statement)}
+        <span class="muted" style="font-size:11px">[${esc((f.evidence_keys||[]).join(", "))}]</span></li>`).join("")}
+    </ul>
+    <h3 style="font-size:12px;margin:8px 0 2px">First hours</h3>
+    <ol style="margin:0;padding-left:18px">
+      ${a.priority_actions.map(x => `<li>${esc(x)}</li>`).join("")}
+    </ol>
+    <h3 style="font-size:12px;margin:8px 0 2px">People</h3>
+    <div>${esc(a.population_note)}</div>
+    <h3 style="font-size:12px;margin:8px 0 2px">What this cannot tell you</h3>
+    <ul style="margin:0;padding-left:18px">
+      ${a.limits.map(x => `<li>${esc(x)}</li>`).join("")}
+    </ul>
+    <div class="muted" style="font-size:11px;margin-top:8px">
+      ${esc(d.disclaimer)} · ${esc(d.generated_by)}${d.cached ? " · cached" : ""}
+    </div>`;
+}
+
+$("aibrief").onclick = () => brief(false);
+$("airefresh").onclick = () => brief(true);
+
+$("demsrc").onchange = applyDemSource;
+$("manningsrc").onchange = applyManningSource;
+$("level").addEventListener("input", previewMaybe);
+$("regression").addEventListener("change", previewMaybe);
+$("btime").addEventListener("input", previewMaybe);
 applyMode();
+loadEnums().then(loadSurrogateMeta);
+loadDemos();
+loadAiHealth();
 loadStates().then(loadDams);
 
 // ---------------------------------------------------------------- run
 $("run").onclick = async () => {
   const mode = $("mode").value;
-  /* Only what the operator actually chose. Breach regression, cell size,
-     numerical scheme and roughness are not operator decisions - they are the
-     values we validate against, and they live in the API defaults so there is
-     one place they can be wrong. */
+  /* Only what the operator actually chose. The defaults for everything in
+     fieldset 4 - DEM, cell size, scheme, roughness, breach regression - are
+     the values we validate against and come from the API itself, so a knob
+     left alone is absent from this body rather than restated in it. */
   const body = {
     failure_mode: mode,
     reservoir_level_frac: +$("level").value / 100,
     reach_length_km: +$("reach").value,
     end_hr: +$("endhr").value,
-    real_terrain: true
+    real_terrain: true,
+    ...advancedBody(mode)
   };
 
-  /* Send the dam_id when the operator picked from the register: the backend
-     then reads name, coordinates, height, storage AND the design spillway
-     capacity straight from CWC rather than trusting anything retyped here. */
-  if ($("srcriver").checked) {
-    if (!RIVER) { log("pick a river first"); return; }
-    body.river_id = RIVER.id;
-    body.river_point_index = +$("frpoint").value || 0;
-  } else if (DAM && !$("manual").checked) {
-    body.dam_id = DAM.id;
-  } else if ($("manual").checked && $("lat").value !== "") {
+  /* Hand-entered coordinates win over the picker, because ticking that box is
+     an explicit statement that the catalogue does not have this site.
+     Otherwise send the dam_id or river_id and let the backend read the name,
+     coordinates, height, storage and design spillway capacity from the
+     catalogue rather than trusting anything retyped here. */
+  if ($("manual").checked && $("lat").value !== "") {
     body.site = {
       name: $("name").value || "manual site", lat: +$("lat").value, lon: +$("lon").value,
       river: $("river").value, state: $("state").value,
-      dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value
+      dam_height_m: +$("height").value, reservoir_capacity_mcm: +$("cap").value,
+      crest_length_m: $("crestlen").value !== "" ? +$("crestlen").value : null
     };
+  } else if (SRC === "river") {
+    if (!RIVER) { log("pick a river first"); return; }
+    body.river_id = RIVER.id;
+    body.river_point_index = +$("frpoint").value || 0;
+  } else if (DAM) {
+    body.dam_id = DAM.id;
   } else {
-    log("pick a dam or a river from the register, choose a demo site, or tick 'Enter a site by hand'");
+    log("pick a dam or a river, or open 'Site by hand' and enter coordinates");
     return;
   }
 
+  /* Only the inputs this case actually reads. Sending a gate opening with a
+     piping breach would record a decision in meta.json that changed nothing. */
   if (mode === "gated_release") body.gate_opening_frac = +$("gate").value / 100;
   if (mode === "blockage_breach") body.blockage_height_m = +$("blockheight").value;
+  if (mode === "foundation_failure") {
+    body.foundation_breach_frac = +$("fndfrac").value / 100;
+    body.collapse_time_min = +$("collapsemin").value;
+  }
+  if (mode === "spillway_blockage") {
+    body.residual_spillway_frac = +$("residual").value / 100;
+    body.inflow_cumecs = +$("inflowbasic").value;
+  }
+  if (mode === "glof_moraine") {
+    body.moraine_height_m = +$("moraineh").value;
+    body.avalanche_surge_frac = +$("avafrac").value / 100;
+    if ($("morainee").value !== "") body.moraine_erodible_depth_m = +$("morainee").value;
+  }
+  if (mode === "river_flood") {
+    body.peak_discharge_cumecs = +$("peakq").value;
+    body.time_to_peak_hr = +$("tpeak").value;
+    if ($("floodhr").value !== "") body.flood_duration_hr = +$("floodhr").value;
+    // A river flood has no reservoir to be full.
+    delete body.reservoir_level_frac;
+  }
   ENDHR = body.end_hr;
   $("run").disabled = true;
   clearLog("submitting…");
@@ -700,15 +1418,58 @@ async function poll(runId) {
 }
 
 // ---------------------------------------------------------------- load
+/* Stored runs, cycled one click at a time.
+
+   A solve takes minutes. In front of a panel that is the whole demonstration
+   gone, so the runs that answer the four questions worth asking are already on
+   disk and each click brings up the next one. They are REAL runs - the same
+   solver, the same DEM, the same contract-valid folders - not a recording, and
+   the panel shows what each one is before it loads so nobody has to guess
+   which case they are looking at.
+
+   The curated list comes from GET /api/demo-runs. If that is unavailable the
+   button falls back to whatever is newest on disk, which is what it used to
+   do, rather than doing nothing. */
+let DEMOS = [], DEMO_I = -1;
+
+async function loadDemos() {
+  try {
+    const d = await jget("/api/demo-runs");
+    DEMOS = d.runs || [];
+  } catch { DEMOS = []; }
+  paintDemoHint();
+}
+
+function paintDemoHint() {
+  const el = $("demohint");
+  if (!el) return;
+  if (!DEMOS.length) { el.textContent = ""; return; }
+  const next = DEMOS[(DEMO_I + 1) % DEMOS.length];
+  el.innerHTML = `${DEMOS.length} stored · next: <b>${esc(next.label)}</b>`;
+}
+
 $("loadlast").onclick = async () => {
-  const r = await jget("/api/runs");
-  const runs = r.runs || r;
-  if (!runs.length) { log("no runs on disk"); return; }
-  load(runs[0].run_id || runs[0]);
+  if (!DEMOS.length) {
+    const r = await jget("/api/runs");
+    const runs = r.runs || r;
+    if (!runs.length) { log("no runs on disk"); return; }
+    load(runs[0].run_id || runs[0]);
+    return;
+  }
+  DEMO_I = (DEMO_I + 1) % DEMOS.length;
+  const d = DEMOS[DEMO_I];
+  clearLog(`stored run ${DEMO_I + 1} of ${DEMOS.length} — ${d.label}`);
+  if (d.why) log(d.why);
+  paintDemoHint();
+  load(d.run_id);
 };
 
 async function load(runId) {
   RUN = runId;
+  // A briefing belongs to one run. Leaving the previous one on screen beside
+  // new numbers is how a wrong reading gets read out loud.
+  $("aibody").innerHTML = "";
+  $("airefresh").style.display = "none";
   let d;
   try { d = await jget(`/api/runs/${runId}`); } catch (e) { log("load failed: " + e.message); return; }
   META = d.meta || d;
@@ -728,11 +1489,42 @@ async function load(runId) {
     <dt>Mass balance</dt><dd>${num(res.mass_balance_err_pct, 3)} %</dd>
     <dt>Runtime</dt><dd>${num(res.runtime_s, 1)} s</dd>`;
 
-  const dem = META.dem || {}, sc = META.scenario || {};
+  /* A natural dam has no published capacity, so the lake is read off the
+     terrain - and on some barriers that reading is not identifiable. The
+     backend perturbs the DEM by a quarter of a millimetre and re-measures; if
+     the volume moves, every discharge derived from it moves with it and the
+     operator has to see that beside the headline, not in a JSON file. */
+  const blk = META.blockage;
+  if (blk) {
+    $("results").innerHTML += `
+      <dt>Impounded lake</dt><dd>${num(blk.impounded_volume_mcm, 2)} MCM
+        over ${num(blk.lake_area_km2, 2)} km²</dd>
+      <dt>Debris breach</dt><dd>${num(blk.breach_width_m, 0)} m wide in
+        ${num(blk.breach_formation_hr, 2)} hr</dd>`;
+    if (blk.volume_is_knife_edge) {
+      $("results").innerHTML += `
+        <dt class="err">Volume</dt>
+        <dd class="err" style="font-size:12px">NOT IDENTIFIABLE — a
+          quarter-millimetre DEM perturbation moves this lake to
+          ${num(blk.volume_mcm_under_perturbed_dem, 2)} MCM
+          (${num(blk.volume_swing_pct, 0)}%). It reroutes the drainage that
+          defines the catchment. Read the volume and every discharge from it as
+          an order of magnitude.</dd>`;
+    } else if (blk.volume_swing_pct !== undefined) {
+      $("results").innerHTML += `
+        <dt>Volume check</dt><dd style="font-size:12px">stable —
+          a quarter-millimetre DEM perturbation moves it
+          ${num(blk.volume_swing_pct, 1)}%</dd>`;
+    }
+  }
+
+  const dem = META.dem || {}, sc = META.scenario || {}, dom = META.domain || {};
   $("prov").innerHTML = `
     <dt>Engine</dt><dd>${META.engine ?? "—"}</dd>
     <dt>DEM</dt><dd>${dem.source ?? "—"}</dd>
+    <dt>Grid</dt><dd>${num(dom.cellsize_m, 1)} m · ${dom.nx ?? "—"} × ${dom.ny ?? "—"} cells</dd>
     <dt>Bathymetry</dt><dd>${dem.bathymetry ?? "—"}</dd>
+    <dt>Roughness</dt><dd style="font-size:12px">${dem.roughness ?? "—"}</dd>
     <dt>Conditioning</dt><dd style="font-size:12px">${dem.conditioning ?? "—"}</dd>
     <dt>Failure mode</dt><dd>${sc.failure_mode ?? "—"}</dd>
     <dt>Breach source</dt><dd style="font-size:12px">${sc.breach_param_source ?? "—"}</dd>`;

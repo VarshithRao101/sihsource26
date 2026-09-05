@@ -28,17 +28,25 @@
 -->
 <style>
   :root {
-    --bg:#0a0d12; --bg2:#10141b; --panel:#161c25; --panel2:#1b222d;
-    --line:#252e3b; --line2:#334155;
-    --fg:#e8eef7; --muted:#93a1b5; --dim:#61708a;
-    --accent:#4c8dff;
-    --wait:#4a5568; --run:#f0b429; --ok:#2fbf71; --bad:#f0566d;
-    --skip:#8b6cf0; --absent:#5a6675;
+    /* White ground, black ink. Every colour below is checked against the
+       white background rather than against the dark one it replaced: the
+       state colours in particular were chosen to glow on near-black and
+       several of them (the amber, the green) were unreadable the moment the
+       ground turned white. */
+    --bg:#ffffff; --bg2:#f6f8fa; --panel:#ffffff; --panel2:#f1f4f8;
+    --line:#c6cfd9; --line2:#8d99a8;
+    --ink:#0b0f14;                       /* the black. Boxes and wires use it. */
+    --fg:#0b0f14; --muted:#48545f; --dim:#6a7480;
+    --accent:#0b4fd0;
+    --wait:#7d8896; --run:#a35a00; --ok:#0d6b3c; --bad:#a4161a;
+    --skip:#5b21b6; --absent:#8d99a8;
 
-    --k-input:#64748b;   --k-data:#6366f1;    --k-geodata:#14b8a6;
-    --k-physics:#f59e0b; --k-solver:#3b82f6;  --k-output:#0ea5e9;
-    --k-ml:#a855f7;      --k-engine:#94a3b8;  --k-validation:#06b6d4;
-    --k-gate:#22c55e;    --k-result:#eab308;
+    /* Category rails. Darkened from the originals so a 4 px bar on white is
+       a colour and not a pastel smear. */
+    --k-input:#475569;   --k-data:#4338ca;    --k-geodata:#0f766e;
+    --k-physics:#a35a00; --k-solver:#1d4ed8;  --k-output:#0369a1;
+    --k-ml:#7e22ce;      --k-engine:#52606d;  --k-validation:#0e7490;
+    --k-gate:#15803d;    --k-result:#a16207;
   }
   * { box-sizing:border-box; }
   html,body { height:100%; }
@@ -54,8 +62,8 @@
   /* ---------------------------------------------------------- chrome */
   header {
     display:flex; align-items:center; gap:16px; padding:11px 18px;
-    background:linear-gradient(180deg,#141a23,#10141b);
-    border-bottom:1px solid var(--line); flex-wrap:wrap;
+    background:var(--bg);
+    border-bottom:2px solid var(--ink); flex-wrap:wrap;
   }
   header h1 {
     font-size:14.5px; margin:0; font-weight:650; letter-spacing:-.01em;
@@ -63,15 +71,15 @@
   }
   header h1 .mark {
     width:9px; height:9px; border-radius:3px;
-    background:linear-gradient(135deg,var(--accent),#22d3ee);
-    box-shadow:0 0 12px #4c8dff88;
+    background:var(--ink);
+    box-shadow:none;
   }
   .nav { display:flex; gap:3px; margin-left:4px; }
   .nav a {
     padding:5px 13px; border-radius:7px; text-decoration:none; font-size:12.5px;
     color:var(--muted); border:1px solid transparent; transition:.15s;
   }
-  .nav a:hover { color:var(--fg); background:#ffffff08; }
+  .nav a:hover { color:var(--fg); background:var(--panel2); }
   .nav a.on { background:var(--panel2); color:var(--fg); border-color:var(--line2); }
   .grow { flex:1; }
   .chip {
@@ -79,9 +87,9 @@
     color:var(--muted); background:var(--panel); white-space:nowrap;
     font-variant-numeric:tabular-nums;
   }
-  .chip.live { border-color:var(--run); color:var(--run); background:#f0b4290f; }
-  .chip.done { border-color:var(--ok); color:var(--ok); background:#2fbf710f; }
-  .chip.bad  { border-color:var(--bad); color:var(--bad); background:#f0566d0f; }
+  .chip.live { border-color:var(--run); color:var(--run); background:#fff4e6; }
+  .chip.done { border-color:var(--ok); color:var(--ok); background:#e8f6ee; }
+  .chip.bad  { border-color:var(--bad); color:var(--bad); background:#fdecea; }
 
   /* -------------------------------------------------------- toolbar */
   .toolbar {
@@ -97,21 +105,20 @@
     border-radius:7px; padding:7px 10px; min-width:110px; transition:.15s;
   }
   select:hover,input:hover { border-color:var(--line2); }
-  select:focus,input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px #4c8dff22; }
+  select:focus,input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px #0b4fd033; }
   .btn {
     display:inline-flex; align-items:center; gap:7px; padding:8px 17px;
     border-radius:8px; border:1px solid var(--line2); background:var(--panel2);
     color:var(--fg); cursor:pointer; font-weight:600; font-size:13px; transition:.15s;
   }
-  .btn:hover:not(:disabled) { border-color:var(--accent); background:#1f2836; }
+  .btn:hover:not(:disabled) { border-color:var(--accent); background:var(--panel2); }
   .btn:disabled { opacity:.32; cursor:not-allowed; }
-  .btn.play {
-    background:linear-gradient(180deg,#1a7f47,#15693a); border-color:#2fbf71; color:#eafff2;
-    box-shadow:0 2px 12px #2fbf7133;
-  }
-  .btn.play:hover:not(:disabled) { background:linear-gradient(180deg,#1f9455,#1a7f47); }
-  .btn.pause { background:linear-gradient(180deg,#7a5410,#5f410b); border-color:#f0b429; color:#fff5da; }
-  .btn.reset { background:linear-gradient(180deg,#7a2230,#5e1a25); border-color:#f0566d; color:#ffe9ec; }
+  .btn.play  { background:var(--ok);  border-color:var(--ok);  color:#fff; }
+  .btn.play:hover:not(:disabled)  { background:#0a5730; border-color:#0a5730; }
+  .btn.pause { background:var(--run); border-color:var(--run); color:#fff; }
+  .btn.pause:hover:not(:disabled) { background:#874a00; border-color:#874a00; }
+  .btn.reset { background:var(--bad); border-color:var(--bad); color:#fff; }
+  .btn.reset:hover:not(:disabled) { background:#851214; border-color:#851214; }
 
   /* ------------------------------------------------- live metrics */
   #strip {
@@ -120,7 +127,7 @@
   }
   #strip.on { display:flex; }
   .metric {
-    background:var(--panel); border:1px solid var(--line); border-radius:9px;
+    background:var(--panel); border:1.5px solid var(--ink); border-radius:9px;
     padding:7px 13px; min-width:104px; flex:none;
   }
   .metric .k { font-size:9px; text-transform:uppercase; letter-spacing:.09em; color:var(--dim);
@@ -128,17 +135,17 @@
   .metric .v { font-size:17px; font-weight:650; font-variant-numeric:tabular-nums;
                letter-spacing:-.02em; margin-top:1px; }
   .metric .u { font-size:10.5px; color:var(--muted); font-weight:400; }
-  .metric.hi { border-color:var(--accent); background:#4c8dff0d; }
+  .metric.hi { border-color:var(--accent); background:#eef4ff; }
 
   /* ---------------------------------------------------------- graph */
   .stage { position:relative; flex:1; min-height:0; }
   .stageHead {
     position:absolute; top:0; left:0; right:0; z-index:6; display:flex; gap:14px;
     align-items:center; padding:9px 16px;
-    background:linear-gradient(#0a0d12f2,#0a0d1200); pointer-events:none;
+    background:linear-gradient(#ffffffee,#ffffff00); pointer-events:none;
   }
   .stageHead .t { font-size:10.5px; text-transform:uppercase; letter-spacing:.1em;
-                  color:var(--muted); font-weight:650; white-space:nowrap; }
+                  color:var(--ink); font-weight:700; white-space:nowrap; }
   .legend { display:flex; gap:13px; flex-wrap:wrap; font-size:10.5px; color:var(--dim); }
   .legend b { color:var(--muted); font-weight:500; }
   .legend i { display:inline-block; width:8px; height:8px; border-radius:2.5px; margin-right:5px; }
@@ -148,13 +155,12 @@
     border-radius:7px; padding:4px 10px; cursor:pointer; font-size:11.5px;
     text-transform:none; letter-spacing:0; transition:.15s;
   }
-  .mini:hover { color:var(--fg); border-color:var(--accent); }
+  .mini:hover { color:var(--fg); border-color:var(--ink); background:var(--panel2); }
 
   #canvasWrap {
     position:absolute; inset:0; overflow:hidden; cursor:grab;
     background:
-      radial-gradient(circle at 1px 1px,#1c2432 1.1px,transparent 0) 0 0/30px 30px,
-      radial-gradient(ellipse 70% 55% at 50% 42%,#131a26,transparent),
+      radial-gradient(circle at 1px 1px,#c9d3de 1.2px,transparent 0) 0 0/30px 30px,
       var(--bg);
   }
   #canvasWrap.drag { cursor:grabbing; }
@@ -165,19 +171,19 @@
      card that grew with its text would leave its arrows pointing at nothing. */
   .node {
     position:absolute; width:214px; height:112px; overflow:hidden;
-    background:linear-gradient(180deg,var(--panel2),var(--panel));
-    color:var(--fg); border:1px solid var(--line); border-radius:11px;
+    background:var(--panel);
+    color:var(--fg); border:2.5px solid var(--ink); border-radius:11px;
     /* The bottom padding reserves the dependency row, which is absolutely
        positioned down there and must never be covered by the detail text. */
     padding:11px 13px 24px; cursor:pointer;
-    box-shadow:0 3px 14px #00000066, inset 0 1px 0 #ffffff08;
+    box-shadow:0 2px 0 #0b0f1414;
     transition:border-color .18s, box-shadow .18s, transform .18s;
   }
   .node::before {
-    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
-    background:var(--kc,var(--wait)); border-radius:11px 0 0 11px;
+    content:""; position:absolute; left:0; top:0; bottom:0; width:7px;
+    background:var(--kc,var(--wait)); border-radius:10px 0 0 10px;
   }
-  .node:hover { transform:translateY(-3px); box-shadow:0 10px 28px #000000aa; border-color:var(--line2); }
+  .node:hover { transform:translateY(-3px); box-shadow:0 8px 20px #0b0f1426; }
   .node .nt { font-size:14px; font-weight:650; line-height:1.25; letter-spacing:-.01em; }
   .node .ns { font-size:11.5px; color:var(--muted); margin-top:2px; }
   .node .nstat {
@@ -195,78 +201,81 @@
     font-size:9.5px; color:var(--dim); letter-spacing:.02em;
   }
   .node .deps span {
-    background:#ffffff0a; border:1px solid var(--line); border-radius:5px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:5px;
     padding:1px 6px; white-space:nowrap;
   }
-  .node .deps span.eng { border-color:#f0566d55; color:#f0566d; }
+  .node .deps span.eng { border-color:var(--bad); color:var(--bad); background:#fdecea; }
 
-  .node[data-s=waiting]  { opacity:.86; }
+  .node[data-s=waiting]  { border-color:var(--ink); }
   .node[data-s=waiting] .nstat { color:var(--dim); }
   .node[data-s=running]  {
-    border-color:var(--run); box-shadow:0 0 0 1px #f0b42944, 0 0 28px #f0b42933, 0 6px 20px #000a;
+    border-color:var(--run); border-width:4px; background:#fff6e8;
+    box-shadow:0 0 0 4px #a35a0022;
   }
   .node[data-s=running] .dot { background:var(--run); animation:pulse 1s infinite; }
   .node[data-s=running] .nstat { color:var(--run); }
-  .node[data-s=complete] { border-color:#2fbf7140; }
+  .node[data-s=complete] { border-color:var(--ok); border-width:3.5px; background:#eef9f2; }
   .node[data-s=complete] .dot { background:var(--ok); }
   .node[data-s=complete] .nstat { color:var(--ok); }
-  .node[data-s=failed]   { border-color:var(--bad); box-shadow:0 0 0 1px #f0566d44, 0 4px 18px #000a; }
+  .node[data-s=failed]   { border-color:var(--bad); border-width:4px; background:#fdeceb; }
   .node[data-s=failed] .dot { background:var(--bad); }
   .node[data-s=failed] .nstat { color:var(--bad); }
   .node[data-s=skipped] .dot { background:var(--skip); }
   .node[data-s=skipped] .nstat { color:var(--skip); }
-  .node[data-s=absent]   { border-style:dashed; opacity:.66; }
+  .node[data-s=absent]   { border-style:dashed; border-color:var(--absent);
+                         background:repeating-linear-gradient(45deg,#f4f6f9 0 7px,#eaeef3 7px 14px); }
   .node[data-s=absent] .dot { background:var(--absent); }
   .node[data-s=absent] .nstat { color:var(--absent); }
-  .node.sel { border-color:var(--accent); box-shadow:0 0 0 2px #4c8dff55, 0 10px 30px #000b; }
+  .node.sel { border-color:var(--accent); box-shadow:0 0 0 4px #0b4fd033; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-  .node .bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:#00000055;
+  .node .bar { position:absolute; left:0; right:0; bottom:0; height:4px; background:#0b0f1418;
                overflow:hidden; display:none; }
   .node.showbar .bar { display:block; }
   .node .bar i { display:block; height:100%; width:0; transition:width .25s;
-                 background:linear-gradient(90deg,#f0b429,#fbbf24); }
+                 background:var(--run); }
 
-  .wire { fill:none; stroke:#2b3646; stroke-width:1.9; }
-  .wire.dashed { stroke-dasharray:5 6; stroke:#28313e; }
+  .wire { fill:none; stroke:var(--ink); stroke-width:2.6; }
+  .wire.dashed { stroke-dasharray:5 6; stroke:var(--line2); }
   .wire.hot { stroke:var(--run); stroke-width:2.6; stroke-dasharray:8 7;
               animation:flow .6s linear infinite; }
-  .wire.done { stroke:#2b6b4a; }
+  .wire.done { stroke:var(--ok); stroke-width:2.4; }
   @keyframes flow { to { stroke-dashoffset:-30; } }
-  .wlab { fill:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.07em;
+  .wlab { fill:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.07em;
           font-weight:600; }
-  .warrow { fill:#2b3646; }
-  .warrow.done { fill:#2b6b4a; }
+  .warrow { fill:var(--ink); }
+  .warrow.done { fill:var(--ok); }
   .warrow.hot { fill:var(--run); }
 
   /* -------------------------------------------------------- inspector */
   #drawer {
     position:fixed; right:0; top:0; bottom:0; width:440px; max-width:94vw; z-index:40;
-    background:linear-gradient(180deg,#141a23,var(--bg2));
-    border-left:1px solid var(--line2); overflow:auto;
+    background:var(--bg);
+    border-left:2px solid var(--ink); overflow:auto;
     transform:translateX(102%); transition:transform .24s cubic-bezier(.4,0,.2,1);
     padding:18px 22px 48px;
   }
-  #drawer.open { transform:none; box-shadow:-20px 0 60px #000c; }
+  #drawer.open { transform:none; box-shadow:-16px 0 44px #0b0f1424; }
   #drawer h2 { margin:0 0 3px; font-size:19px; letter-spacing:-.02em; }
   #drawer .sub { color:var(--muted); font-size:12.5px; margin-bottom:13px; }
   #drawer h3 { font-size:9.5px; text-transform:uppercase; letter-spacing:.11em;
                color:var(--dim); margin:19px 0 7px; font-weight:700; }
-  #drawer p { margin:0; font-size:13px; line-height:1.65; color:#c4d1e2; }
-  #drawer ul { margin:0; padding-left:18px; font-size:12.5px; line-height:1.65; color:#c4d1e2; }
+  #drawer p { margin:0; font-size:13px; line-height:1.65; color:var(--fg); }
+  #drawer ul { margin:0; padding-left:18px; font-size:12.5px; line-height:1.65; color:var(--fg); }
   #drawer ul.plain { list-style:none; padding-left:0; }
   #drawer ul.plain li {
-    padding:5px 9px; margin-bottom:4px; background:#ffffff07; border:1px solid var(--line);
+    padding:5px 9px; margin-bottom:4px; background:var(--panel2); border:1px solid var(--line);
     border-left:2px solid var(--dl,var(--line2)); border-radius:6px; font-size:12px;
   }
-  #drawer code { background:var(--panel); padding:2px 6px; border-radius:5px; font-size:11.5px;
-                 color:#8fc0ff; word-break:break-all; }
+  #drawer code { background:var(--panel2); border:1px solid var(--line); padding:2px 6px;
+                 border-radius:5px; font-size:11.5px; color:var(--accent);
+                 word-break:break-all; }
   .close { position:absolute; right:14px; top:14px; }
   .badge { display:inline-block; font-size:10px; font-weight:700; letter-spacing:.08em;
            text-transform:uppercase; padding:3px 10px; border-radius:20px; }
-  .b-waiting{background:#2c3442;color:#b6c2d3} .b-running{background:#6b4a0d;color:#ffd97a}
-  .b-complete{background:#12502f;color:#a9f0c8} .b-failed{background:#6b1c28;color:#ffb9c3}
-  .b-skipped{background:#3a2a72;color:#d6c9ff} .b-absent{background:#2c3442;color:#8a97a8}
+  .b-waiting{background:#e8ecf1;color:#3f4a56} .b-running{background:var(--run);color:#fff}
+  .b-complete{background:var(--ok);color:#fff}   .b-failed{background:var(--bad);color:#fff}
+  .b-skipped{background:var(--skip);color:#fff}  .b-absent{background:#e8ecf1;color:#6a7480}
   .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:12.5px; }
   .kv dt { color:var(--muted); } .kv dd { margin:0; font-variant-numeric:tabular-nums; }
   table { border-collapse:collapse; width:100%; font-size:12px; }
@@ -278,30 +287,32 @@
   /* ------------------------------------------------------------ misc */
   #tip {
     position:fixed; z-index:60; max-width:340px;
-    background:#080b10f5; color:var(--fg); border:1px solid var(--line2);
+    background:var(--bg); color:var(--fg); border:2px solid var(--ink);
     border-radius:9px; padding:11px 13px; font-size:12px; line-height:1.55;
-    pointer-events:none; display:none; box-shadow:0 12px 34px #000c;
+    pointer-events:none; display:none; box-shadow:0 10px 28px #0b0f1433;
   }
   #tip b { display:block; margin-bottom:4px; font-size:13px; }
   #tip .t2 { color:var(--muted); }
-  #tip .t3 { margin-top:7px; color:#8fc0ff; }
+  #tip .t3 { margin-top:7px; color:var(--accent); }
   #tip .t4 { margin-top:7px; color:var(--dim); font-size:11px; }
   #banner {
-    display:none; padding:9px 18px; background:linear-gradient(90deg,#6b4a0d,#5a3f0b);
-    color:#ffd97a; font-weight:700; font-size:12px; border-bottom:1px solid #f0b429;
+    display:none; padding:9px 18px; background:#fff4e6;
+    color:var(--run); font-weight:700; font-size:12px;
+    border-bottom:2px solid var(--run);
   }
   #log {
     position:absolute; left:16px; bottom:16px; width:min(480px,44%); max-height:150px;
-    overflow:auto; background:#080b10e8; border:1px solid var(--line); border-radius:9px;
-    padding:9px 11px; font:11px/1.6 ui-monospace,Consolas,monospace; color:#93c5ea;
-    z-index:6; box-shadow:0 8px 24px #0009;
+    overflow:auto; background:var(--ink); border:1.5px solid var(--ink); border-radius:9px;
+    padding:9px 11px; font:11px/1.6 ui-monospace,Consolas,monospace; color:#dbe6f2;
+    z-index:6; box-shadow:0 6px 18px #0b0f1433;
   }
   #log .t { color:var(--dim); }
-  #log .ok { color:#86efac; } #log .warn { color:#fcd34d; } #log .err { color:#fda4af; }
+  #log .ok { color:#7ee2a8; } #log .warn { color:#ffd27a; } #log .err { color:#ffa8ae; }
+  #log .t { color:#8d99a8; }
   #log::-webkit-scrollbar { width:7px; }
-  #log::-webkit-scrollbar-thumb { background:#2b3646; border-radius:4px; }
+  #log::-webkit-scrollbar-thumb { background:#4a5563; border-radius:4px; }
   #drawer::-webkit-scrollbar { width:9px; }
-  #drawer::-webkit-scrollbar-thumb { background:#2b3646; border-radius:5px; }
+  #drawer::-webkit-scrollbar-thumb { background:var(--line2); border-radius:5px; }
 </style>
 <!-- The design layer, owned by the two designers. Loaded last so their
      rules win without anyone editing this file. See theme.css. -->
@@ -334,12 +345,10 @@
   </div>
   <div class="fld">
     <label for="mode">Scenario</label>
-    <select id="mode">
-      <option value="overtopping">Dam break — overtopping</option>
-      <option value="piping">Dam break — piping</option>
-      <option value="gated_release">Controlled release — gates</option>
-      <option value="blockage_breach">River blockage — landslide dam</option>
-    </select>
+    <!-- Filled from GET /api/enums. Deliberately empty in the markup: a
+         hardcoded list here was a second copy of shared/contract.py's, and it
+         was still offering four cases after the backend grew to eight. -->
+    <select id="mode"></select>
   </div>
   <div class="fld" id="fldLevel">
     <label for="level">Reservoir full</label>
@@ -696,10 +705,10 @@ function applyNodeMap(nodes) {
    ====================================================================== */
 
 const DEP_SECTIONS = [
-  ["engines", "External engines", "#f0566d"],
-  ["services", "Network services and credentials", "#f59e0b"],
-  ["data", "Datasets and files", "#14b8a6"],
-  ["code", "Python packages", "#4c8dff"],
+  ["engines", "External engines", "#a4161a"],
+  ["services", "Network services and credentials", "#a35a00"],
+  ["data", "Datasets and files", "#0f766e"],
+  ["code", "Python packages", "#1d4ed8"],
 ];
 
 function depBlock(n) {
@@ -728,7 +737,7 @@ function openNode(id, keepScroll) {
     `<h2>${escapeHtml(n.title)}</h2>` +
     `<div class="sub">${escapeHtml(n.subtitle)}</div>` +
     `<span class="badge b-${st.status}">${st.status}</span>` +
-    (st.detail ? `<p style="margin-top:11px;color:#8fc0ff">${escapeHtml(st.detail)}</p>` : "") +
+    (st.detail ? `<p style="margin-top:11px;color:#0b4fd0">${escapeHtml(st.detail)}</p>` : "") +
     (st.note ? `<p style="margin-top:9px;color:var(--muted)">${escapeHtml(st.note)}</p>` : "") +
     `<h3>What this stage does</h3><p>${escapeHtml(n.does)}</p>`;
 
@@ -756,7 +765,7 @@ function openNode(id, keepScroll) {
     jget(`/api/runs/${S.runId}/validate`).then(rep => {
       const el = $("valv");
       if (!el) return;
-      el.style.color = rep.ok ? "#a9f0c8" : "#ffb9c3";
+      el.style.color = rep.ok ? "#0d6b3c" : "#a4161a";
       el.innerHTML =
         (rep.ok ? "PASS — contract clean." : "FAIL — " + escapeHtml(rep.errors.join("; "))) +
         (rep.warnings.length
@@ -790,7 +799,7 @@ function delftBlock() {
   if ((d.licence_tooling || []).length)
     h += `<h3>Found, but not a solver</h3><ul class="plain">` +
       d.licence_tooling.map(x => `<li><code>${escapeHtml(x)}</code></li>`).join("") + `</ul>`;
-  h += `<p style="margin-top:12px;color:#ffb9c3">This node cannot turn green while the kernel is
+  h += `<p style="margin-top:12px;color:#a4161a">This node cannot turn green while the kernel is
         missing, and no other engine's numbers are shown in its place.</p>`;
   return h;
 }
@@ -840,7 +849,7 @@ function resultBlock() {
       S.evac.routes.slice(0, 12).map(r2 => `<tr>
         <td>${escapeHtml(r2.settlement || r2.name || "")}</td>
         <td class="num">${fmt(r2.walk_time_hr ?? r2.travel_time_hr)} hr</td>
-        <td class="num" style="color:${(r2.margin_hr ?? 1) < 0 ? "#ffb9c3" : "#a9f0c8"}">
+        <td class="num" style="color:${(r2.margin_hr ?? 1) < 0 ? "#a4161a" : "#0d6b3c"}">
           ${fmt(r2.margin_hr)} hr</td></tr>`).join("") + `</table>`;
   } else {
     h += `<h3>Evacuation</h3><p style="color:var(--muted)">No evacuation plan for this run — it
@@ -932,12 +941,37 @@ async function loadDams() {
 }
 
 $("fstate").onchange = loadDams;
-$("mode").onchange = () => {
+loadModes();
+/* The case list, and which of this page's fields each case reads. Both come
+   from the API - `controls` is the same per-mode list the console uses, so a
+   case cannot show a field here that the solver ignores. */
+async function loadModes() {
+  let e;
+  try { e = await fetch(API + "/api/enums").then(r => r.json()); }
+  catch { log("could not read /api/enums — case list unavailable", "err"); return; }
+  MODEINFO = e.failure_mode_info || {};
+  const legal = e.dam_failure_modes || e.failure_modes || [];
+  $("mode").innerHTML = legal.map(m =>
+    `<option value="${m}">${(MODEINFO[m] || {}).label || m}</option>`).join("");
+  applyModeFields();
+}
+
+let MODEINFO = {};
+
+function applyModeFields() {
   const m = $("mode").value;
-  $("fldGate").style.display  = m === "gated_release" ? "" : "none";
-  $("fldBlock").style.display = m === "blockage_breach" ? "" : "none";
-  $("fldLevel").style.display = m === "blockage_breach" ? "none" : "";
-};
+  const wants = new Set((MODEINFO[m] || {}).controls || []);
+  $("fldLevel").style.display = wants.has("reservoir_level_frac") ? "" : "none";
+  $("fldGate").style.display  = wants.has("gate_opening_frac") ? "" : "none";
+  $("fldBlock").style.display =
+    (wants.has("blockage_height_m") || wants.has("moraine_height_m")) ? "" : "none";
+  const lbl = $("fldBlock").querySelector("label");
+  if (lbl) {
+    lbl.textContent = wants.has("moraine_height_m") ? "Moraine (m)" : "Barrier (m)";
+  }
+}
+
+$("mode").onchange = applyModeFields;
 
 /* ======================================================================
    PLAY / PAUSE / RESET — these drive the real backend
@@ -968,6 +1002,16 @@ async function play() {
   };
   if (mode === "gated_release")   body.gate_opening_frac = +$("gate").value / 100;
   if (mode === "blockage_breach") body.blockage_height_m = +$("blockh").value;
+  if (mode === "glof_moraine")    body.moraine_height_m = +$("blockh").value;
+  if (mode === "spillway_blockage") {
+    // Without an inflow the reservoir never rises and the run is refused. This
+    // page has no inflow box, so it states a value rather than posting one the
+    // validator will reject - and the log says what it used.
+    body.inflow_cumecs = 2000;
+    body.residual_spillway_frac = 0.15;
+    log("spillway blockage: inflow 2,000 m3/s at 15% residual outlet capacity " +
+        "(this page has no inflow field; the console does).");
+  }
 
   resetStates();
   S.meta = S.impact = S.evac = null;
