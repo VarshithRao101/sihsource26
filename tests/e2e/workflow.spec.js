@@ -108,7 +108,12 @@ test("the workflow page draws one box per stage, all waiting", async ({ page }) 
     if (n.engine) expect(["skipped", "absent", "complete"]).toContain(state);
     else expect(state).toBe("waiting");
   }
-  await expect(page.locator('.node[data-id="delft3d"]')).toHaveAttribute("data-s", "absent");
+  // `absent` when the kernel is not installed, `skipped` when it is but this
+  // request did not run it. Both are the honest answer and which one you get
+  // depends on the machine; the assertion above already forbids the only
+  // dishonest one, which is `complete`.
+  await expect(page.locator('.node[data-id="delft3d"]'))
+    .toHaveAttribute("data-s", /^(skipped|absent)$/);
 });
 
 test("clicking a box expands it into what that stage does", async ({ page }) => {
@@ -217,8 +222,12 @@ test("PLAY executes the real pipeline and every node changes state", async ({ pa
     expect(seen[id]).toContain("running");
     expect(seen[id][seen[id].length - 1], `${id} did not complete`).toBe("complete");
   }
-  // The engine we do not have never moved at all.
-  expect(seen.delft3d).toEqual(["absent"]);
+  // The engine this request did not use never moved at all. What it started on
+  // is a property of the machine - `absent` with no kernel installed,
+  // `skipped` with one - and the claim being tested is that a live PLAY does
+  // not drag it along with everything else.
+  expect(seen.delft3d).toHaveLength(1);
+  expect(["absent", "skipped"]).toContain(seen.delft3d[0]);
 
   // Nothing is left hanging: every box reaches a state that means something.
   for (const [id, node] of Object.entries(final.nodes)) {
@@ -227,8 +236,10 @@ test("PLAY executes the real pipeline and every node changes state", async ({ pa
       `${id} finished on ${node.status}`
     ).toContain(node.status);
   }
-  // And the engine we do not have still has not run.
-  expect(final.nodes.delft3d.status).toBe("absent");
+  // And the engine this request did not use still has not run - `absent` or
+  // `skipped` depending on whether the kernel is installed here, never
+  // `complete`.
+  expect(["absent", "skipped"]).toContain(final.nodes.delft3d.status);
 
   // The page agrees with the API.
   await expect(page.locator("#cStatus")).toContainText("done", { timeout: 60000 });
@@ -359,7 +370,8 @@ test("the page is the graph and nothing else", async ({ page }) => {
   await expect(page.locator("#sceneNote")).toHaveCount(0);
   await expect(page.locator('nav.nav a[href="/docs"]')).toHaveCount(0);
   // The controls the operator drives it with are all still here.
-  for (const id of ["#bPlay", "#bPause", "#bReset", "#bLast", "#fstate", "#fdam", "#mode"]) {
+  for (const id of ["#bPlay", "#bPause", "#bReset", "#bLast", "#bStored",
+                    "#storedsrc", "#storedcase", "#fstate", "#fdam", "#mode"]) {
     await expect(page.locator(id)).toBeVisible();
   }
   // The engine probe log is on screen - it is how we show what is installed.
@@ -437,6 +449,153 @@ test("PAUSE holds the solver and RESET stops it", async ({ page, request }) => {
   await expect(page.locator("#cStatus")).toHaveText("idle");
   await expect(page.locator('.node[data-id="solve"]')).toHaveAttribute("data-s", "waiting");
   await expect(page.locator('.node[data-id="result"]')).toHaveAttribute("data-s", "waiting");
-  // ...but a stage we never ran still tells the truth about itself.
-  await expect(page.locator('.node[data-id="delft3d"]')).toHaveAttribute("data-s", "absent");
+  // ...but a stage we never ran still tells the truth about itself. Whether it
+  // reads `absent` or `skipped` depends on whether the kernel is installed on
+  // the machine running this, and both are honest - what it must never be is
+  // green. Pinning it to `absent` failed the suite on a machine where Delft3D
+  // had since been installed, which is the machine we most want it to pass on.
+  await expect(page.locator('.node[data-id="delft3d"]'))
+    .toHaveAttribute("data-s", /^(skipped|absent)$/);
+});
+
+// ---------------------------------------------------------------------------
+// 7. Stored runs — the dam set and the river set, walked stage by stage
+//
+// The stored-run button is what gets pressed in front of a panel, because a
+// real solve on real terrain takes minutes and the room will not wait. So the
+// two things that must be true of it are tested here: that the two categories
+// stay apart, and that pressing it walks the graph rather than snapping every
+// box green at once.
+//
+// It is also the one control on this page that must never read as a live
+// solve. The status chip says so throughout, and that is asserted.
+// ---------------------------------------------------------------------------
+
+test("stored runs are split into dams and rivers and never mix", async ({ page, request }) => {
+  const manifest = await (await request.get("/api/demo-runs")).json();
+  test.skip(!manifest.count, "no stored runs built on this machine");
+
+  await page.goto("/workflow");
+  await expect(page.locator("#storedcase option").first()).not.toHaveText("loading…", {
+    timeout: 20000,
+  });
+
+  for (const category of ["dam", "river"]) {
+    const expected = (manifest.runs || []).filter(
+      (r) => (r.category || "dam") === category
+    );
+    if (!expected.length) continue;
+
+    await page.selectOption("#storedsrc", category);
+    const values = await page.evaluate(() =>
+      [...document.querySelectorAll("#storedcase option")].map((o) => o.value)
+    );
+    // Exactly this category's runs, and nothing from the other one.
+    expect(values.sort()).toEqual(expected.map((r) => r.run_id).sort());
+    await expect(page.locator("#storedcount")).toHaveText(`(${expected.length})`);
+  }
+});
+
+test("a stored run walks the graph stage by stage and never claims to be solving",
+  async ({ page, request }) => {
+    const manifest = await (await request.get("/api/demo-runs")).json();
+    const river = (manifest.runs || []).filter((r) => r.category === "river");
+    test.skip(!river.length, "no stored river runs built on this machine");
+
+    await page.goto("/workflow");
+    await expect(page.locator("#storedcase option").first()).not.toHaveText("loading…", {
+      timeout: 20000,
+    });
+    await page.selectOption("#storedsrc", "river");
+    await page.selectOption("#storedcase", river[0].run_id);
+
+    // Record every distinct status the chip passes through. A replay that
+    // filled the graph in one paint would show one value here; a walk shows a
+    // stage counter climbing.
+    await page.evaluate(() => {
+      window.__seen = [];
+      const el = document.getElementById("cStatus");
+      new MutationObserver(() => window.__seen.push(el.textContent)).observe(el, {
+        childList: true, subtree: true, characterData: true,
+      });
+    });
+
+    const t0 = Date.now();
+    await page.click("#bStored");
+
+    // Mid-walk, the graph must be part-done: something complete, something
+    // still waiting. This is the assertion that a staged replay exists at all.
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const st = [...document.querySelectorAll(".node")].map((n) => n.dataset.s);
+          return st.includes("complete") && st.includes("waiting");
+        }),
+        { timeout: 15000, intervals: [150] }
+      )
+      .toBe(true);
+
+    await expect(page.locator("#cStatus")).toContainText("nothing is solving", {
+      timeout: 40000,
+    });
+    const elapsed = (Date.now() - t0) / 1000;
+
+    // The demo script allows ten to twenty seconds. The upper bound is loose
+    // because a throttled or contended browser cannot hit its own deadlines -
+    // the walk degrades to about a stage a second rather than hanging - and
+    // failing the suite for that would be failing it for the machine.
+    expect(elapsed, `stored run walked in ${elapsed.toFixed(1)} s`).toBeGreaterThan(8);
+    expect(elapsed, `stored run walked in ${elapsed.toFixed(1)} s`).toBeLessThan(40);
+
+    const seen = await page.evaluate(() => window.__seen);
+    // It passed through per-stage labels, not straight to done.
+    expect(seen.filter((t) => /replay \d+\/\d+/.test(t)).length).toBeGreaterThan(4);
+    // And at no point did it describe itself as a live solve.
+    expect(seen.filter((t) => /^running/.test(t))).toEqual([]);
+
+    // The run it loaded is the one that was selected, and the graph ends on
+    // the real verdict from the real validator.
+    await expect(page.locator("#cRun")).toHaveText(river[0].run_id);
+    await expect(page.locator('.node[data-id="result"]')).toHaveAttribute(
+      "data-s", "complete", { timeout: 20000 }
+    );
+    await expect(page.locator('.node[data-id="validate"]')).toHaveAttribute(
+      "data-s", "complete", { timeout: 20000 }
+    );
+    // A stage this run genuinely did not execute is still not green. Whether
+    // it reads `skipped` or `absent` depends on whether the kernel happens to
+    // be installed on this machine, and both are honest; what must never
+    // happen is a replay painting it complete because everything else was.
+    await expect(page.locator('.node[data-id="delft3d"]')).toHaveAttribute(
+      "data-s", /^(skipped|absent)$/
+    );
+  });
+
+test("RESET abandons a stored-run walk in flight", async ({ page, request }) => {
+  const manifest = await (await request.get("/api/demo-runs")).json();
+  test.skip(!manifest.count, "no stored runs built on this machine");
+
+  await page.goto("/workflow");
+  await expect(page.locator("#storedcase option").first()).not.toHaveText("loading…", {
+    timeout: 20000,
+  });
+  await page.click("#bStored");
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll(".node")].some((n) => n.dataset.s === "complete")
+      ),
+      { timeout: 15000, intervals: [150] }
+    )
+    .toBe(true);
+
+  await page.click("#bReset");
+  await expect(page.locator("#cStatus")).toHaveText("idle");
+  await expect(page.locator('.node[data-id="result"]')).toHaveAttribute("data-s", "waiting");
+
+  // The walk must be dead, not merely interrupted: two seconds later nothing
+  // has crept forward behind the reset.
+  await new Promise((r) => setTimeout(r, 2000));
+  await expect(page.locator('.node[data-id="result"]')).toHaveAttribute("data-s", "waiting");
+  await expect(page.locator("#cStatus")).toHaveText("idle");
 });
