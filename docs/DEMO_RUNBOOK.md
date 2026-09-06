@@ -86,29 +86,73 @@ Check any of them:
 .venv\Scripts\python.exe -m shared.validate outputs\latatapovanntpc_blockage_fast_001
 ```
 
-### The four the console cycles
+### The ten the console cycles — five dams and five rivers
 
-**Load a stored run** on the console cycles four curated runs, one per click, and tells you which
-is next before you press it. They are real runs on COP30 through the same code path as anything
-you solve live — not recordings — and each one is there because it shows something the other
-three cannot:
+**Load a stored run** cycles the set that matches the tab you are on. The dam tab cycles the five
+dams; the river tab cycles the five rivers. They are real runs on COP30 through the same code path
+as anything you solve live — not recordings — and each one is there because it shows something the
+others cannot.
+
+**The five dams:**
 
 | Click | Run | Shows |
 |---|---|---|
 | 1 | Machchhu II, 1979 — overtopping | A real Indian dam break with a **documented outcome**. The one case in the set where "is this right" has an answer — see [`HISTORICAL_VALIDATION.md`](HISTORICAL_VALIDATION.md) |
-| 2 | Lower Manair — spillway blocked | The **time to overtop**: 35.8 hours between the outlets failing and the first water over the crest. No other case produces that number |
-| 3 | South Lhonak, 2023 — moraine outburst | A natural dam with no published storage. Also the honest bit: the DEM finds 0.34 MCM behind that moraine against ~25.7 MCM that actually drained, and `meta.json` publishes both |
+| 2 | Lower Manair — spillway blocked | The **time to overtop**: the hours between the outlets failing and the first water over the crest. No other case produces that number |
+| 3 | South Lhonak, 2023 — moraine outburst | A natural dam with no published storage. Also the honest bit: the DEM finds 0.34 MCM behind that moraine against the volume Huggel's area relation gives, and `meta.json` publishes both |
 | 4 | Idukki — foundation failure | A 169 m arch dam, the one class of structure the breach regressions **do not describe**. `meta.json` says no regression was applied |
+| 5 | Annamayya (Cheyyeru), 2021 — overtopping | The only run here laid against an **observed satellite extent** — and it did not flatter us: bias 7.3. Read `validation.json` before quoting anything from it |
+
+**The five rivers are the five the problem statement names.** NTRO's Background paragraph names
+Rishi Ganga (Feb 2021), Wapriyang (Nov 2021), Phuktal near Sumdo (Mar 2015), Kosi (2008) and the
+Kashmir valley (2014). All five are in the set:
+
+| Click | Run | Shows |
+|---|---|---|
+| 1 | Rishi Ganga, Feb 2021 | A landslide dam on a Himalayan trunk channel. The DEM finds 0.87 MCM behind the barrier against a reported 0.8 — the closest agreement in the set |
+| 2 | Wapriyang, Nov 2021 | A 25 m debris barrier on a steep tributary a 30 m DEM can barely see |
+| 3 | Phuktal near Sumdo, Mar 2015 | The clearest **NOT IDENTIFIABLE** volume we have: a quarter-millimetre DEM perturbation moves this lake 94.5%, and the run measures that itself |
+| 4 | Kosi, Aug 2008 | An **embankment breach and avulsion** — neither a dam nor a natural barrier. Runs in `river_flood` mode from a published peak |
+| 5 | Jhelum, Sep 2014 | The Kashmir valley flood. A river with no dam on it at all, which is the literal wording of the problem statement title |
+
+**Say this out loud about the last two.** Kosi 2008 and Kashmir 2014 are not blockages, so their
+coordinates and peak discharges come from published accounts and are **approximate**; `meta.json`
+says so. And the Rishi Ganga and Wapriyang coordinates in `events.py` are not on a river in COP30 —
+one cell of flow accumulation and two — so the barrier is placed on the trunk channel the DEM finds
+within 3 km, with the distance and the drop published in the run's own notes. Say it before anyone
+measures it.
+
+### Walking a stored run stage by stage
+
+On the **Workflow** page the stored runs get a second control: pick Dams or Rivers, pick the case,
+press **Load stored run**, and the twenty boxes light up in execution order over about fifteen
+seconds instead of all at once.
+
+The pace is not invented. Each stage's dwell is proportional to the wall-clock seconds that stage
+genuinely took when the run was built — `stage_timings` in `data/demo_runs.json`, measured off the
+same progress stream the WebSocket carries during a live PLAY — normalised onto a fifteen-second
+clock. The compression factor is printed in the log ("14.6 s of measured pipeline time, replayed
+over 15 s"), the status chip reads **nothing is solving** throughout, and a stage that did not run
+in that run goes straight to `skipped` rather than green.
+
+**PLAY is still the live solve.** If someone asks whether the stored run is real, the answer is
+that the run is real and the replay is a replay, and both halves of that are on screen.
 
 Rebuild them on a machine with network access:
 
 ```bash
 .venv\Scripts\python.exe -u -m integration.build_demo_runs
+.venv\Scripts\python.exe -m integration.build_demo_runs --category river   # just the rivers
+.venv\Scripts\python.exe -m integration.build_demo_runs --revalidate       # re-check, no re-solve
 ```
+
+`--revalidate` re-runs the contract validator over the runs already on disk and republishes the
+verdict without re-solving anything. Use it after the validator changes: `validates` in the
+manifest is a claim made at build time, and it can go stale while every output file stays correct.
 
 The manifest (`data/demo_runs.json`) is committed; the run folders are not, because they are large
 and regenerable. `GET /api/demo-runs` returns only what is actually on disk, so on a fresh clone the
-button falls back to loading the newest run rather than offering four ids that 404.
+button falls back to loading the newest run rather than offering ten ids that 404.
 
 ---
 

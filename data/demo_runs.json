@@ -2,45 +2,573 @@
  "runs": [
   {
    "key": "machhu_overtopping",
-   "run_id": "machhuii_overtop_fast_002",
+   "category": "dam",
+   "run_id": "machhuii_overtop_fast_003",
    "label": "Machchhu II, 1979 - overtopping",
    "why": "Morbi, Gujarat, 11 August 1979. 600 mm in 24 hours produced an inflow near three times the spillway's design capacity, the water passed the earthen flanks and 2,100 m of embankment went. This is the one case in the set with a documented outcome to argue with.",
    "failure_mode": "overtopping",
    "site": "Machhu II",
+   "river": "Machhu",
+   "state": "Gujarat",
    "validates": true,
-   "runtime_s": 1222.14
+   "runtime_s": 1090.6,
+   "stage_timings": [
+    {
+     "node": "catalogue",
+     "seconds": 0.033
+    },
+    {
+     "node": "river",
+     "seconds": 1.002
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.023
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.001
+    },
+    {
+     "node": "breach",
+     "seconds": 0.005
+    },
+    {
+     "node": "solve",
+     "seconds": 1090.277
+    },
+    {
+     "node": "grids",
+     "seconds": 0.33
+    },
+    {
+     "node": "impact",
+     "seconds": 0.005
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.004
+    },
+    {
+     "node": "validate",
+     "seconds": 0.124
+    }
+   ],
+   "stage_total_s": 1091.8
   },
   {
    "key": "manair_spillway_blockage",
-   "run_id": "lowermanairdam_spillblock_fast_001",
+   "category": "dam",
+   "run_id": "lowermanairdam_spillblock_fast_002",
    "label": "Lower Manair - spillway blocked",
    "why": "The outlets are gone and the inflow keeps arriving. The number this case produces and no other case can is the time to overtop: the hours between the blockage and the first water over the crest, which is the warning the operator actually has.",
    "failure_mode": "spillway_blockage",
    "site": "Lower Manair Dam",
+   "river": "manair",
+   "state": "Telangana",
    "validates": true,
-   "runtime_s": 445.87
+   "runtime_s": 410.3,
+   "stage_timings": [
+    {
+     "node": "catalogue",
+     "seconds": 0.001
+    },
+    {
+     "node": "river",
+     "seconds": 0.292
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.037
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.018
+    },
+    {
+     "node": "breach",
+     "seconds": 0.006
+    },
+    {
+     "node": "solve",
+     "seconds": 409.645
+    },
+    {
+     "node": "grids",
+     "seconds": 0.148
+    },
+    {
+     "node": "impact",
+     "seconds": 0.01
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.436
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.004
+    },
+    {
+     "node": "validate",
+     "seconds": 0.075
+    }
+   ],
+   "stage_total_s": 410.67
   },
   {
    "key": "lhonak_glof",
-   "run_id": "southlhonaklake2023_glof_fast_002",
+   "category": "dam",
+   "run_id": "southlhonaklake2023_glof_fast_003",
    "label": "South Lhonak, 2023 - moraine outburst",
    "why": "North Sikkim, 3-4 October 2023. The lake grew from 1.12 to 1.63 km2 between 2016 and 2023 and then drained into the Teesta. A natural dam: no published storage exists, so the impounded volume comes from the 2023 lake area through Huggel et al. (2002) - because a 30 m DEM cannot resolve this basin, finding 0.34 MCM behind the moraine against the ~25.7 MCM that actually drained. Both numbers are in meta.json. The breach stops at the bedrock sill rather than cutting through the whole ridge.",
    "failure_mode": "glof_moraine",
    "site": "South Lhonak Lake (2023)",
+   "river": "Teesta headwaters",
+   "state": "Sikkim",
    "validates": true,
-   "runtime_s": 645.98
+   "runtime_s": 178.7,
+   "stage_timings": [
+    {
+     "node": "catalogue",
+     "seconds": 0.001
+    },
+    {
+     "node": "river",
+     "seconds": 0.605
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.056
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.013
+    },
+    {
+     "node": "breach",
+     "seconds": 0.087
+    },
+    {
+     "node": "solve",
+     "seconds": 178.25
+    },
+    {
+     "node": "grids",
+     "seconds": 0.195
+    },
+    {
+     "node": "impact",
+     "seconds": 0.005
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.074
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.005
+    },
+    {
+     "node": "validate",
+     "seconds": 0.09
+    }
+   ],
+   "stage_total_s": 179.38
   },
   {
    "key": "idukki_foundation",
-   "run_id": "idukki_foundation_fast_001",
+   "category": "dam",
+   "run_id": "idukki_foundation_fast_002",
    "label": "Idukki - foundation failure of an arch dam",
    "why": "A 169 m double-curvature arch dam in Kerala. This is the one class of structure the breach regressions in shared/hydro.py do not describe - Froehlich, Von Thun and MacDonald are all fitted to earthfill embankments, and an arch dam that loses its foundation is displaced whole rather than eroded. The opening here is geometry under critical-flow control, and meta.json says no regression was applied. READ THE WARNING ON THIS ONE: the run validates, but its peak velocity of 30.2 m/s is above the ~20 m/s the validator considers plausible for a dam-break front. A 169 m head into a Kerala gorge is where you would expect to find such a number, and it is also where a wet/dry front treatment is most likely to be flattering itself. Quote the depths and the extent; treat the velocity as an upper bound.",
    "failure_mode": "foundation_failure",
    "site": "Idukki",
+   "river": "Periyar",
+   "state": "Kerala",
    "validates": true,
-   "runtime_s": 1797.18
+   "runtime_s": 1538.0,
+   "stage_timings": [
+    {
+     "node": "river",
+     "seconds": 0.365
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.043
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.059
+    },
+    {
+     "node": "breach",
+     "seconds": 0.02
+    },
+    {
+     "node": "solve",
+     "seconds": 1536.896
+    },
+    {
+     "node": "grids",
+     "seconds": 0.192
+    },
+    {
+     "node": "impact",
+     "seconds": 0.052
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.801
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.004
+    },
+    {
+     "node": "validate",
+     "seconds": 0.096
+    }
+   ],
+   "stage_total_s": 1538.53
+  },
+  {
+   "key": "annamayya_overtopping",
+   "category": "dam",
+   "run_id": "cheyyeruprojectannamayya_overtop_fast_011",
+   "label": "Annamayya (Cheyyeru), 2021 - overtopping",
+   "why": "Rajampet, Andhra Pradesh, 19 November 2021. An earthfill dam on the Cheyyeru that overtopped and failed on a floodplain, and the only run in this repository that has been laid against an observed satellite extent. It is in the set because the comparison did not flatter us: against a Sentinel-1 pass we simulate 12,416 wet cells to 1,698 observed, a bias of 7.3, because a full-reservoir worst case at maximum extent over 24 hours is not the same object as one satellite pass days later. POD rose seventeenfold from the Teesta gorge, which is what told us the gorge was a resolution problem. Read validation.json before quoting anything from it.",
+   "failure_mode": "overtopping",
+   "site": "Cheyyeru Project (Annamayya)",
+   "river": "cheyyeru",
+   "state": "Andhra Pradesh",
+   "validates": true,
+   "runtime_s": 24.1,
+   "stage_timings": [
+    {
+     "node": "river",
+     "seconds": 0.404
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.278
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.019
+    },
+    {
+     "node": "breach",
+     "seconds": 0.006
+    },
+    {
+     "node": "solve",
+     "seconds": 23.568
+    },
+    {
+     "node": "grids",
+     "seconds": 0.119
+    },
+    {
+     "node": "impact",
+     "seconds": 0.01
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.12
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.003
+    },
+    {
+     "node": "validate",
+     "seconds": 0.075
+    }
+   ],
+   "stage_total_s": 24.6
+  },
+  {
+   "key": "rishiganga_2021",
+   "category": "river",
+   "run_id": "rishiganga2021_blockage_fast_004",
+   "label": "Rishi Ganga, Feb 2021 - landslide dam",
+   "why": "Chamoli, Uttarakhand, 7 February 2021 - the first event NTRO names. A rock-ice avalanche off Ronti peak ran into the Rishiganga and left a barrier that impounded the river. THE TRIGGER IS NOT MODELLED: this run starts at a 30 m barrier that already exists and fails, which is the part the hydrodynamics can speak to. The impounded volume is read off the terrain, not taken from the reported 0.8 MCM, and meta.json carries both so the gap is visible. The published coordinate for this event is not on a river in COP30 - it has a flow accumulation of one cell - so the barrier is placed on the trunk channel the DEM finds within 3 km and meta.json states the distance and the drop. Say that out loud before anyone measures it.",
+   "failure_mode": "blockage_breach",
+   "site": "Rishi Ganga 2021",
+   "river": "Rishiganga",
+   "state": "Uttarakhand",
+   "validates": true,
+   "runtime_s": 2.5,
+   "stage_timings": [
+    {
+     "node": "catalogue",
+     "seconds": 0.547
+    },
+    {
+     "node": "river",
+     "seconds": 0.095
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.013
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.003
+    },
+    {
+     "node": "breach",
+     "seconds": 0.06
+    },
+    {
+     "node": "solve",
+     "seconds": 1.902
+    },
+    {
+     "node": "grids",
+     "seconds": 0.16
+    },
+    {
+     "node": "impact",
+     "seconds": 0.014
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.317
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.003
+    },
+    {
+     "node": "validate",
+     "seconds": 0.076
+    }
+   ],
+   "stage_total_s": 3.19
+  },
+  {
+   "key": "wapriyang_2021",
+   "category": "river",
+   "run_id": "wapriyangriver2021_blockage_fast_006",
+   "label": "Wapriyang, Nov 2021 - debris barrier",
+   "why": "A Kameng tributary in Arunachal Pradesh, November 2021, the second event NTRO names. It is the hardest case in the set and it is here for that reason: a 25 m barrier on a steep tributary that a 30 m DEM can barely see, at a published coordinate that is not on a river at all - two cells of flow accumulation, which is hillslope. The barrier is placed on the trunk channel the DEM finds within 3 km and meta.json publishes the distance and the drop. If the terrain still holds almost nothing behind it, the run says so rather than manufacturing a lake.",
+   "failure_mode": "blockage_breach",
+   "site": "Wapriyang River 2021",
+   "river": "Kameng tributary",
+   "state": "Arunachal Pradesh",
+   "validates": true,
+   "runtime_s": 5.0,
+   "stage_timings": [
+    {
+     "node": "catalogue",
+     "seconds": 0.069
+    },
+    {
+     "node": "river",
+     "seconds": 0.096
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.015
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.006
+    },
+    {
+     "node": "breach",
+     "seconds": 0.099
+    },
+    {
+     "node": "solve",
+     "seconds": 4.613
+    },
+    {
+     "node": "grids",
+     "seconds": 0.094
+    },
+    {
+     "node": "impact",
+     "seconds": 0.011
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.154
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.003
+    },
+    {
+     "node": "validate",
+     "seconds": 0.068
+    }
+   ],
+   "stage_total_s": 5.23
+  },
+  {
+   "key": "phuktal_2015",
+   "category": "river",
+   "run_id": "phuktalriver2015_blockage_fast_009",
+   "label": "Phuktal near Sumdo, Mar 2015 - blockage breach",
+   "why": "The Tsarap Chu in Ladakh, blocked at the end of 2014 and overtopped in May 2015 after 110 days behind a reported 15 km lake - the third event NTRO names. It is also the clearest example in the repository of a volume that is NOT IDENTIFIABLE: rounding the conditioned DEM by a quarter of a millimetre flips 428 of 123,256 D8 directions and moves this lake from 46.1 to 2.5 MCM, a 94.5% swing. The run measures that swing itself and prints it in red. Read every discharge from this case as an order of magnitude.",
+   "failure_mode": "blockage_breach",
+   "site": "Phuktal River 2015",
+   "river": "Tsarap Chu / Phuktal",
+   "state": "Ladakh",
+   "validates": true,
+   "runtime_s": 5.9,
+   "stage_timings": [
+    {
+     "node": "river",
+     "seconds": 0.066
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.008
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.001
+    },
+    {
+     "node": "breach",
+     "seconds": 0.035
+    },
+    {
+     "node": "solve",
+     "seconds": 5.762
+    },
+    {
+     "node": "grids",
+     "seconds": 0.084
+    },
+    {
+     "node": "impact",
+     "seconds": 0.004
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.047
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.003
+    },
+    {
+     "node": "validate",
+     "seconds": 0.066
+    }
+   ],
+   "stage_total_s": 6.08
+  },
+  {
+   "key": "kosi_2008",
+   "category": "river",
+   "run_id": "kosiatkusaha2008_riverflood_fast_005",
+   "label": "Kosi, Aug 2008 - embankment breach and avulsion",
+   "why": "18 August 2008, the eastern afflux embankment at Kusaha in Sunsari district, Nepal, about 12 km upstream of the Kosi barrage - the fourth event NTRO names, and the one that is NOT a dam and NOT a natural barrier. The river was carrying roughly 1.44 lakh cusecs, far under the barrage's design capacity, and still took most of that flow out through a breach in the embankment and abandoned its course east across the Bihar plain. So it runs in river_flood mode from a published peak rather than from a breach regression: there is no reservoir to empty, only a wave to route. THE COORDINATE AND THE DISCHARGE ARE APPROXIMATE, from published accounts, and meta.json says so. A 30 m DEM on an alluvial fan with no surveyed embankment is the weakest terrain in the set and the run is shown as a routing demonstration, not as a reconstruction of the 2008 avulsion.",
+   "failure_mode": "river_flood",
+   "site": "Kosi at Kusaha (2008)",
+   "river": "Kosi",
+   "state": "Sunsari, Nepal / Bihar",
+   "validates": true,
+   "runtime_s": 19.1,
+   "stage_timings": [
+    {
+     "node": "river",
+     "seconds": 0.773
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.01
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.005
+    },
+    {
+     "node": "solve",
+     "seconds": 18.409
+    },
+    {
+     "node": "grids",
+     "seconds": 0.173
+    },
+    {
+     "node": "impact",
+     "seconds": 0.009
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.448
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.002
+    },
+    {
+     "node": "validate",
+     "seconds": 0.093
+    }
+   ],
+   "stage_total_s": 19.92
+  },
+  {
+   "key": "kashmir_jhelum_2014",
+   "category": "river",
+   "run_id": "jhelumatsangam2014_riverflood_fast_005",
+   "label": "Jhelum, Sep 2014 - Kashmir valley flood",
+   "why": "The Kashmir valley, first week of September 2014 - the fifth event NTRO names, and the other one that is neither a dam nor a barrier. Four days of rain put the Jhelum at Sangam far above the channel's carrying capacity and the flood filled the valley floor through Srinagar. It runs in river_flood mode: an NRCS unit-hydrograph wave entering the reach at a published peak, routed by the same shallow-water solver over the same conditioned COP30 terrain as every other case. THE COORDINATE AND THE PEAK ARE APPROXIMATE. This is the case that answers 'can the tool do a river with no dam on it at all', which is the literal wording of the problem statement title.",
+   "failure_mode": "river_flood",
+   "site": "Jhelum at Sangam (2014)",
+   "river": "Jhelum",
+   "state": "Jammu & Kashmir",
+   "validates": true,
+   "runtime_s": 37.2,
+   "stage_timings": [
+    {
+     "node": "river",
+     "seconds": 0.845
+    },
+    {
+     "node": "terrain",
+     "seconds": 0.012
+    },
+    {
+     "node": "exposure",
+     "seconds": 0.016
+    },
+    {
+     "node": "solve",
+     "seconds": 36.438
+    },
+    {
+     "node": "grids",
+     "seconds": 0.175
+    },
+    {
+     "node": "impact",
+     "seconds": 0.022
+    },
+    {
+     "node": "evacuation",
+     "seconds": 0.512
+    },
+    {
+     "node": "uncertainty",
+     "seconds": 0.002
+    },
+    {
+     "node": "validate",
+     "seconds": 0.083
+    }
+   ],
+   "stage_total_s": 38.11
   }
  ],
  "built_by": "python -m integration.build_demo_runs",
- "note": "Real runs through runner.run_scenario on COP30 terrain, not recordings. The run folders are regenerable and are not committed; rebuild them with the command above."
+ "note": "Real runs through runner.run_scenario on COP30 terrain, not recordings. Five dams and the five rivers the problem statement names; `category` says which tab a run belongs to. `stage_timings` are the wall-clock seconds each pipeline stage actually took on the machine that built the run - the workflow page replays against them. The run folders are regenerable and are not committed; rebuild them with the command above."
 }

@@ -29,6 +29,8 @@ passes **23/23** in about twenty seconds with the network unplugged.
   04_backend:  2D shallow-water solver  ->  depth / arrival / velocity grids
                river blockage: DEM storage -> fill time -> natural-dam breach
                         |                              |
+  03_delft3d:  the same case in Delft3D-FLOW  ->  engine-vs-engine CSI
+                        |                              |
   07_ml:       damage · uncertainty · surrogate · evacuation · inflow
                         |
   06_gee:      Sentinel-1 observed extent  ->  CSI
@@ -50,7 +52,7 @@ Console at `/`, API docs at `/docs`.
 | `shared/` | the data contract in code — grids, units, validator, fake data | done |
 | `01_geodata` | D8 river tracing, DEM fetch + conditioning, OSM exposure, dam catalogue | done |
 | `02_sph` | DualSPHysics breach near-field on GPU → hydrograph | done |
-| `03_delft3d` | far-field routing | **absent — engine check reports it, never estimates** |
+| `03_delft3d` | Delft3D-FLOW case writer, kernel probe, and the comparison the statement asks for | done — **solves our scenarios**; CSI 0.7379 / 0.7768 against our solver on two reaches |
 | `04_backend` | HLL shallow-water solver, **river blockage**, FastAPI, WebSocket, `pipeline.py` (the stage graph the workflow page draws) | done |
 | `05_frontend` | operator console + the node **workflow** page and its 3D scene; zero runtime dependencies, Babylon vendored | done; styling still open to Frontend A/B |
 | `06_gee_validation` | Sentinel-1 water detection, CSI/POD/FAR | done |
@@ -191,13 +193,64 @@ Written down so nobody discovers them in front of a juror. Every one of these is
 | Surrogate is an emulator | CSI 0.909 vs **our solver** | not validated against real floods |
 | Damage replacement values | assumptions | `damage_curve_source` string |
 | Breach parameter spread | up to 10× | `uncertainty.json` |
-| Delft3D | absent | reported as absent, never estimated |
+| **Natural-dam storage is not identifiable on some reaches** | Rounding the conditioned DEM by **0.00024 m** flips 428 of 123,256 D8 directions and moves the Tsarap Chu lake from **46.10 to 2.51 MCM** — a 94.5% swing. Gohna Tal swings 12.3% | Every blockage run re-measures itself under that perturbation and publishes `volume_swing_pct` and `volume_is_knife_edge` in `meta.json`; the console prints NOT IDENTIFIABLE in red beside the volume. The cause is D8 routing on flat conditioned terrain, not the crest elevation |
+| Delft3D agreement | **CSI 0.7379** (Godavari, 223x161) and **0.7768** (Annamayya, 93x125) against our solver | `docs/engine_comparison_delft3d_*.json`. Two engines agreeing bounds the numerics; neither is validated against a measured flood on those reaches |
 | SFINCS cross-check | **CSI 0.9653** at the 60 m default (0.9607 at 90 m) | `compare_routing.py`; SFINCS is **not** Delft3D |
 | Solver grid | default **60 m** since 2026-09-04, the coarsest CONVERGED grid on ordinary terrain. **Gorges do not converge at any resolution tried** - Chungthang depth still moves +5.7% from 60 m to 45 m | `docs/CONVERGENCE.md` |
 
 Populations are now measured from WorldPop 2020 (constrained, 100 m). Every mapped cell goes to
 its nearest settlement within 2 km, so nobody is counted twice. A settlement with a real OSM
 census tag keeps it, and one with no mapped buildings keeps its class default and says so.
+
+### Four silent wrong answers, found and fixed on 2026-09-06
+
+Every one of these produced a plausible result rather than an error, which is the only kind of bug
+that reaches a juror. They were found by building the five river stored runs the problem statement
+names, which is the argument for having built them.
+
+1. **A fast breach was invisible.** The release hydrograph was sampled at a flat
+   `min(output_step_hr, 0.05)` — three minutes. The Rishi Ganga barrier holds 0.87 MCM behind 30 m
+   of debris and breaches in **0.046 hr**, so the entire release began and ended between two
+   samples: both read zero, `hydrograph.csv` came out all zeros, the solver received no water, and
+   the run reported *"no flood at all"* for a barrier that had emptied 0.87 MCM in under three
+   minutes. `runner._release_step_hr` now takes twenty samples across whatever timescale actually
+   governs the release — the breach formation time, the foundation collapse time, the moraine
+   formation time — and nothing for a mode that has no breach. Fixed: 2.6 km², peak 10,985 m³/s.
+2. **`river_flood` could never validate.** With no barrier there is no reservoir, so
+   `site.reservoir_capacity_mcm` is a placeholder `SiteSpec.validate` only requires to be positive.
+   The released-volume check compared against it and rejected every river flood ever run, at any
+   size, as *"the routing is creating water"*. The comparison is now skipped for that mode rather
+   than loosened, because a loose threshold on a meaningless number is still meaningless.
+3. **A reservoir with an inflow is a conduit, not a bathtub.** Machchhu II's scenario is 600 mm in
+   24 hours driving 16,300 m³/s, which over twelve hours delivers **704 MCM** through a reservoir
+   holding 100.55. The run released 766.5 MCM having conserved mass to 0.000% — and the validator
+   failed it. The flagship demo of this repository was failing its own validator on arithmetic. The
+   yardstick is now what was *available* to release: stored volume plus everything the inflow
+   delivered while the run lasted. Same 1.5× margin.
+4. **The GLOF was checked against the volume it deliberately did not use.** Where an operator
+   supplies a lake area measured off imagery, `runner.py` uses it in preference to the DEM and says
+   why at length. The validator went on comparing the release against the DEM figure, so South
+   Lhonak was rejected for emptying 67.9 MCM out of a lake its own `meta.json` recorded as 68.9,
+   while pointing at the 0.34 MCM the terrain holds.
+
+Two of these were **stale claims in `data/demo_runs.json`**: `validates: true` is recorded when a
+run is built, and the validator is not frozen. `python -m integration.build_demo_runs --revalidate`
+re-runs the validator over what is already on disk and republishes the verdict without re-solving.
+Run it after touching `shared/validate.py`.
+
+### Where the published event coordinates are not on a river
+
+`modules/01_geodata/events.py` measures this and refuses to move anything, on the correct grounds
+that where a real barrier stood is a question about the event and not about flow accumulation. Two
+of its coordinates land on hillslope in COP30 — **Rishi Ganga** at one cell of flow accumulation
+and **Wapriyang** at two — and a run from an off-channel point floods nothing.
+
+The stored river demos make the placement explicitly, once, in
+`integration/build_demo_runs.py`: the barrier goes on the strongest flow path the DEM finds within
+3 km of the published coordinate, and the distance, the drop and the accumulation are written into
+the run's own notes. It is a modelling decision to have a channel to block, not a measurement of
+where the debris was, and it says that in `meta.json`. **Say it out loud before anyone measures
+it.**
 
 ---
 
