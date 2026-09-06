@@ -71,9 +71,15 @@ ASSET_CLASSES = tuple(DAMAGE_CURVES)
 # travels into impact.json next to the number.
 #
 # The defaults are order-of-magnitude construction and asset values for rural
-# and semi-urban Sikkim / North Bengal. A juror who works in this field will
-# have better numbers; the correct response is to ask for theirs and re-run,
-# not to defend ours.
+# and semi-urban Sikkim / North Bengal, and there is only one set of them: a
+# run on the Kosi in Bihar, in Kerala or in the Kashmir valley costs its damage
+# at Sikkim replacement values and at Sikkim's household size. That is a real
+# limitation rather than a rounding one - construction cost varies severalfold
+# across these states - and the `source` string below says so in every
+# impact.json and every export, because the number leaves the building.
+#
+# A juror who works in this field will have better numbers; the correct
+# response is to ask for theirs and re-run, not to defend ours.
 
 @dataclass(frozen=True)
 class ValueAssumptions:
@@ -98,8 +104,13 @@ class ValueAssumptions:
 
     source: str = (
         "Damage curves: Huizinga et al. (2017), JRC EUR 28552 EN, Asia "
-        "continental functions. Replacement values: project assumptions for "
-        "rural Sikkim, NOT measured - see modules/07_ml/damage.py."
+        "continental functions. Replacement values and household size are "
+        "project assumptions derived for rural and semi-urban Sikkim / North "
+        "Bengal and APPLIED UNCHANGED AT EVERY SITE, including this one - they "
+        "are not adjusted for local construction cost, and the 4.6 persons per "
+        "household is Sikkim's 2011 census figure wherever this run is. NOT "
+        "MEASURED for this district. Replace them with district figures and "
+        "re-run - see modules/07_ml/damage.py."
     )
 
 

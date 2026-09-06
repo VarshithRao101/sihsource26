@@ -65,6 +65,17 @@ a worse failure here than being alarming.
 5. Warning actions are for the first hours after the breach and must be \
 justified by arrival times, depths or the evacuation block in the payload. Do \
 not invent local geography, road names, shelters or agencies.
+6. The timeline may only use hours that appear in the payload - a settlement's \
+arrival_hr, a time_of_peak, or zero. Do not interpolate between two of them \
+and do not round one into a friendlier number.
+7. `confidence` is set by the payload's own validation, uncertainty and \
+knife-edge fields, never by how reasonable the numbers look to you. A run \
+whose impounded volume is flagged volume_is_knife_edge cannot be better than \
+low. A run with is_fake true is 'not usable'.
+8. `verify_before_acting` must name things specific to THIS run - the figure \
+that is an assumption, the settlement whose population is a class default, the \
+barrier whose volume moved under perturbation. A generic "verify with local \
+authorities" is a wasted line.
 
 Write plainly. An officer reads this once, at speed."""
 
@@ -86,6 +97,27 @@ class Finding(BaseModel):
     )
 
 
+class TimelineEntry(BaseModel):
+    """One moment in the first hours, with the hour it happens at.
+
+    The hour must be an arrival time or a hydrograph time that is IN the
+    payload. This is the field most likely to tempt an invented number - "by
+    about two hours" - and the grounding check treats it exactly like any
+    other, so an interpolated hour is reported as ungrounded.
+    """
+
+    hours_after_failure: float = Field(
+        description="From the payload. An arrival time, a peak time, or 0."
+    )
+    what_happens: str = Field(description="One clause. No new geography.")
+    who_is_affected: str = Field(
+        description=(
+            "Named settlements from the payload, or 'the reach' if the payload "
+            "names nobody at this hour."
+        )
+    )
+
+
 class RunAnalysis(BaseModel):
     """The briefing. Every field is rendered in the console."""
 
@@ -93,6 +125,20 @@ class RunAnalysis(BaseModel):
     severity: Literal["low", "moderate", "significant", "extreme"]
     severity_basis: str = Field(
         description="Which payload figures drove that severity word."
+    )
+    alert_text: str = Field(
+        description=(
+            "Under 160 characters. What an officer would actually send as a "
+            "text message in the first minutes: place, hazard, time, action. "
+            "No jargon, no unit symbols an SMS will mangle. If the run is "
+            "synthetic or ungrounded this must say so first."
+        )
+    )
+    timeline: list[TimelineEntry] = Field(
+        description=(
+            "The first hours in order, earliest first. Built only from arrival "
+            "times and hydrograph times in the payload."
+        )
     )
     findings: list[Finding]
     priority_actions: list[str] = Field(
@@ -102,6 +148,22 @@ class RunAnalysis(BaseModel):
         description=(
             "What the exposure figures do and do not mean, including how the "
             "population was measured where the payload says."
+        )
+    )
+    confidence: Literal["high", "moderate", "low", "not usable"] = Field(
+        description=(
+            "How much weight this run can carry. Driven by the payload's own "
+            "validation, uncertainty and knife-edge fields - NOT by how "
+            "plausible the numbers look."
+        )
+    )
+    confidence_basis: str = Field(
+        description="The payload fields that set the confidence word."
+    )
+    verify_before_acting: list[str] = Field(
+        description=(
+            "The two or three things a human must check against reality before "
+            "this is used for a decision. Specific to this run, not generic."
         )
     )
     limits: list[str] = Field(
@@ -132,31 +194,69 @@ def build_payload(run_dir: Path) -> dict:
         "run_id": meta.get("run_id"),
         "is_fake": meta.get("is_fake", True),
         "engine": meta.get("engine"),
+        "created_utc": meta.get("created_utc"),
         "site": meta.get("site"),
         "scenario": meta.get("scenario"),
         "domain": meta.get("domain"),
         "dem": meta.get("dem"),
         "time": meta.get("time"),
         "results": meta.get("results"),
+        "provenance": meta.get("provenance"),
     }
+
+    # The mode-specific blocks. These were missing, and their absence was a
+    # real hole rather than a tidiness issue: `blockage` is where
+    # volume_is_knife_edge lives, so the single most important caveat this
+    # repository produces - that an impounded volume moves 94% under a
+    # quarter-millimetre DEM perturbation - could never reach the briefing at
+    # all. A briefing that cannot see the caveat cannot report it.
+    for block in ("blockage", "glof_moraine", "spillway_blockage",
+                  "river_flood", "sph", "foundation"):
+        if meta.get(block):
+            payload[block] = meta[block]
 
     for name in ("impact", "uncertainty", "evacuation", "validation"):
         if (run_dir / f"{name}.json").exists():
             payload[name] = read_json(run_dir, f"{name}.json")
 
-    # Settlement lists get long and repetitive. Keep the worst-affected ones,
-    # which is what a briefing is about, and say how many were dropped so the
-    # model cannot imply it saw all of them.
+    # What the run did NOT produce, named. Otherwise a missing evacuation.json
+    # is indistinguishable from one the briefing simply did not mention, and
+    # silence reads as reassurance.
+    expected = ["impact.json", "uncertainty.json", "evacuation.json",
+                "validation.json", "extent.geojson", "hydrograph.csv"]
+    payload["files_absent"] = [f for f in expected if not (run_dir / f).exists()]
+
+    # Settlement lists get long and repetitive. Keep the ones a briefing is
+    # about, and say how many were dropped so the model cannot imply it saw all
+    # of them.
+    #
+    # Ordering by population alone was wrong for this purpose. A briefing is
+    # read in the first hour, when the question is who gets hit FIRST, and the
+    # earliest-warning settlement is routinely a small one that a population
+    # sort drops off the end. So the sample is the union of the largest and the
+    # earliest, and the payload says that is what it is.
     impact = payload.get("impact") or {}
     settlements = impact.get("settlements")
     if isinstance(settlements, list) and len(settlements) > 15:
-        ordered = sorted(
-            settlements,
-            key=lambda s: (s.get("population") or 0),
-            reverse=True,
+        by_pop = sorted(settlements, key=lambda s: (s.get("population") or 0),
+                        reverse=True)[:10]
+        by_time = sorted(
+            (s for s in settlements if s.get("arrival_hr") is not None),
+            key=lambda s: s["arrival_hr"],
+        )[:10]
+        keep, seen = [], set()
+        for s in by_time + by_pop:          # earliest first: it is read first
+            key = (s.get("name"), s.get("lat"), s.get("lon"))
+            if key not in seen:
+                seen.add(key)
+                keep.append(s)
+        impact["settlements"] = keep
+        impact["settlements_omitted"] = len(settlements) - len(keep)
+        impact["settlements_sample_rule"] = (
+            "The ten earliest to be reached and the ten most populous, "
+            "deduplicated, earliest first. Not the complete list - "
+            "settlements_omitted says how many are not here."
         )
-        impact["settlements"] = ordered[:15]
-        impact["settlements_omitted"] = len(settlements) - 15
 
     return payload
 
@@ -201,12 +301,21 @@ def check_grounding(analysis: RunAnalysis, payload: dict) -> dict:
     """
     known = _numbers_in(payload, set())
 
+    # Every field that carries prose is scanned. Adding a field to RunAnalysis
+    # and forgetting it here would create a place in the briefing where a
+    # number is not checked, which is the one thing this module exists to
+    # prevent - so the list is exhaustive by intent, not by convenience.
     text_parts = [
         analysis.headline,
         analysis.severity_basis,
+        analysis.alert_text,
         analysis.population_note,
+        analysis.confidence_basis,
         *[f.statement for f in analysis.findings],
+        *[t.what_happens for t in analysis.timeline],
+        *[t.who_is_affected for t in analysis.timeline],
         *analysis.priority_actions,
+        *analysis.verify_before_acting,
         *analysis.limits,
     ]
     written: list[tuple[str, float]] = []
@@ -217,6 +326,10 @@ def check_grounding(analysis: RunAnalysis, payload: dict) -> dict:
             except ValueError:
                 continue
     written += [("numbers_cited", v) for v in analysis.numbers_cited]
+    # A timeline hour is a bare float with no prose around it, so it would
+    # otherwise escape the scan entirely.
+    written += [("timeline.hours_after_failure", float(t.hours_after_failure))
+                for t in analysis.timeline]
 
     def matches(v: float) -> bool:
         for k in known:
