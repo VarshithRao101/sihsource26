@@ -316,20 +316,75 @@
 </style>
 <!-- The design layer, owned by the two designers. Loaded last so their
      rules win without anyone editing this file. See theme.css. -->
+<!-- Tab icon, inline. A file on disk would be one more request that must
+     succeed, and the rule for this frontend is that it renders with the
+     network unplugged. -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a5fbf'/><g fill='none' stroke='%23ffffff' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 8h18'/><path d='M11 8v7M16 8v7M21 8v7'/><path d='M5.5 20c2.6 0 2.6 2.6 5.2 2.6S13.3 20 15.9 20s2.6 2.6 5.2 2.6S23.7 20 26.3 20'/><path d='M5.5 25c2.6 0 2.6 2.6 5.2 2.6'/></g></svg>">
+<meta name="theme-color" content="#f6f9fc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1220" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="/theme.css">
+<script>
+/* Same pre-paint theme decision as the console, and the same key, so moving
+   between the two pages never flips the ground under the operator. */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem("sih-theme"); } catch (e) {}
+  if (t !== "dark" && t !== "light") {
+    t = (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches)
+        ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
 </head>
 <body>
 
 <header>
-  <h1><span class="mark"></span>Dam Break Inundation — Processing Graph</h1>
-  <nav class="nav">
-    <a href="/">Console</a>
-    <a href="/workflow" class="on">Workflow</a>
-  </nav>
-  <span class="grow"></span>
-  <span class="chip" id="cHealth">connecting…</span>
-  <span class="chip" id="cRun">no run</span>
-  <span class="chip" id="cStatus">idle</span>
+  <div class="header-left">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 5h17"/>
+          <path d="M6.5 5v6M12 5v6M17.5 5v6"/>
+          <path d="M2.5 14.6c1.9 0 1.9 2 3.8 2s1.9-2 3.8-2 1.9 2 3.8 2 1.9-2 3.8-2 1.9 2 3.8 2"/>
+          <path d="M2.5 19.2c1.9 0 1.9 2 3.8 2s1.9-2 3.8-2 1.9 2 3.8 2 1.9-2 3.8-2 1.9 2 3.8 2"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Dam Break Inundation Workflow</h1>
+        <span class="brand-sub">Processing graph &middot; live from the solver</span>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/" class="nav-btn">Console</a>
+      <a href="/workflow" class="on nav-btn">Workflow</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <span class="sub badge-chip id-chip">SIH26161 &middot; NTRO</span>
+    <span class="chip badge-chip" id="cHealth">connecting…</span>
+    <!-- Which run is on screen, and what it is doing. Eleven call sites in
+         this file still write to these two through chip(), which returns
+         quietly when the element is missing - so dropping them from the markup
+         did not break the page, it just stopped the page saying which run it
+         was showing. They are back. -->
+    <span class="chip badge-chip" id="cRun">no run</span>
+    <span class="chip badge-chip" id="cStatus">idle</span>
+    <button type="button" class="theme-toggle" id="themebtn"
+            title="Switch light / dark" aria-label="Switch light / dark">
+      <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4.2"/>
+        <path d="M12 2.6v2.1M12 19.3v2.1M2.6 12h2.1M19.3 12h2.1M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"/>
+      </svg>
+      <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 14.4A8.6 8.6 0 0 1 9.6 3.5a8.6 8.6 0 1 0 10.9 10.9z"/>
+      </svg>
+    </button>
+  </div>
+  <div class="run-rail" aria-hidden="true"></div>
 </header>
 
 <div id="banner">SYNTHETIC DATA — this run is not real and must not be shown as a result</div>
@@ -393,6 +448,7 @@
       <span id="storedcount" style="text-transform:none;letter-spacing:0"></span></label>
     <select id="storedcase" style="min-width:270px"><option value="">loading…</option></select>
   </div>
+  <span class="tb-sep" aria-hidden="true"></span>
   <button class="btn play"  id="bPlay">&#9654;&nbsp; PLAY</button>
   <button class="btn pause" id="bPause" disabled>&#10073;&#10073;&nbsp; PAUSE</button>
   <button class="btn reset" id="bReset">&#8635;&nbsp; RESET</button>
@@ -474,8 +530,9 @@ async function jget(u) {
 }
 function chip(id, text, cls) {
   const el = $(id);
+  if (!el) return;
   el.textContent = text;
-  el.className = "chip" + (cls ? " " + cls : "");
+  el.className = "chip badge-chip" + (cls ? " " + cls : "");
 }
 
 /* ======================================================================
@@ -891,6 +948,9 @@ function metric(k, v, u, hi) {
 }
 
 function stripLive(d) {
+  // The hairline under the header is the same percentage the strip is showing.
+  document.documentElement.style.setProperty("--run-pct", (d.pct || 0) + "%");
+  document.body.classList.add("is-running");
   $("strip").className = "on";
   $("strip").innerHTML =
     metric("solver", fmt(d.pct, 1), "%", true) +
@@ -904,6 +964,8 @@ function stripLive(d) {
 }
 
 function stripResult() {
+  document.body.classList.remove("is-running");
+  document.documentElement.style.setProperty("--run-pct", "100%");
   if (!S.meta) { $("strip").className = ""; return; }
   const r = S.meta.results || {}, t = (S.impact || {}).totals || {};
   $("strip").className = "on";
@@ -1511,6 +1573,24 @@ $("bStored").onclick = playStored;
 /* ======================================================================
    Boot
    ====================================================================== */
+
+/* The switch is chrome only. The graph is DOM and SVG, both of which restyle
+   themselves off the same custom properties, so unlike the console there is
+   nothing here to redraw. */
+(function wireTheme() {
+  const btn = $("themebtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const root = document.documentElement;
+    const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.classList.add("theme-switching");
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("sih-theme", next); } catch (e) {}
+    btn.title = next === "dark" ? "Switch to light" : "Switch to dark";
+    requestAnimationFrame(() => requestAnimationFrame(
+      () => root.classList.remove("theme-switching")));
+  });
+})();
 
 function buildLegend() {
   const items = [

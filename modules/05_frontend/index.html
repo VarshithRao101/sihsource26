@@ -171,477 +171,659 @@
 </style>
 <!-- The design layer, owned by the two designers. Loaded last so their
      rules win without anyone editing this file. See theme.css. -->
+<!-- Tab icon, inline. A file on disk would be one more request that must
+     succeed, and the rule for this frontend is that it renders with the
+     network unplugged. -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230a5fbf'/><g fill='none' stroke='%23ffffff' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 8h18'/><path d='M11 8v7M16 8v7M21 8v7'/><path d='M5.5 20c2.6 0 2.6 2.6 5.2 2.6S13.3 20 15.9 20s2.6 2.6 5.2 2.6S23.7 20 26.3 20'/><path d='M5.5 25c2.6 0 2.6 2.6 5.2 2.6'/></g></svg>">
+<meta name="theme-color" content="#f6f9fc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1220" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="/theme.css">
+<script>
+/* The theme is decided BEFORE first paint, so the console never flashes the
+   wrong ground on load. localStorage only - no cookie, no network, nothing to
+   consent to, and it falls back to the OS preference when storage is blocked. */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem("sih-theme"); } catch (e) {}
+  if (t !== "dark" && t !== "light") {
+    t = (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches)
+        ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
 </head>
 <body>
 
 <header>
-  <h1>Dam Break Inundation Console</h1>
-  <nav class="nav">
-    <a href="/" class="on">Console</a>
-    <a href="/workflow">Workflow</a>
-  </nav>
-  <span class="sub">SIH26161 &middot; NTRO</span>
-  <span class="sub" id="health"></span>
+  <div class="header-left">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 5h17"/>
+          <path d="M6.5 5v6M12 5v6M17.5 5v6"/>
+          <path d="M2.5 14.6c1.9 0 1.9 2 3.8 2s1.9-2 3.8-2 1.9 2 3.8 2 1.9-2 3.8-2 1.9 2 3.8 2"/>
+          <path d="M2.5 19.2c1.9 0 1.9 2 3.8 2s1.9-2 3.8-2 1.9 2 3.8 2 1.9-2 3.8-2 1.9 2 3.8 2"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Dam Break Inundation Console</h1>
+        <span class="brand-sub">Hydrodynamic solver &middot; impact &middot; evacuation</span>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/" class="on nav-btn">Console</a>
+      <a href="/workflow" class="nav-btn">Workflow</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <span class="sub badge-chip id-chip">SIH26161 &middot; NTRO</span>
+    <span class="sub badge-chip" id="health"></span>
+    <button type="button" class="theme-toggle" id="themebtn"
+            title="Switch light / dark" aria-label="Switch light / dark">
+      <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4.2"/>
+        <path d="M12 2.6v2.1M12 19.3v2.1M2.6 12h2.1M19.3 12h2.1M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"/>
+      </svg>
+      <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 14.4A8.6 8.6 0 0 1 9.6 3.5a8.6 8.6 0 1 0 10.9 10.9z"/>
+      </svg>
+    </button>
+  </div>
+  <div class="run-rail" aria-hidden="true"></div>
 </header>
 
 <div id="banner">SYNTHETIC DATA — this run is not real and must not be shown as a result</div>
 
-<div class="wrap">
-  <!-- ------------------------------------------------ controls -->
-  <div class="side">
+<div class="wrap dashboard-wrap">
+  <!-- Terminal / Progress above dam box and map box -->
+  <div class="panel terminal-panel">
+    <h2>Terminal / Progress</h2>
+    <pre id="log">idle.</pre>
+  </div>
 
-    <!-- Two sources, not three.
-
-         There used to be a third tab of historic natural-dam failures, sitting
-         beside the dam picker and the river picker. It is gone, and the events
-         are not: they are natural dams with coordinates and a barrier height,
-         which is what the dam catalogue holds, so they are in it. Making the
-         operator decide which PICKER a moraine belonged to before they could
-         pick it was an interface mistake.
-
-         A dam and a river are genuinely different questions and that is why
-         these two remain. A dam has a barrier that can fail in seven ways. A
-         river has no crest, no embankment, no foundation and no gates - it has
-         water arriving, and ground that decides where it goes. -->
-    <div class="srctabs">
-      <button type="button" class="srctab on" id="tab-dam" data-src="dam">Dam</button>
-      <button type="button" class="srctab" id="tab-river" data-src="river">River</button>
-    </div>
-
-    <fieldset>
-      <legend id="lg-pick">1 · Which dam</legend>
-
-      <div id="dampick">
-        <div class="muted" style="font-size:11px;margin-bottom:4px">
-          <span id="damcount">…</span>
-        </div>
-        <label>State</label>
-        <select id="fstate"><option value="">— all states —</option></select>
-        <label>Nearest city <span class="muted">(engineered dams only)</span></label>
-        <select id="fcity"><option value="">— all cities —</option></select>
-        <label>Search name / river / state</label>
-        <input id="fq" placeholder="e.g. Hirakud, Teesta, Lhonak">
-        <label>Dam</label>
-        <select id="fdam" size="7"></select>
-        <div id="damcard" class="damcard muted">No dam selected — pick one above.</div>
+  <!-- ------------------------------------------------ TOP ROW: SIDEBAR (7 BUTTONS) + MAP BOX -->
+  <div class="top-row">
+    <!-- Left box with 7 buttons: Dam, River, Which Dam, What Happens, How Much to Sim, Advanced, Site by Hand -->
+    <div class="side-box panel" id="side-box">
+      <!-- Buttons 1 & 2: Dam and River Tabs -->
+      <div class="srctabs">
+        <button type="button" class="srctab on" id="tab-dam" data-src="dam">Dam</button>
+        <button type="button" class="srctab" id="tab-river" data-src="river">River</button>
       </div>
 
-      <div id="riverpick" style="display:none">
-        <div class="muted" style="font-size:11px;margin-bottom:4px">
-          River index derived from the CWC register — <span id="rivcount">…</span>
-        </div>
-        <label>Search river / basin</label>
-        <input id="rq" placeholder="e.g. Godavari, Krishna">
-        <label>River</label>
-        <select id="friver" size="5"></select>
-        <label>Where on it <span class="muted">(points north to south)</span></label>
-        <select id="frpoint"></select>
-        <div id="rivcard" class="damcard muted">No river selected — pick one above.</div>
-        <div class="muted" style="font-size:11px;margin-top:6px;line-height:1.45">
-          This is an <b>index, not a river network</b>. It maps river names to points
-          whose coordinates we hold. The channel itself is traced from the DEM at run
-          time, and <b>nothing here sets a flow direction</b> — where the water goes is
-          a property of the ground. A river with no indexed point is reached through
-          <b>Site by hand</b> below.
-        </div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>2 · What happens</legend>
-      <label>Case</label>
-      <select id="mode"></select>
-      <div class="muted" id="modehelp" style="font-size:11px;margin:5px 0 2px"></div>
-      <details id="modewhy" style="margin:4px 0 2px">
-        <summary class="muted" style="font-size:11px;cursor:pointer">
-          what this case computes that the others do not
-        </summary>
-        <div class="muted" style="font-size:11px;line-height:1.5;padding:5px 0 2px">
-          <div id="modephysics"></div>
-          <div id="moderef" style="margin-top:5px;font-style:italic"></div>
-        </div>
-      </details>
-
-      <!-- Only the inputs this case actually reads. Which ones those are comes
-           from the API's own per-mode `controls` list, so a case can never show
-           a box the solver ignores. -->
-      <div id="ctl-reservoir_level_frac" class="ctl">
-        <label>How full is the reservoir? <b id="levellab">100%</b>
-          <span class="muted" id="levelvol"></span></label>
-        <input id="level" type="range" min="0" max="100" step="5" value="100" style="width:100%">
-      </div>
-
-      <div id="ctl-gate_opening_frac" class="ctl">
-        <label>How far are the gates opened? <b id="gatelab">100%</b></label>
-        <input id="gate" type="range" min="5" max="100" step="5" value="100" style="width:100%">
-      </div>
-
-      <div id="ctl-blockage_height_m" class="ctl">
-        <label>Height of the barrier (m)</label>
-        <input id="blockheight" type="number" step="5" min="5" max="300" value="40">
-        <div class="muted" style="font-size:11px">The impounded volume is read off the
-          terrain — nobody publishes a natural dam's storage.</div>
-      </div>
-
-      <div id="ctl-foundation_breach_frac" class="ctl">
-        <label>How much of the dam goes? <b id="fndlab">80%</b></label>
-        <input id="fndfrac" type="range" min="10" max="100" step="5" value="80" style="width:100%">
-      </div>
-      <div id="ctl-collapse_time_min" class="ctl">
-        <label>Collapse time (minutes)</label>
-        <input id="collapsemin" type="number" step="0.5" min="0.5" max="120" value="2">
-        <div class="muted" style="font-size:11px">Minutes, not hours. St Francis and
-          Malpasset both went in under five.</div>
-      </div>
-
-      <div id="ctl-residual_spillway_frac" class="ctl">
-        <label>Outlet capacity still working <b id="reslab">0%</b></label>
-        <input id="residual" type="range" min="0" max="100" step="5" value="0" style="width:100%">
-        <div class="muted" style="font-size:11px">0% is a total blockage. Banqiao's gates
-          were silted, not removed.</div>
-      </div>
-      <div id="ctl-inflow_cumecs" class="ctl">
-        <label>Inflow arriving (m³/s)</label>
-        <input id="inflowbasic" type="number" step="100" min="0" value="1000">
-        <div class="muted" style="font-size:11px">With no inflow the level never rises and
-          nothing overtops — which is the whole point of this case.</div>
-      </div>
-
-      <div id="ctl-moraine_height_m" class="ctl">
-        <label>Moraine height (m)</label>
-        <input id="moraineh" type="number" step="5" min="5" max="300" value="30">
-      </div>
-      <div id="ctl-moraine_erodible_depth_m" class="ctl">
-        <label>Erodible depth (m) <span class="muted">blank = 0.6 × height</span></label>
-        <input id="morainee" type="number" step="1" min="1" max="300" placeholder="0.6 × height">
-        <div class="muted" style="font-size:11px">Below this is bedrock and any ice core.
-          The breach stops there.</div>
-      </div>
-      <div id="ctl-avalanche_surge_frac" class="ctl">
-        <label>Avalanche displacement <b id="avalab">0%</b> of the lake</label>
-        <input id="avafrac" type="range" min="0" max="40" step="1" value="0" style="width:100%">
-        <div class="muted" style="font-size:11px">Leave at 0 unless you mean it. A surge is
-          a volume over a duration, so it sets the peak directly.</div>
-      </div>
-
-      <div id="ctl-peak_discharge_cumecs" class="ctl">
-        <label>Peak of the flood wave (m³/s)</label>
-        <input id="peakq" type="number" step="100" min="1" value="2000">
-      </div>
-      <div id="ctl-time_to_peak_hr" class="ctl">
-        <label>Hours to the peak</label>
-        <input id="tpeak" type="number" step="0.5" min="0.1" value="3">
-      </div>
-      <div id="ctl-flood_duration_hr" class="ctl">
-        <label>Flood duration (hr) <span class="muted">blank = 2.67 × rise</span></label>
-        <input id="floodhr" type="number" step="0.5" min="0.2" placeholder="2.67 × rise">
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>3 · How much to simulate</legend>
-      <div class="row2">
-        <div><label>Area — look downstream (km)</label>
-          <input id="reach" type="number" step="5" value="40"></div>
-        <div><label>Time — simulate (hours)</label>
-          <input id="endhr" type="number" step="1" value="8"></div>
-      </div>
-      <div class="muted" style="font-size:11px;margin-top:4px">
-        Everything else — elevation model, grid, roughness, breach regression — has a
-        measured default and lives under <b>Advanced</b>.
-      </div>
-    </fieldset>
-
-    <!-- The trained emulator, answering while the operator is still deciding.
-         It is a PREDICTION and the label never comes off. -->
-    <div id="preview" class="damcard" style="display:none;margin-bottom:8px">
-      <div><b>Instant preview — PREDICTION, not a simulation</b></div>
-      <div id="previewbody" class="muted" style="font-size:11px">—</div>
-    </div>
-
-    <!-- Two slots above Run. Both open upward as panels rather than pushing the
-         Run button down a growing accordion, which is what the old bottom
-         expander did every time it was opened. -->
-    <div class="slots">
-      <div class="slot" id="slot-adv">
-        <button type="button" class="slotbtn" id="btn-adv">Advanced ▴</button>
-        <div class="pop" id="pop-adv">
-          <div class="pophead">Advanced settings
-            <span class="muted">— every default here is measured, not chosen.
-            Only what you change is sent.</span></div>
-
-          <label>Elevation model</label>
-          <select id="demsrc"></select>
-          <div class="muted" id="demhelp" style="font-size:11px;margin:3px 0"></div>
-
-          <div id="grp-localdem" style="display:none">
-            <label>DEM file on disk</label>
-            <select id="localdem"></select>
-          </div>
-
-          <div class="row2">
-            <div><label>Cell size (m)</label>
-              <input id="cell" type="number" step="5" min="10" max="500"></div>
-            <div><label>Corridor width (km)</label>
-              <input id="corridor" type="number" step="1" min="1" max="60"></div>
-          </div>
-          <div class="muted" style="font-size:11px;margin:3px 0">
-            60 m is the coarsest grid that converged on two dams (docs/CONVERGENCE.md).
-            Gorges did not converge at any resolution we tried.
-          </div>
-
-          <div class="row2">
-            <div><label>Breach regression</label><select id="regression"></select></div>
-            <div><label>Numerical scheme</label><select id="schemesel"></select></div>
-          </div>
-
-          <div class="row2">
-            <div><label>Roughness from</label><select id="manningsrc"></select></div>
-            <div><label>Manning <i>n</i></label>
-              <input id="manning" type="number" step="0.005" min="0.01" max="0.2"></div>
-          </div>
-          <div class="muted" style="font-size:11px;margin:3px 0">
-            <b>auto</b> reads per-cell roughness off ESA WorldCover land cover.
-          </div>
-
-          <div class="row2">
-            <div><label>Output every (hr)</label>
-              <input id="outstep" type="number" step="0.05" min="0.02" max="2"></div>
-            <div><label>Inflow during event (m³/s)</label>
-              <input id="inflow" type="number" step="10" min="0"></div>
-          </div>
-
-          <div class="row2">
-            <div><label>Storage curve exponent</label>
-              <input id="kexp" type="number" step="0.1" min="1" max="5"></div>
-            <div><label>Channel bed</label>
-              <select id="bathy">
-                <option value="true">estimated under the water</option>
-                <option value="false">DEM surface as-is</option>
-              </select></div>
-          </div>
-
-          <div id="grp-gateadv" style="display:none">
-            <div class="row2">
-              <div><label>Gates open over (hr)</label>
-                <input id="gateopen" type="number" step="0.1" min="0.1" max="24"></div>
-              <div><label>Target release (m³/s)</label>
-                <input id="targetrel" type="number" step="100" min="1" placeholder="design capacity"></div>
+      <!-- Accordion: at a time only one box can be open -->
+      <div class="acc-group">
+        <!-- Button 3: 1 · Which dam / river -->
+        <div class="acc-item open" id="acc-item-1">
+          <button type="button" class="acc-btn active" id="acc-btn-1" onclick="toggleAcc(1)">
+            <span id="lg-pick">1 · Which dam</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="acc-body" id="acc-body-1">
+            <div id="dampick">
+              <div class="muted" style="font-size:11px;margin-bottom:4px">
+                <span id="damcount">…</span>
+              </div>
+              <label>State</label>
+              <select id="fstate"><option value="">— all states —</option></select>
+              <label>Nearest city <span class="muted">(engineered dams only)</span></label>
+              <select id="fcity"><option value="">— all cities —</option></select>
+              <label>Search name / river / state</label>
+              <input id="fq" placeholder="e.g. Hirakud, Teesta, Lhonak">
+              <label>Dam</label>
+              <select id="fdam" size="7"></select>
+              <div id="damcard" class="damcard muted">No dam selected — pick one above.</div>
             </div>
-            <label>Spillway crest length (m)</label>
-            <input id="spillway" type="number" step="5" min="1" max="2000">
-          </div>
 
-          <div id="grp-fndadv" style="display:none">
-            <label>Opening width at the bed, as a fraction of the crest</label>
-            <input id="fndbase" type="number" step="0.05" min="0.05" max="1" value="0.25">
-            <div class="muted" style="font-size:11px">A concrete dam stands in a gorge, so
-              the crest length is the valley width at the top. 1.0 makes the opening
-              rectangular and over-predicts the peak badly.</div>
-          </div>
-
-          <div id="grp-glofadv" style="display:none">
-            <div class="row2">
-              <div><label>Breach width (m)</label>
-                <input id="glofw" type="number" step="5" min="1" placeholder="1 × erodible depth"></div>
-              <div><label>Surge duration (s)</label>
-                <input id="avadur" type="number" step="30" min="1" max="7200" value="600"></div>
+            <div id="riverpick" style="display:none">
+              <div class="muted" style="font-size:11px;margin-bottom:4px">
+                River index derived from the CWC register — <span id="rivcount">…</span>
+              </div>
+              <label>Search river / basin</label>
+              <input id="rq" placeholder="e.g. Godavari, Krishna">
+              <label>River</label>
+              <select id="friver" size="5"></select>
+              <label>Where on it <span class="muted">(points north to south)</span></label>
+              <select id="frpoint"></select>
+              <div id="rivcard" class="damcard muted">No river selected — pick one above.</div>
+              <div class="muted" style="font-size:11px;margin-top:6px;line-height:1.45">
+                This is an <b>index, not a river network</b>. It maps river names to points
+                whose coordinates we hold. The channel itself is traced from the DEM at run
+                time, and <b>nothing here sets a flow direction</b> — where the water goes is
+                a property of the ground. A river with no indexed point is reached through
+                <b>Site by hand</b> below.
+              </div>
             </div>
-            <label>Lake area (km²) <span class="muted">only if the DEM cannot see the lake</span></label>
-            <input id="lakearea" type="number" step="0.01" min="0.01" placeholder="DEM supplies the volume">
-            <div class="muted" style="font-size:11px">Falling back on area gives
-              Huggel et al. (2002) V = 0.104·A<sup>1.42</sup>, which the source reports with
-              roughly a factor-of-two scatter.</div>
           </div>
+        </div>
 
-          <div id="grp-riveradv" style="display:none">
-            <label>Base flow before the flood (m³/s)</label>
-            <input id="baseq" type="number" step="10" min="0" value="0">
+        <!-- Button 4: 2 · What happens -->
+        <div class="acc-item" id="acc-item-2">
+          <button type="button" class="acc-btn" id="acc-btn-2" onclick="toggleAcc(2)">
+            <span>2 · What happens</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="acc-body" id="acc-body-2" style="display:none">
+            <label>Case</label>
+            <select id="mode"></select>
+            <div class="muted" id="modehelp" style="font-size:11px;margin:5px 0 2px"></div>
+            <details id="modewhy" style="margin:4px 0 2px">
+              <summary class="muted" style="font-size:11px;cursor:pointer">
+                what this case computes that the others do not
+              </summary>
+              <div class="muted" style="font-size:11px;line-height:1.5;padding:5px 0 2px">
+                <div id="modephysics"></div>
+                <div id="moderef" style="margin-top:5px;font-style:italic"></div>
+              </div>
+            </details>
+
+            <div id="ctl-reservoir_level_frac" class="ctl">
+              <label>How full is the reservoir? <b id="levellab">100%</b>
+                <span class="muted" id="levelvol"></span></label>
+              <input id="level" type="range" min="0" max="100" step="5" value="100" style="width:100%">
+            </div>
+
+            <div id="ctl-gate_opening_frac" class="ctl">
+              <label>How far are the gates opened? <b id="gatelab">100%</b></label>
+              <input id="gate" type="range" min="5" max="100" step="5" value="100" style="width:100%">
+            </div>
+
+            <div id="ctl-blockage_height_m" class="ctl">
+              <label>Height of the barrier (m)</label>
+              <input id="blockheight" type="number" step="5" min="5" max="300" value="40">
+              <div class="muted" style="font-size:11px">The impounded volume is read off the
+                terrain — nobody publishes a natural dam's storage.</div>
+            </div>
+
+            <div id="ctl-foundation_breach_frac" class="ctl">
+              <label>How much of the dam goes? <b id="fndlab">80%</b></label>
+              <input id="fndfrac" type="range" min="10" max="100" step="5" value="80" style="width:100%">
+            </div>
+            <div id="ctl-collapse_time_min" class="ctl">
+              <label>Collapse time (minutes)</label>
+              <input id="collapsemin" type="number" step="0.5" min="0.5" max="120" value="2">
+              <div class="muted" style="font-size:11px">Minutes, not hours. St Francis and
+                Malpasset both went in under five.</div>
+            </div>
+
+            <div id="ctl-residual_spillway_frac" class="ctl">
+              <label>Outlet capacity still working <b id="reslab">0%</b></label>
+              <input id="residual" type="range" min="0" max="100" step="5" value="0" style="width:100%">
+              <div class="muted" style="font-size:11px">0% is a total blockage. Banqiao's gates
+                were silted, not removed.</div>
+            </div>
+            <div id="ctl-inflow_cumecs" class="ctl">
+              <label>Inflow arriving (m³/s)</label>
+              <input id="inflowbasic" type="number" step="100" min="0" value="1000">
+              <div class="muted" style="font-size:11px">With no inflow the level never rises and
+                nothing overtops — which is the whole point of this case.</div>
+            </div>
+
+            <div id="ctl-moraine_height_m" class="ctl">
+              <label>Moraine height (m)</label>
+              <input id="moraineh" type="number" step="5" min="5" max="300" value="30">
+            </div>
+            <div id="ctl-moraine_erodible_depth_m" class="ctl">
+              <label>Erodible depth (m) <span class="muted">blank = 0.6 × height</span></label>
+              <input id="morainee" type="number" step="1" min="1" max="300" placeholder="0.6 × height">
+              <div class="muted" style="font-size:11px">Below this is bedrock and any ice core.
+                The breach stops there.</div>
+            </div>
+            <div id="ctl-avalanche_surge_frac" class="ctl">
+              <label>Avalanche displacement <b id="avalab">0%</b> of the lake</label>
+              <input id="avafrac" type="range" min="0" max="40" step="1" value="0" style="width:100%">
+              <div class="muted" style="font-size:11px">Leave at 0 unless you mean it. A surge is
+                a volume over a duration, so it sets the peak directly.</div>
+            </div>
+
+            <div id="ctl-peak_discharge_cumecs" class="ctl">
+              <label>Peak of the flood wave (m³/s)</label>
+              <input id="peakq" type="number" step="100" min="1" value="2000">
+            </div>
+            <div id="ctl-time_to_peak_hr" class="ctl">
+              <label>Hours to the peak</label>
+              <input id="tpeak" type="number" step="0.5" min="0.1" value="3">
+            </div>
+            <div id="ctl-flood_duration_hr" class="ctl">
+              <label>Flood duration (hr) <span class="muted">blank = 2.67 × rise</span></label>
+              <input id="floodhr" type="number" step="0.5" min="0.2" placeholder="2.67 × rise">
+            </div>
           </div>
+        </div>
 
-          <div id="grp-breachadv">
+        <!-- Button 5: 3 · How much to simulate -->
+        <div class="acc-item" id="acc-item-3">
+          <button type="button" class="acc-btn" id="acc-btn-3" onclick="toggleAcc(3)">
+            <span>3 · How much to simulate</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="acc-body" id="acc-body-3" style="display:none">
             <div class="row2">
-              <div><label>Breach width (m)</label>
-                <input id="bwidth" type="number" step="5" min="1" placeholder="from regression"></div>
-              <div><label>Formation time (hr)</label>
-                <input id="btime" type="number" step="0.1" min="0.1" placeholder="from regression"></div>
+              <div><label>Area — look downstream (km)</label>
+                <input id="reach" type="number" step="5" value="40"></div>
+              <div><label>Time — simulate (hours)</label>
+                <input id="endhr" type="number" step="1" value="8"></div>
+            </div>
+            <div class="muted" style="font-size:11px;margin-top:4px">
+              Everything else — elevation model, grid, roughness, breach regression — has a
+              measured default and lives under <b>Advanced</b>.
+            </div>
+
+            <div id="preview" class="damcard" style="display:none;margin-top:8px">
+              <div><b>Instant preview — PREDICTION, not a simulation</b></div>
+              <div id="previewbody" class="muted" style="font-size:11px">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buttons 6 & 7: Advanced and Site by Hand at bottom of left box -->
+      <div class="slots">
+        <div class="slot" id="slot-adv">
+          <button type="button" class="slotbtn" id="btn-adv">Advanced ▴</button>
+          <div class="pop" id="pop-adv">
+            <div class="pophead">Advanced settings
+              <span class="muted">— every default here is measured, not chosen.
+              Only what you change is sent.</span></div>
+
+            <label>Elevation model</label>
+            <select id="demsrc"></select>
+            <div class="muted" id="demhelp" style="font-size:11px;margin:3px 0"></div>
+
+            <div id="grp-localdem" style="display:none">
+              <label>DEM file on disk</label>
+              <select id="localdem"></select>
+            </div>
+
+            <div class="row2">
+              <div><label>Cell size (m)</label>
+                <input id="cell" type="number" step="5" min="10" max="500"></div>
+              <div><label>Corridor width (km)</label>
+                <input id="corridor" type="number" step="1" min="1" max="60"></div>
             </div>
             <div class="muted" style="font-size:11px;margin:3px 0">
-              Fill either of these and meta.json records that a human overrode the
-              regression.
+              60 m is the coarsest grid that converged on two dams (docs/CONVERGENCE.md).
+              Gorges did not converge at any resolution we tried.
             </div>
-          </div>
 
-          <button type="button" class="sec popclose">Close</button>
+            <div class="row2">
+              <div><label>Breach regression</label><select id="regression"></select></div>
+              <div><label>Numerical scheme</label><select id="schemesel"></select></div>
+            </div>
+
+            <div class="row2">
+              <div><label>Roughness from</label><select id="manningsrc"></select></div>
+              <div><label>Manning <i>n</i></label>
+                <input id="manning" type="number" step="0.005" min="0.01" max="0.2"></div>
+            </div>
+            <div class="muted" style="font-size:11px;margin:3px 0">
+              <b>auto</b> reads per-cell roughness off ESA WorldCover land cover.
+            </div>
+
+            <div class="row2">
+              <div><label>Output every (hr)</label>
+                <input id="outstep" type="number" step="0.05" min="0.02" max="2"></div>
+              <div><label>Inflow during event (m³/s)</label>
+                <input id="inflow" type="number" step="10" min="0"></div>
+            </div>
+
+            <div class="row2">
+              <div><label>Storage curve exponent</label>
+                <input id="kexp" type="number" step="0.1" min="1" max="5"></div>
+              <div><label>Channel bed</label>
+                <select id="bathy">
+                  <option value="true">estimated under the water</option>
+                  <option value="false">DEM surface as-is</option>
+                </select></div>
+            </div>
+
+            <div id="grp-gateadv" style="display:none">
+              <div class="row2">
+                <div><label>Gates open over (hr)</label>
+                  <input id="gateopen" type="number" step="0.1" min="0.1" max="24"></div>
+                <div><label>Target release (m³/s)</label>
+                  <input id="targetrel" type="number" step="100" min="1" placeholder="design capacity"></div>
+              </div>
+              <label>Spillway crest length (m)</label>
+              <input id="spillway" type="number" step="5" min="1" max="2000">
+            </div>
+
+            <div id="grp-fndadv" style="display:none">
+              <label>Opening width at the bed, as a fraction of the crest</label>
+              <input id="fndbase" type="number" step="0.05" min="0.05" max="1" value="0.25">
+              <div class="muted" style="font-size:11px">A concrete dam stands in a gorge, so
+                the crest length is the valley width at the top. 1.0 makes the opening
+                rectangular and over-predicts the peak badly.</div>
+            </div>
+
+            <div id="grp-glofadv" style="display:none">
+              <div class="row2">
+                <div><label>Breach width (m)</label>
+                  <input id="glofw" type="number" step="5" min="1" placeholder="1 × erodible depth"></div>
+                <div><label>Surge duration (s)</label>
+                  <input id="avadur" type="number" step="30" min="1" max="7200" value="600"></div>
+              </div>
+              <label>Lake area (km²) <span class="muted">only if the DEM cannot see the lake</span></label>
+              <input id="lakearea" type="number" step="0.01" min="0.01" placeholder="DEM supplies the volume">
+              <div class="muted" style="font-size:11px">Falling back on area gives
+                Huggel et al. (2002) V = 0.104·A<sup>1.42</sup>, which the source reports with
+                roughly a factor-of-two scatter.</div>
+            </div>
+
+            <div id="grp-riveradv" style="display:none">
+              <label>Base flow before the flood (m³/s)</label>
+              <input id="baseq" type="number" step="10" min="0" value="0">
+            </div>
+
+            <div id="grp-breachadv">
+              <div class="row2">
+                <div><label>Breach width (m)</label>
+                  <input id="bwidth" type="number" step="5" min="1" placeholder="from regression"></div>
+                <div><label>Formation time (hr)</label>
+                  <input id="btime" type="number" step="0.1" min="0.1" placeholder="from regression"></div>
+              </div>
+              <div class="muted" style="font-size:11px;margin:3px 0">
+                Fill either of these and meta.json records that a human overrode the
+                regression.
+              </div>
+            </div>
+
+            <button type="button" class="sec popclose">Close</button>
+          </div>
         </div>
-      </div>
 
-      <div class="slot" id="slot-man">
-        <button type="button" class="slotbtn" id="btn-man">Site by hand ▴</button>
-        <div class="pop pop-right" id="pop-man">
-          <div class="pophead">Enter a location by hand
-            <span class="muted">— for a structure the catalogue does not list.
-            Ticking this overrides the picker.</span></div>
-          <label><input type="checkbox" id="manual" style="width:auto"> Use these coordinates</label>
-          <div id="grp-manual" style="display:none">
-            <label>Name</label><input id="name" value="">
-            <div class="row2">
-              <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value=""></div>
-              <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value=""></div>
+        <div class="slot" id="slot-man">
+          <button type="button" class="slotbtn" id="btn-man">Site by hand ▴</button>
+          <div class="pop pop-right" id="pop-man">
+            <div class="pophead">Enter a location by hand
+              <span class="muted">— for a structure the catalogue does not list.
+              Ticking this overrides the picker.</span></div>
+            <label><input type="checkbox" id="manual" style="width:auto"> Use these coordinates</label>
+            <div id="grp-manual" style="display:none">
+              <label>Name</label><input id="name" value="">
+              <div class="row2">
+                <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value=""></div>
+                <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value=""></div>
+              </div>
+              <div class="row2">
+                <div><label>River</label><input id="river" value=""></div>
+                <div><label>State</label><input id="state" value=""></div>
+              </div>
+              <div class="row2">
+                <div><label>Barrier height (m)</label>
+                  <input id="height" type="number" step="1" value="60"></div>
+                <div><label>Capacity (MCM)</label>
+                  <input id="cap" type="number" step="0.1" value="5"></div>
+              </div>
+              <label>Crest length (m) <span class="muted">needed for foundation failure</span></label>
+              <input id="crestlen" type="number" step="5" min="1" placeholder="along the dam">
+              <div class="muted" style="font-size:11px;margin-top:5px;line-height:1.45">
+                Paste coordinates as decimal degrees. Nothing here is checked against a
+                register — a run from hand-entered numbers is only as good as they are, and
+                meta.json records that they were typed in.
+              </div>
             </div>
-            <div class="row2">
-              <div><label>River</label><input id="river" value=""></div>
-              <div><label>State</label><input id="state" value=""></div>
-            </div>
-            <div class="row2">
-              <div><label>Barrier height (m)</label>
-                <input id="height" type="number" step="1" value="60"></div>
-              <div><label>Capacity (MCM)</label>
-                <input id="cap" type="number" step="0.1" value="5"></div>
-            </div>
-            <label>Crest length (m) <span class="muted">needed for foundation failure</span></label>
-            <input id="crestlen" type="number" step="5" min="1" placeholder="along the dam">
-            <div class="muted" style="font-size:11px;margin-top:5px;line-height:1.45">
-              Paste coordinates as decimal degrees. Nothing here is checked against a
-              register — a run from hand-entered numbers is only as good as they are, and
-              meta.json records that they were typed in.
-            </div>
+            <button type="button" class="sec popclose">Close</button>
           </div>
-          <button type="button" class="sec popclose">Close</button>
         </div>
       </div>
     </div>
 
-    <button id="run">Run simulation</button>
-    <button id="loadlast" class="sec" style="width:100%;margin-top:6px">
-      Load a stored run</button>
-    <div class="muted" id="demohint" style="font-size:11px;margin-top:4px;text-align:center"></div>
+    <!-- Right Box: Map Box with same height as sidebar -->
+    <div class="map-box panel" id="map-box">
+      <!-- Top buttons above map: Run Simulation and Load Stored Run -->
+      <div class="map-top-bar">
+        <div class="map-top-actions">
+          <button id="run">Run simulation</button>
+          <button id="loadlast" class="sec">Load a stored run</button>
+        </div>
+        <div class="muted" id="demohint" style="font-size:11px;margin-top:4px"></div>
+      </div>
+
+      <!-- Map Display & Scrubber -->
+      <div class="map-content">
+        <div class="map-title-row">
+          <h2>Flood — play it, or drag through time</h2>
+          <div class="map-time-actions">
+            <button id="tplay" class="sec" style="width:auto;padding:3px 12px"
+                    title="Run the flood forward from the moment of failure">&#9654; Play</button>
+            <select id="tspeed" style="width:auto;padding:3px 6px" title="Playback speed">
+              <option value="0.5">0.5&times;</option>
+              <option value="1" selected>1&times;</option>
+              <option value="2">2&times;</option>
+              <option value="4">4&times;</option>
+            </select>
+            <!-- The streaks are a reading of max_velocity.tif, but they are
+                 also continuous motion. Anyone who does not want that - a
+                 projector, a screenshot, a vestibular disorder - turns them off
+                 here, and the choice is remembered. -->
+            <button type="button" id="tflow" class="sec"
+                    title="Velocity streaks — the flow field the solver computed">
+              &#8776;&nbsp;Flow</button>
+            <div class="muted" id="timelab">t = —</div>
+            <span class="grow" style="flex:1"></span>
+            <span class="muted" id="flowlegend" style="font-size:11px"></span>
+          </div>
+        </div>
+
+        <input id="time" type="range" min="0" max="100" value="100" style="width:100%">
+        <div id="mapwrap">
+          <canvas id="map" width="600" height="380"></canvas>
+          <canvas id="flow" width="600" height="380"></canvas>
+          <div id="maptip"></div>
+        </div>
+        <div class="muted map-caption" style="font-size:11px;margin-top:6px;line-height:1.4">
+          <b>Hover anywhere on the water</b> for depth, speed and hazard.
+          OpenStreetMap basemap, flood reprojected cell by cell.
+        </div>
+        <!-- The ramp below is the SAME function renderFlood() uses, written out
+             in CSS: shallow water is pale and translucent, deep water saturated
+             and near-opaque. The front swatch is the lit band drawn behind the
+             advancing wave. Neither is decorative - a legend that does not match
+             the raster is worse than no legend at all. -->
+        <div class="depth-legend">
+          <span class="k">Depth</span>
+          <span>shallow</span><span class="ramp"></span><span>deep</span>
+          <span class="sep"></span>
+          <span class="k">Wave front</span><span class="front-swatch"></span>
+          <span class="sep"></span>
+          <span class="k">Hazard</span>
+          <span class="pill low">Low</span>
+          <span class="pill moderate">Moderate</span>
+          <span class="pill significant">Significant</span>
+          <span class="pill extreme">Extreme</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- ------------------------------------------------ results -->
-  <div class="main">
-    <div class="panel">
-      <h2>Progress</h2>
-      <pre id="log">idle.</pre>
-    </div>
+  <!-- Headline figures, lifted out of the Results list so they carry across a
+       room. paintKpis() draws only tiles whose number the run actually
+       reported; a missing figure means a missing tile, never a fabricated one. -->
+  <div class="kpi-strip" id="kpis" hidden></div>
 
-    <div class="cols">
-      <div class="panel">
-        <h2>Results</h2>
-        <dl class="kv" id="results"><dd class="muted">No run loaded.</dd></dl>
-      </div>
-      <div class="panel">
-        <h2>Provenance</h2>
-        <dl class="kv" id="prov"></dl>
-      </div>
+  <!-- ------------------------------------------------ BELOW TOP ROW: ROWS FROM SKETCH -->
+  <!-- 1. Result & Provenance side by side -->
+  <div class="cols results-row">
+    <div class="panel results-panel">
+      <h2>Results</h2>
+      <dl class="kv" id="results">
+        <dt>Run</dt><dd class="muted">—</dd>
+        <dt>Peak discharge</dt><dd class="muted">—</dd>
+        <dt>Max depth</dt><dd class="muted">—</dd>
+        <dt>Max velocity</dt><dd class="muted">—</dd>
+        <dt>Flooded area</dt><dd class="muted">—</dd>
+        <dt>Released volume</dt><dd class="muted">—</dd>
+        <dt>Mass balance</dt><dd class="muted">—</dd>
+        <dt>Runtime</dt><dd class="muted">—</dd>
+      </dl>
     </div>
-
-    <!-- AI briefing. Written by Claude from this run's own JSON, then every
-         number in it checked back against that JSON before it is shown. -->
-    <div class="panel" id="aipanel" style="display:none">
-      <h2>AI briefing — interpretation, not a result</h2>
-      <div class="muted" style="font-size:11px;margin-bottom:6px" id="aihint">
-        Claude reads this run's output files and writes the plain-language brief. It may
-        not use a number the run did not compute, and every number it writes is matched
-        back against the run before you see it.
-      </div>
-      <button id="aibrief" class="sec" style="width:auto">Brief this run</button>
-      <button id="airefresh" class="sec" style="width:auto;display:none">Rewrite</button>
-      <div id="aibody" style="margin-top:8px"></div>
+    <div class="panel prov-panel">
+      <h2>Provenance</h2>
+      <dl class="kv" id="prov">
+        <dt>Engine</dt><dd class="muted">—</dd>
+        <dt>DEM</dt><dd class="muted">—</dd>
+        <dt>Grid</dt><dd class="muted">—</dd>
+        <dt>Bathymetry</dt><dd class="muted">—</dd>
+        <dt>Roughness</dt><dd class="muted">—</dd>
+        <dt>Conditioning</dt><dd class="muted">—</dd>
+        <dt>Failure mode</dt><dd class="muted">—</dd>
+        <dt>Breach source</dt><dd class="muted">—</dd>
+      </dl>
     </div>
+  </div>
 
-    <div class="panel">
-      <h2>Flood — play it, or drag through time</h2>
-      <input id="time" type="range" min="0" max="100" value="100" style="width:100%">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button id="tplay" class="sec" style="width:auto;padding:3px 12px"
-                title="Run the flood forward from the moment of failure">&#9654; Play</button>
-        <select id="tspeed" style="width:auto;padding:3px 6px" title="Playback speed">
-          <option value="0.5">0.5&times;</option>
-          <option value="1" selected>1&times;</option>
-          <option value="2">2&times;</option>
-          <option value="4">4&times;</option>
-        </select>
-        <div class="muted" id="timelab">t = —</div>
-        <span class="grow" style="flex:1"></span>
-        <!-- The streaks are a velocity field, not decoration, so they get a
-             scale like any other quantity on this page. -->
-        <span class="muted" id="flowlegend" style="font-size:11px"></span>
+  <!-- 2. Analysis (all charts) -->
+  <div class="panel analysis-panel">
+    <h2>Analysis</h2>
+    <div class="charts">
+      <div class="ch">
+        <h3>Outflow hydrograph <span class="u">m&sup3;/s vs hours</span></h3>
+        <canvas id="ch-hydro" width="560" height="210"></canvas>
+        <p class="cn" id="cn-hydro">&mdash;</p>
       </div>
-      <div id="mapwrap">
-        <canvas id="map" width="600" height="420"></canvas>
-        <canvas id="flow" width="600" height="420"></canvas>
-        <div id="maptip"></div>
+      <div class="ch">
+        <h3>Peak by breach regression <span class="u">m&sup3;/s</span></h3>
+        <canvas id="ch-breach" width="560" height="210"></canvas>
+        <p class="cn" id="cn-breach">&mdash;</p>
       </div>
-      <div class="muted" style="font-size:12px;margin-top:6px">
-        <b>Hover anywhere on the water</b> for the depth, speed and hazard at that cell, read
-        straight out of this run's GeoTIFFs. The drifting streaks follow the arrival-time
-        gradient — the direction the water actually travelled — at the speed
-        <code>max_velocity.tif</code> recorded there.
-        OpenStreetMap basemap, flood reprojected cell by cell; deeper water is darker and
-        markers turn red as the water reaches each village. The time slider replays a
-        reconstruction from the arrival-time and peak-depth grids, not frame-by-frame
-        solver output.
+      <div class="ch">
+        <h3>Flooded area vs time <span class="u">km&sup2; vs hours</span></h3>
+        <canvas id="ch-area" width="560" height="210"></canvas>
+        <p class="cn" id="cn-area">&mdash;</p>
       </div>
-    </div>
-
-    <div class="panel">
-      <h2>Analysis</h2>
-      <div class="charts">
-        <div class="ch">
-          <h3>Outflow hydrograph <span class="u">m&sup3;/s vs hours</span></h3>
-          <canvas id="ch-hydro" width="560" height="210"></canvas>
-          <p class="cn" id="cn-hydro">&mdash;</p>
-        </div>
-        <div class="ch">
-          <h3>Peak by breach regression <span class="u">m&sup3;/s</span></h3>
-          <canvas id="ch-breach" width="560" height="210"></canvas>
-          <p class="cn" id="cn-breach">&mdash;</p>
-        </div>
-        <div class="ch">
-          <h3>Flooded area vs time <span class="u">km&sup2; vs hours</span></h3>
-          <canvas id="ch-area" width="560" height="210"></canvas>
-          <p class="cn" id="cn-area">&mdash;</p>
-        </div>
-        <div class="ch">
-          <h3>People reached vs warning time <span class="u">cumulative</span></h3>
-          <canvas id="ch-pop" width="560" height="210"></canvas>
-          <p class="cn" id="cn-pop">&mdash;</p>
-        </div>
-        <div class="ch">
-          <h3>Depth distribution <span class="u">% of flooded area</span></h3>
-          <canvas id="ch-depth" width="560" height="210"></canvas>
-          <p class="cn" id="cn-depth">&mdash;</p>
-        </div>
+      <div class="ch">
+        <h3>People reached vs warning time <span class="u">cumulative</span></h3>
+        <canvas id="ch-pop" width="560" height="210"></canvas>
+        <p class="cn" id="cn-pop">&mdash;</p>
+      </div>
+      <div class="ch">
+        <h3>Depth distribution <span class="u">% of flooded area</span></h3>
+        <canvas id="ch-depth" width="560" height="210"></canvas>
+        <p class="cn" id="cn-depth">&mdash;</p>
       </div>
     </div>
+  </div>
 
-    <div class="panel">
+  <!-- 3. Impact & Uncertainty side by side / stacked horizontally -->
+  <div class="cols impact-uncert-row">
+    <div class="panel impact-panel">
       <h2>Impact</h2>
-      <div id="totals" class="muted">—</div>
-      <table id="settlements"></table>
+      <div id="totals" class="muted">Awaiting simulation run to compute flood impact totals…</div>
+      <table id="settlements">
+        <thead>
+          <tr>
+            <th>Settlement</th>
+            <th class="num">Arrival (hr)</th>
+            <th class="num">Depth (m)</th>
+            <th class="num">Population</th>
+            <th>Hazard</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="5" class="muted" style="text-align:center;padding:10px">Awaiting simulation run…</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="panel">
-      <h2>Evacuation — time-dependent routing on the OSM road graph</h2>
-      <div id="evacnote" class="muted">—</div>
-      <table id="evac"></table>
-    </div>
-
-    <div class="panel">
+    <div class="panel uncert-panel">
       <h2>Uncertainty — what we do not know</h2>
-      <div id="uncert" class="muted">—</div>
+      <div id="uncert">
+        <div class="muted" style="margin-bottom:6px">Peak outflow uncertainty and empirical envelope across breach regressions:</div>
+        <table>
+          <thead>
+            <tr><th>Peak-outflow regression</th><th class="num">m³/s</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Froehlich (2008)</td><td class="num muted">—</td></tr>
+            <tr><td>USBR (1982)</td><td class="num muted">—</td></tr>
+            <tr><td>Von Thun & Gillette (1990)</td><td class="num muted">—</td></tr>
+            <tr><td>MacDonald & Langridge-Monopolis (1984)</td><td class="num muted">—</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
+  </div>
 
-    <div class="panel">
-      <h2>Export</h2>
-      <button class="sec" onclick="dl('kml')">KML</button>
-      <button class="sec" onclick="dl('shp')">Shapefile (zip)</button>
-      <button class="sec" onclick="dl('geojson')">GeoJSON</button>
+  <!-- Evacuation -->
+  <div class="panel evac-panel">
+    <h2>Evacuation — time-dependent routing on the OSM road graph</h2>
+    <div id="evacnote" class="muted">Awaiting simulation run to compute evacuation routes on OSM network…</div>
+    <table id="evac">
+      <thead>
+        <tr>
+          <th>Settlement</th>
+          <th class="num">Road floods (hr)</th>
+          <th class="num">Walk (hr)</th>
+          <th class="num">Margin (hr)</th>
+          <th class="num">Route (km)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="6" class="muted" style="text-align:center;padding:10px">Awaiting simulation run…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- AI Panel -->
+  <div class="panel" id="aipanel" style="display:none">
+    <h2>AI briefing — interpretation, not a result</h2>
+    <div class="muted" style="font-size:11px;margin-bottom:6px" id="aihint">
+      Claude reads this run's output files and writes the plain-language brief. It may
+      not use a number the run did not compute, and every number it writes is matched
+      back against the run before you see it.
     </div>
+    <button id="aibrief" class="sec" style="width:auto">Brief this run</button>
+    <button id="airefresh" class="sec" style="width:auto;display:none">Rewrite</button>
+    <div id="aibody" style="margin-top:8px"></div>
+  </div>
+
+  <!-- Export -->
+  <div class="panel export-panel">
+    <h2>Export</h2>
+    <button class="sec" onclick="dl('kml')">KML</button>
+    <button class="sec" onclick="dl('shp')">Shapefile (zip)</button>
+    <button class="sec" onclick="dl('geojson')">GeoJSON</button>
   </div>
 </div>
+
+<script>
+// Accordion controller: opens the selected section, closes the others
+function toggleAcc(idx) {
+  for (let i = 1; i <= 3; i++) {
+    const item = document.getElementById("acc-item-" + i);
+    const body = document.getElementById("acc-body-" + i);
+    const btn = document.getElementById("acc-btn-" + i);
+    if (!item || !body || !btn) continue;
+    if (i === idx) {
+      const isClosed = body.style.display === "none";
+      if (isClosed) {
+        body.style.display = "block";
+        item.classList.add("open");
+        btn.classList.add("active");
+      } else {
+        body.style.display = "none";
+        item.classList.remove("open");
+        btn.classList.remove("active");
+      }
+    } else {
+      body.style.display = "none";
+      item.classList.remove("open");
+      btn.classList.remove("active");
+    }
+  }
+}
+window.toggleAcc = toggleAcc;
+</script>
 
 <script src="/config.js"></script>
 <script>
@@ -1449,7 +1631,16 @@ $("run").onclick = async () => {
   } catch (e) { log("failed: " + e.message); $("run").disabled = false; }
 };
 
+function setRunProgress(pct) {
+  // One CSS variable drives the hairline under the header. No layout work, and
+  // it is the solver's own percentage - not an animation pretending to be one.
+  document.documentElement.style.setProperty("--run-pct", (pct == null ? 0 : pct) + "%");
+}
+function runStarted() { document.body.classList.add("is-running"); setRunProgress(0); }
+function runEnded()   { document.body.classList.remove("is-running"); setRunProgress(100); }
+
 function follow(runId) {
+  runStarted();
   // Not location.host: when the page is hosted apart from the backend the
   // socket has to go to the backend's origin, not this page's. config.js
   // still falls back to location.host when they are the same, which is the
@@ -1475,6 +1666,7 @@ function follow(runId) {
       if (d.volume_stored_mcm !== undefined)
         bits.push(`in=${d.volume_in_mcm} stored=${d.volume_stored_mcm} MCM`);
       // A node-only update carries no new numbers; it would repeat this line.
+      setRunProgress(d.pct);
       const line = bits.join("  ");
       if (line !== lastLine) { lastLine = line; log(line); }
     }
@@ -1485,6 +1677,7 @@ function follow(runId) {
       if (st.error) log("ERROR: " + st.error);
       else log("done.");
     } catch {}
+    runEnded();
     $("run").disabled = false;
     load(runId);
   };
@@ -1498,6 +1691,7 @@ async function poll(runId) {
     if (st.status === "done") { log("done."); break; }
     if (st.status === "error") { log("ERROR: " + st.error); break; }
   }
+  runEnded();
   $("run").disabled = false;
   load(runId);
 }
@@ -1642,6 +1836,7 @@ async function load(runId) {
     <dt>Breach source</dt><dd style="font-size:12px">${sc.breach_param_source ?? "—"}</dd>`;
 
   IMPACT = d.impact || null;
+  paintKpis();
   drawImpact(d.impact);
   drawEvacuation(runId);
   drawUncertainty(runId);
@@ -1744,8 +1939,59 @@ async function drawUncertainty(runId) {
    new physics, and none of them draw a number the API did not send. Where a
    chart is a reconstruction rather than solver output, its caption says so. */
 
-const C_TEXT = "#5b6570", C_GRID = "#eef1f4", C_AXIS = "#c3ccd4",
-      C_ACC = "#1256a0", C_BAD = "#a11212";
+/* The chart palette is READ OFF theme.css rather than written here, so the
+   axes, gridlines and ink follow the light/dark switch instead of staying
+   behind on a hardcoded grey. readPalette() runs again on every switch; the
+   literals below are only the fallback for a stylesheet that failed to load. */
+const cssvar = (n, fb) => {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  return v || fb;
+};
+let C_TEXT = "#64788c", C_GRID = "#edf3f9", C_AXIS = "#cbd7e4",
+    C_ACC = "#0a5fbf", C_BAD = "#c02626", C_INK = "#0c1826",
+    C_BAR = "#7aa3cf", C_FILL = "rgba(10,95,191,.10)";
+
+/* The map is a raster with a basemap under it, so it needs its own ink: the
+   marker labels and the scale bar sit on top of OSM tiles, not on a panel, and
+   in dark mode both the tiles and the type have to invert with the page. */
+let MAP_DARK = false;
+let C_MAPINK = "#131a22", C_MAPHALO = "rgba(255,255,255,.92)",
+    C_MAPPLATE = "rgba(255,255,255,.84)", C_MAPGROUND = "#eceff1";
+
+function readPalette() {
+  C_TEXT = cssvar("--ink-3", C_TEXT);
+  C_GRID = cssvar("--surface-3", C_GRID);
+  C_AXIS = cssvar("--hairline-2", C_AXIS);
+  C_ACC  = cssvar("--brand", C_ACC);
+  C_BAD  = cssvar("--bad", C_BAD);
+  C_INK  = cssvar("--ink", C_INK);
+  C_BAR  = cssvar("--brand-3", C_BAR);
+  C_FILL = cssvar("--brand-ring", C_FILL);
+
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  if (dark !== MAP_DARK) BASE_DIRTY = true;   // the tiles are recoloured, once
+  MAP_DARK    = dark;
+  C_MAPINK    = dark ? "#e9f1fa" : "#131a22";
+  C_MAPHALO   = dark ? "rgba(6,12,20,.88)" : "rgba(255,255,255,.92)";
+  C_MAPPLATE  = dark ? "rgba(9,16,26,.80)" : "rgba(255,255,255,.84)";
+  C_MAPGROUND = dark ? "#111a25" : "#eceff1";
+}
+
+/* A canvas cannot be restyled by CSS, so a theme switch has to draw the charts
+   again. Two of these re-fetch a small JSON; the other three redraw from grids
+   already in memory. Nothing is re-solved and no new number appears. */
+function repaintCharts() {
+  readPalette();
+  if (!RUN) return;
+  drawHydro(RUN);
+  drawBreachSpread(RUN);
+  drawAreaCurve();
+  drawDepthHist();
+  drawPopCurve(IMPACT);
+  // The basemap tiles are recoloured for dark mode inside the composite, so
+  // the map has to be rebuilt too - readPalette() has already marked it dirty.
+  if (PACKED) renderFlood(+$("time").value / 100);
+}
 
 function niceStep(range, target = 4) {
   if (!(range > 0)) return 1;
@@ -1812,7 +2058,7 @@ async function drawHydro(runId) {
   x.beginPath(); x.moveTo(f.xs(T[0]), f.ys(0));
   T.forEach((t, i) => x.lineTo(f.xs(t), f.ys(Q[i])));
   x.lineTo(f.xs(T[T.length - 1]), f.ys(0)); x.closePath();
-  x.fillStyle = "rgba(18,86,160,.10)"; x.fill();
+  x.fillStyle = C_FILL; x.fill();
 
   x.strokeStyle = C_ACC; x.lineWidth = 2; x.beginPath();
   T.forEach((t, i) => i ? x.lineTo(f.xs(t), f.ys(Q[i])) : x.moveTo(f.xs(t), f.ys(Q[i])));
@@ -1850,9 +2096,9 @@ async function drawBreachSpread(runId) {
 
   keys.forEach((k, i) => {
     const y = T + i * row + (row - bh) / 2, w = (Number(by[k]) / vmax) * W;
-    x.fillStyle = "#7aa3cf"; x.fillRect(L, y, w, bh);
+    x.fillStyle = C_BAR; x.fillRect(L, y, w, bh);
     x.fillStyle = C_TEXT; x.textAlign = "right"; x.fillText(k, L - 8, y + bh / 2 + 3);
-    x.fillStyle = "#14171a"; x.textAlign = "left";
+    x.fillStyle = C_INK; x.textAlign = "left";
     x.fillText(Math.round(by[k]).toLocaleString(), L + w + 5, y + bh / 2 + 3);
   });
 
@@ -1899,7 +2145,7 @@ function drawAreaCurve() {
   x.beginPath(); x.moveTo(f.xs(0), f.ys(0));
   ts.forEach((t, i) => x.lineTo(f.xs(t), f.ys(as[i])));
   x.lineTo(f.xs(ENDHR), f.ys(0)); x.closePath();
-  x.fillStyle = "rgba(18,86,160,.10)"; x.fill();
+  x.fillStyle = C_FILL; x.fill();
   x.strokeStyle = C_ACC; x.lineWidth = 2; x.beginPath();
   ts.forEach((t, i) => i ? x.lineTo(f.xs(t), f.ys(as[i])) : x.moveTo(f.xs(t), f.ys(as[i])));
   x.stroke();
@@ -1972,7 +2218,7 @@ function drawDepthHist() {
   const f = frame("ch-depth", dmax, Math.max.apply(null, pct) * 1.1, "metres", "% of wet area");
   if (!f) return;
   const x = f.x, bw = f.W / NB;
-  x.fillStyle = "#7aa3cf";
+  x.fillStyle = C_BAR;
   pct.forEach((v, i) => {
     const h = f.ys(0) - f.ys(v);
     if (h > 0) x.fillRect(f.L + i * bw + 1, f.ys(v), Math.max(bw - 2, 1), h);
@@ -1996,6 +2242,95 @@ function drawDepthHist() {
 }
 
 // ---------------------------------------------------------------- flood map
+
+/* ------------------------------------------------------------ depth ramp
+
+   packed.png carries depth as one byte per cell, so the whole colour ramp is
+   256 entries wide and can be resolved ONCE into four lookup tables. The inner
+   loop of renderFlood() then costs four array reads per pixel instead of four
+   multiplies and an interpolation, which is what makes a 1100x520 canvas
+   redraw at sixty frames while the flood is playing.
+
+   The stops are a bathymetric ramp - pale shoal water through azure to a deep
+   indigo - chosen so that every entry stays strongly blue-dominant. That is
+   not only taste: the shallow end has to remain unmistakably water against a
+   pale OSM basemap, or a 10 cm sheet across a floodplain reads as haze.       */
+const RAMP_STOPS = [
+  [0.00, 128, 206, 250, 0.40],
+  [0.25,  74, 168, 238, 0.56],
+  [0.55,  26, 112, 208, 0.73],
+  [0.80,  14,  70, 172, 0.86],
+  [1.00,  12,  42, 128, 0.95]
+];
+const RAMP_R = new Float32Array(256), RAMP_G = new Float32Array(256),
+      RAMP_B = new Float32Array(256), RAMP_A = new Float32Array(256);
+(function buildRamp() {
+  for (let q = 0; q < 256; q++) {
+    const t = q / 255;
+    let i = 0;
+    while (i < RAMP_STOPS.length - 2 && t > RAMP_STOPS[i + 1][0]) i++;
+    const a = RAMP_STOPS[i], b = RAMP_STOPS[i + 1];
+    const f = (t - a[0]) / Math.max(b[0] - a[0], 1e-9);
+    RAMP_R[q] = a[1] + (b[1] - a[1]) * f;
+    RAMP_G[q] = a[2] + (b[2] - a[2]) * f;
+    RAMP_B[q] = a[3] + (b[3] - a[3]) * f;
+    RAMP_A[q] = a[4] + (b[4] - a[4]) * f;
+  }
+})();
+
+/* ------------------------------------------- derived grids, built once
+
+   Three things about the flood do not change with the scrubber, so computing
+   them per frame was three full passes over the grid, sixty times a second,
+   for answers that were identical every time:
+
+     PACKED_SHADE  depth relief. The difference between a cell's depth and its
+                   neighbour to the north-west, which is a hillshade of the
+                   water surface: the channel thalweg falls away and darkens,
+                   the bar tops and the shoulders catch the light. It is a
+                   rendering of depth.tif and nothing else.
+     PACKED_EDGE   the inundation boundary - a wet cell touching a dry one.
+                   Drawn as a bright rim, which is the single line on this map
+                   an engineer actually traces: the flood extent.
+     WET_CELLS     every cell that is ever wet, as a flat index. Particle
+                   respawn used to reject-sample the whole grid up to forty
+                   times to find one; now it picks one.
+   ------------------------------------------------------------------------- */
+let PACKED_SHADE = null, PACKED_EDGE = null, WET_CELLS = null;
+
+function buildPackedDerivatives() {
+  PACKED_SHADE = PACKED_EDGE = WET_CELLS = null;
+  if (!PACKED) return;
+  const w = PACKED.width, h = PACKED.height, d = PACKED.data, n = w * h;
+  const shade = new Int8Array(n), edge = new Uint8Array(n);
+  const wet = new Int32Array(n);
+  let nWet = 0;
+
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const i = r * w + c, s = i * 4;
+      if (!d[s + 3]) continue;                     // never wet
+      wet[nWet++] = i;
+
+      // relief, lit from the north-west. A dry neighbour reads as zero depth,
+      // which is what puts the bright rim on the waterline below.
+      const ci = c > 0 ? c - 1 : c, ri = r > 0 ? r - 1 : r;
+      const ns = (ri * w + ci) * 4;
+      const nw = d[ns + 3] ? d[ns + 2] : 0;
+      let g = (d[s + 2] - nw) / 255 * 4;
+      if (g > 1) g = 1; else if (g < -1) g = -1;
+      shade[i] = Math.round(g * 127);
+
+      edge[i] = (c === 0 || c === w - 1 || r === 0 || r === h - 1 ||
+                 !d[(i - 1) * 4 + 3] || !d[(i + 1) * 4 + 3] ||
+                 !d[(i - w) * 4 + 3] || !d[(i + w) * 4 + 3]) ? 1 : 0;
+    }
+  }
+  PACKED_SHADE = shade;
+  PACKED_EDGE = edge;
+  WET_CELLS = wet.subarray(0, nWet);
+}
+
 async function loadPacked(runId) {
   const img = new Image();
   img.onload = () => {
@@ -2003,6 +2338,8 @@ async function loadPacked(runId) {
     off.width = img.width; off.height = img.height;
     off.getContext("2d").drawImage(img, 0, 0);
     PACKED = off.getContext("2d").getImageData(0, 0, img.width, img.height);
+    buildPackedDerivatives();
+    PARTICLES = [];
     $("time").value = 100;
     renderFlood(1.0);
     drawAreaCurve();
@@ -2011,9 +2348,10 @@ async function loadPacked(runId) {
   img.onerror = () => {
     const c = $("map"), x = c.getContext("2d");
     x.clearRect(0, 0, c.width, c.height);
-    x.fillStyle = "#5b6570"; x.font = "13px system-ui";
+    x.fillStyle = C_TEXT; x.font = "13px system-ui";
     x.fillText("No packed.png for this run.", 12, 24);
     PACKED = null;
+    buildPackedDerivatives();
     noData("ch-area", "No packed.png for this run.");
     noData("ch-depth", "No packed.png for this run.");
   };
@@ -2032,6 +2370,13 @@ async function loadPacked(runId) {
    scenario, which is short enough to read as an edge and long enough to still
    be visible when the front is crossing a floodplain slowly. */
 const FRONT_BAND = 0.02;
+
+/* The bloom is the shoulder BEHIND the crest - water the wave crossed in the
+   last twenty model-minutes or so. Drawing only the tight crest gave a bright
+   thread with nothing behind it; the wider, softer band is what makes the
+   front read as a body of water with a leading edge. Same rule as above: it
+   is a contour of arrival_time.tif and it changes no number on this page. */
+const FRONT_BLOOM = FRONT_BAND * 3.2;
 
 /* The flood, played rather than dragged. A dam break is an event with a shape
    in time - a front that accelerates down a gorge and stalls on a floodplain -
@@ -2091,10 +2436,12 @@ function paintFlowLegend() {
   if (!el) return;
   const vmax = FIELDSMETA && FIELDSMETA.velocity_max_ms;
   if (!vmax) { el.textContent = ""; return; }
+  // The ramp printed here is the one flowColour() draws with, written out in
+  // CSS. A velocity legend that does not match the streaks is a lie about a
+  // measured field, so the two are kept in step deliberately.
   el.innerHTML =
-    `streaks follow measured velocity · thin/pale 0 m/s ` +
-    `<span style="display:inline-block;width:38px;height:3px;vertical-align:middle;` +
-    `background:linear-gradient(90deg,rgba(200,245,255,.5),rgba(255,200,255,1))"></span> ` +
+    `streaks = measured velocity · 0 m/s ` +
+    `<span class="vel-ramp"></span> ` +
     `${Number(vmax).toFixed(1)} m/s peak`;
 }
 
@@ -2135,8 +2482,31 @@ let redrawTimer = null;
    basemap dirty so it recomposites once more, not once per frame.            */
 let BASE_CANVAS = null;           // offscreen composited basemap
 let BASE_DIRTY = true;
+readPalette();                    // safe here: BASE_DIRTY now exists
 let CELL_LUT = null;              // Int32Array, one entry per canvas pixel
 let VIEW_KEY = "";                // identity of the view both caches were built for
+
+const TAU = Math.PI * 2;
+const LABEL_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+/** #rrggbb + alpha -> rgba(), for the marker flashes. */
+const hexA = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+/** roundRect is not everywhere yet, and a label plate is not worth a polyfill
+    library. Falls back to four arcTo corners, which is what roundRect is. */
+function roundRectPath(ctx, rx, ry, rw, rh, rr) {
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, rr); return; }
+  ctx.beginPath();
+  ctx.moveTo(rx + rr, ry);
+  ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rr);
+  ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, rr);
+  ctx.arcTo(rx, ry + rh, rx, ry, rr);
+  ctx.arcTo(rx, ry, rx + rw, ry, rr);
+  ctx.closePath();
+}
 
 const lon2mx = lon => (lon + 180) / 360;
 const lat2my = lat => {
@@ -2190,21 +2560,60 @@ function renderFlood(frac) {
   const bbox = (META.domain && META.domain.bbox) || null;
   const w = PACKED.width, h = PACKED.height;
 
-  // Canvas keeps the Mercator aspect of the domain, so nothing is stretched.
+  /* ---- fitting the view to the frame ---------------------------------
+
+     The canvas keeps the Mercator aspect of what it draws, so nothing is ever
+     stretched. What changed is WHAT it draws.
+
+     A dam-break domain is a corridor - Machchhu is roughly one part wide to
+     three tall - and the panel it sits in is a wide rectangle. Drawing the
+     domain and nothing else left a blue thread down the middle of a large
+     empty box, and it also meant the canvas element and its own pixels had
+     different shapes, which is what put the hover readout a cell or two off
+     the pointer on every portrait run.
+
+     So the view is WIDENED with context until it is exactly the shape of the
+     frame, and the canvas then fills that frame edge to edge. There is no
+     letterbox and no bare panel beside the water: the whole box is map.
+
+     Nothing about the FLOOD changes. Every pixel outside the domain resolves
+     to no cell in CELL_LUT, so no water is ever painted there - the extra
+     ground is basemap and nothing else. Because that ground was never solved,
+     and "never solved" and "solved and found dry" would otherwise look
+     identical, the modelled domain is outlined further down. */
   let v;
+  const wrapEl = $("mapwrap");
+  const availW = wrapEl && wrapEl.clientWidth > 100 ? wrapEl.clientWidth : 860;
+  const availH = wrapEl && wrapEl.clientHeight > 100 ? wrapEl.clientHeight : 470;
+  const targetW = Math.min(Math.max(Math.round(availW), 320), 1600);
+  const targetH = Math.min(Math.max(Math.round(availH), 300), 760);
+
   if (bbox) {
     const [W_, S_, E_, N_] = bbox;
-    const mx0 = lon2mx(W_), mx1 = lon2mx(E_);
-    const my0 = lat2my(N_), my1 = lat2my(S_);   // y grows southward
-    const aspect = (mx1 - mx0) / (my1 - my0);
-    let W = 600, H = Math.round(W / aspect);
-    if (H > 560) { H = 560; W = Math.round(H * aspect); }
+    let mx0 = lon2mx(W_), mx1 = lon2mx(E_);
+    let my0 = lat2my(N_), my1 = lat2my(S_);   // y grows southward
+    const domA = (mx1 - mx0) / (my1 - my0);
+    const frameA = targetW / targetH;
+
+    // Grow the short axis only. The domain is never cropped - a dam break
+    // corridor cut off at the top of the frame is a missing flood.
+    if (domA < frameA) {
+      const grow = ((my1 - my0) * frameA - (mx1 - mx0)) / 2;
+      mx0 -= grow; mx1 += grow;
+    } else if (domA > frameA) {
+      const grow = ((mx1 - mx0) / frameA - (my1 - my0)) / 2;
+      my0 -= grow; my1 += grow;
+    }
+
+    const W = targetW, H = targetH;
     // Writing canvas.width clears the canvas even when the value is identical,
     // so only write it when the size genuinely changed.
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     v = { mx0, mx1, my0, my1, W, H, bbox };
   } else {
-    const scale = Math.min(600 / w, 560 / h);
+    // No bbox means no geography, so there is nothing to pad with - the grid
+    // is drawn at its own aspect and centred.
+    const scale = Math.min(targetW / w, targetH / h);
     const W = Math.max(Math.round(w * scale), 1);
     const H = Math.max(Math.round(h * scale), 1);
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
@@ -2224,7 +2633,9 @@ function renderFlood(frac) {
   VIEW = v;
 
   // ---- 1. basemap, composited once per view -----------------------
-  const key = `${c.width}x${c.height}|${v ? v.bbox.join(",") : "nogeo"}`;
+  const key = v
+    ? `${c.width}x${c.height}|${v.mx0},${v.mx1},${v.my0},${v.my1}`
+    : `${c.width}x${c.height}|nogeo`;
   if (key !== VIEW_KEY) { VIEW_KEY = key; CELL_LUT = null; BASE_DIRTY = true; }
 
   if (BASE_DIRTY || !BASE_CANVAS ||
@@ -2232,8 +2643,19 @@ function renderFlood(frac) {
     if (!BASE_CANVAS) BASE_CANVAS = document.createElement("canvas");
     BASE_CANVAS.width = c.width; BASE_CANVAS.height = c.height;
     const bx = BASE_CANVAS.getContext("2d");
-    bx.fillStyle = "#eceff1";
+    bx.filter = "none";
+    bx.fillStyle = C_MAPGROUND;
     bx.fillRect(0, 0, c.width, c.height);
+    /* Dark mode does not get a second tile server. It gets the SAME OSM
+       raster, recoloured on the way into the composite: invert plus a 180
+       degree hue rotation is the standard dark-basemap recipe - paper white
+       becomes near-black while roads, water and landuse stay distinguishable.
+       Saturation is pulled down deliberately, so that the flood painted on top
+       is the most colourful thing on the canvas rather than competing with the
+       towns underneath it. */
+    if (MAP_DARK) {
+      bx.filter = "invert(1) hue-rotate(180deg) saturate(.68) brightness(.82) contrast(1.08)";
+    }
     if (v) {
       const z = Math.max(0, Math.min(16,
         Math.round(Math.log2(v.W / ((v.mx1 - v.mx0) * TILE_PX)))));
@@ -2253,6 +2675,7 @@ function renderFlood(frac) {
         }
       }
     }
+    bx.filter = "none";
     BASE_DIRTY = false;
   }
   x.drawImage(BASE_CANVAS, 0, 0);
@@ -2296,6 +2719,12 @@ function renderFlood(frac) {
   const invEnd = 1 / Math.max(ENDHR, 1e-9);
   const tFrac = tNow * invEnd;
 
+  /* One pass over the canvas, and only the part that genuinely depends on the
+     clock is done here. Which cell a pixel is, what colour a depth byte maps
+     to, how the surface is lit and where the waterline runs were all resolved
+     once - at load, or the first time this view was drawn. */
+  const shade = PACKED_SHADE, edge = PACKED_EDGE;
+
   for (let i = 0; i < nPix; i++) {
     const cell = CELL_LUT[i];
     if (cell < 0) continue;
@@ -2303,33 +2732,56 @@ function renderFlood(frac) {
     if (!src[s + 3]) continue;                       // never wet
     const arrFrac = src[s] / 255;
     if (arrFrac > tFrac) continue;                   // arrival still ahead
-    const d01 = src[s + 2] / 255;
-    if (d01 <= 0) continue;
+    const q = src[s + 2];
+    if (!q) continue;
 
-    const o = i * 4;
-    let a = 0.40 + 0.55 * d01;                       // deeper -> more opaque
-    let r = 30 + 90 * (1 - d01), g = 110 + 90 * (1 - d01), b = 200 + 40 * (1 - d01);
+    let r = RAMP_R[q], g = RAMP_G[q], b = RAMP_B[q], a = RAMP_A[q];
 
-    /* The wave front, lit. `lead` is how long ago the front passed this cell,
-       as a fraction of the run; cells inside a narrow band behind the present
-       moment are the front itself and are drawn bright.
-
-       This is a rendering of arrival_time.tif and nothing else - the band is a
-       contour of a grid the solver computed, so what glows is where the water
-       actually arrived in the last few minutes of model time. It is the one
-       thing a still image of a flood map cannot show and the reason the flood
-       reads as moving rather than spreading. */
-    const lead = tFrac - arrFrac;
-    if (lead < FRONT_BAND) {
-      const f = 1 - lead / FRONT_BAND;               // 1 at the front
-      const lit = f * f;                             // keep the band tight
-      r += (255 - r) * 0.80 * lit;
-      g += (255 - g) * 0.80 * lit;
-      b += (255 - b) * 0.45 * lit;
-      a = Math.min(1, a + 0.38 * lit);
+    /* Relief on the water surface, lit from the north-west off the depth
+       grid. It adds nothing the ramp did not already carry; it makes what the
+       ramp carries legible, so a channel reads as a channel cut into a
+       floodplain instead of as a flat blue ribbon laid over one. */
+    if (shade) {
+      const k = 1 + shade[cell] * 0.0030;
+      r *= k; g *= k; b *= k;
     }
 
-    const inv = 1 - a;
+    // The waterline. It is the one contour on this map anybody traces by hand,
+    // so it is drawn as a line rather than left to be inferred from the alpha.
+    if (edge && edge[cell]) {
+      r += (214 - r) * 0.42;
+      g += (242 - g) * 0.42;
+      b += (255 - b) * 0.30;
+      a = Math.min(1, a + 0.14);
+    }
+
+    /* The front, in two stages. `lead` is how long ago the water arrived here,
+       as a fraction of the run. A wide soft bloom marks the shoulder the wave
+       has just crossed; a tight near-white crest inside it is the front
+       itself. Both are contours of arrival_time.tif, so what glows is where
+       the water actually arrived in the last minutes of model time - the one
+       thing a still flood map cannot show, and the reason this reads as a
+       flood moving rather than a shape growing. */
+    const lead = tFrac - arrFrac;
+    if (lead < FRONT_BLOOM) {
+      const fb = 1 - lead / FRONT_BLOOM;
+      const bloom = fb * fb;
+      r += (120 - r) * 0.34 * bloom;
+      g += (215 - g) * 0.34 * bloom;
+      b += (255 - b) * 0.34 * bloom;
+      a = Math.min(1, a + 0.16 * bloom);
+
+      if (lead < FRONT_BAND) {
+        const f = 1 - lead / FRONT_BAND;             // 1 at the front
+        const lit = f * f;                           // keep the band tight
+        r += (255 - r) * 0.82 * lit;
+        g += (255 - g) * 0.88 * lit;
+        b += (255 - b) * 0.58 * lit;
+        a = Math.min(1, a + 0.42 * lit);
+      }
+    }
+
+    const o = i * 4, inv = 1 - a;
     dst[o]     = dst[o]     * inv + r * a;
     dst[o + 1] = dst[o + 1] * inv + g * a;
     dst[o + 2] = dst[o + 2] * inv + b * a;
@@ -2339,9 +2791,50 @@ function renderFlood(frac) {
 
   if (!v) return;
 
-  // ---- 3. what a district officer needs on the map ---------------
-  x.font = "11px system-ui";
-  const HAZ = { extreme: "#a11212", significant: "#c25708", moderate: "#a8410a", low: "#14663a" };
+  // ---- 4. what a district officer needs on the map ----------------
+
+  /* A label on a flood map is not competing with an empty ground - it is
+     competing with the road names, contours and villages OSM already drew
+     there. Stroking a white halo round the type works on open country and
+     falls apart over a town, so every label here sits on a plate. */
+  const plateText = (text, px, py, ink) => {
+    const tw = x.measureText(text).width;
+    x.fillStyle = C_MAPPLATE;
+    roundRectPath(x, px - 4, py - 10.5, tw + 8, 14.5, 4);
+    x.fill();
+    x.fillStyle = ink || C_MAPINK;
+    x.fillText(text, px, py);
+  };
+
+  x.font = "600 11px " + LABEL_FONT;
+  x.textAlign = "left";
+  x.textBaseline = "alphabetic";
+
+  /* The modelled domain. Now that the frame is filled with context, ground
+     outside the solved area looks exactly like ground that was solved and
+     came out dry - and those are not the same claim at all. This line is the
+     boundary of what the solver was actually asked about. */
+  {
+    const [dW, dS, dE, dN] = v.bbox;
+    const [rx0, ry0] = project(dW, dN, v);
+    const [rx1, ry1] = project(dE, dS, v);
+    x.save();
+    x.setLineDash([6, 5]);
+    x.lineWidth = 1.2;
+    x.strokeStyle = MAP_DARK ? "rgba(196,222,248,.40)" : "rgba(18,36,56,.34)";
+    x.strokeRect(rx0 + 0.5, ry0 + 0.5, rx1 - rx0 - 1, ry1 - ry0 - 1);
+    x.restore();
+    if (rx1 - rx0 > 150 && ry0 > -6) {
+      x.font = "700 9px " + LABEL_FONT;
+      plateText("MODELLED DOMAIN", rx0 + 6, Math.max(ry0 + 14, 14));
+      x.font = "600 11px " + LABEL_FONT;
+    }
+  }
+  /* Marker colours are deliberately NOT the theme's hazard tokens. These sit
+     on an OSM raster in both themes, not on a panel, so they are picked to
+     hold up against pale paper and dark tiles alike. The classes themselves
+     come from the run. */
+  const HAZ = { extreme: "#e0362f", significant: "#f0821e", moderate: "#dcb133", low: "#1fa968" };
 
   for (const s of (IMPACT && IMPACT.settlements) || []) {
     const [sx, sy] = project(s.lon, s.lat, v);
@@ -2354,52 +2847,112 @@ function renderFlood(frac) {
        somewhere with a name - and the ring is drawn from that settlement's own
        arrival_hr, so it cannot appear at a place or a time the run did not
        compute. */
+    const col = reached ? (HAZ[s.hazard_class] || HAZ.extreme)
+                        : (MAP_DARK ? "#7d94ad" : "#5b6570");
+
     if (reached) {
       const since = (tNow - s.arrival_hr) / Math.max(ENDHR * FRONT_BAND, 1e-9);
       if (since < 1) {
+        // Two rings, the second lagging the first, so the arrival reads as an
+        // impact rather than as a circle that happens to be growing.
+        for (const lag of [0, 0.34]) {
+          const t2 = since - lag;
+          if (t2 <= 0 || t2 >= 1) continue;
+          const ease = 1 - (1 - t2) * (1 - t2);
+          x.beginPath();
+          x.arc(sx, sy, 5 + 22 * ease, 0, TAU);
+          x.strokeStyle = `rgba(255,255,255,${0.82 * (1 - t2)})`;
+          x.lineWidth = 2.6 * (1 - t2) + 0.5;
+          x.stroke();
+        }
         x.beginPath();
-        x.arc(sx, sy, 5 + 16 * since, 0, Math.PI * 2);
-        x.strokeStyle = `rgba(255,255,255,${0.85 * (1 - since)})`;
-        x.lineWidth = 2.4 * (1 - since) + 0.6;
-        x.stroke();
+        x.arc(sx, sy, 5 + 11 * (1 - (1 - since) * (1 - since)), 0, TAU);
+        x.fillStyle = hexA(col, 0.26 * (1 - since));
+        x.fill();
       }
     }
 
-    x.beginPath(); x.arc(sx, sy, 4.5, 0, Math.PI * 2);
-    x.fillStyle = reached ? (HAZ[s.hazard_class] || "#a11212") : "#5b6570";
-    x.fill();
-    x.strokeStyle = "#fff"; x.lineWidth = 1.5; x.stroke();
-    x.fillStyle = "#14171a"; x.textAlign = "left";
-    x.strokeStyle = "rgba(255,255,255,.9)"; x.lineWidth = 3;
-    x.strokeText(s.name, sx + 7, sy + 3.5);
-    x.fillText(s.name, sx + 7, sy + 3.5);
+    // A shadow first: a 5 px dot dropped straight onto OSM tiles disappears
+    // into a roundabout.
+    x.beginPath(); x.arc(sx + 0.5, sy + 1, 5.6, 0, TAU);
+    x.fillStyle = "rgba(6,14,24,.28)"; x.fill();
+
+    x.beginPath(); x.arc(sx, sy, 4.7, 0, TAU);
+    x.fillStyle = col; x.fill();
+    x.strokeStyle = MAP_DARK ? "#0b1420" : "#ffffff"; x.lineWidth = 1.7; x.stroke();
+
+    plateText(s.name, sx + 9, sy + 4);
   }
 
   if (META.site && META.site.lat != null) {
     const [dx_, dy_] = project(META.site.lon, META.site.lat, v);
-    x.fillStyle = "#14171a";
+    /* The breach. Everything on this canvas came out of this one point, so it
+       gets a halo and the eye lands on it before it lands on anything else. */
+    const halo = x.createRadialGradient(dx_, dy_, 0, dx_, dy_, 30);
+    halo.addColorStop(0, "rgba(255,92,56,.40)");
+    halo.addColorStop(0.55, "rgba(255,92,56,.14)");
+    halo.addColorStop(1, "rgba(255,92,56,0)");
+    x.fillStyle = halo;
+    x.beginPath(); x.arc(dx_, dy_, 30, 0, TAU); x.fill();
+
     x.beginPath();
-    x.moveTo(dx_, dy_ - 8); x.lineTo(dx_ + 7, dy_ + 5); x.lineTo(dx_ - 7, dy_ + 5);
-    x.closePath(); x.fill();
-    x.strokeStyle = "#fff"; x.lineWidth = 1.5; x.stroke();
+    x.moveTo(dx_, dy_ - 9.5); x.lineTo(dx_ + 8, dy_ + 5.5); x.lineTo(dx_ - 8, dy_ + 5.5);
+    x.closePath();
+    x.fillStyle = "#d8371f"; x.fill();
+    x.strokeStyle = MAP_DARK ? "#0b1420" : "#ffffff"; x.lineWidth = 1.8; x.stroke();
   }
 
-  // scale bar, because a flood map without one is a picture
+  /* Scale bar, because a flood map without one is a picture. The bar picks the
+     LARGEST round distance that fits in a quarter of the canvas, so it stays
+     informative on a 3 km gorge and on a 90 km reach - the old rule took the
+     first that fitted, which meant it read "1 km" on almost every run. */
   const midLat = my2lat((v.my0 + v.my1) / 2);
   const mPerPx = (mx2lon(v.mx1) - mx2lon(v.mx0)) / v.W * 111320 * Math.cos(midLat * Math.PI / 180);
-  const targets = [1000, 2000, 5000, 10000, 20000, 50000];
-  const barM = targets.find(t => t / mPerPx < v.W * 0.3) || 1000;
+  const targets = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100];
+  const barM = targets.find(t => t / mPerPx < v.W * 0.26) || 100;
   const barPx = barM / mPerPx;
-  x.strokeStyle = "#14171a"; x.lineWidth = 2;
-  x.beginPath(); x.moveTo(12, v.H - 14); x.lineTo(12 + barPx, v.H - 14); x.stroke();
-  x.fillStyle = "#14171a"; x.textAlign = "left";
-  x.strokeStyle = "rgba(255,255,255,.9)"; x.lineWidth = 3;
   const barLab = barM >= 1000 ? `${barM / 1000} km` : `${barM} m`;
-  x.strokeText(barLab, 12, v.H - 18); x.fillText(barLab, 12, v.H - 18);
+
+  x.font = "700 10.5px " + LABEL_FONT;
+  x.textAlign = "left";
+  const bx0 = 15, by0 = v.H - 15;
+  const plateW = Math.max(barPx, x.measureText(barLab).width) + 16;
+  x.fillStyle = C_MAPPLATE;
+  roundRectPath(x, bx0 - 8, by0 - 23, plateW, 30, 7); x.fill();
+
+  x.strokeStyle = C_MAPINK; x.lineWidth = 1.8; x.lineCap = "butt";
+  x.beginPath();
+  x.moveTo(bx0, by0 - 5); x.lineTo(bx0, by0);
+  x.lineTo(bx0 + barPx, by0); x.lineTo(bx0 + barPx, by0 - 5);
+  x.stroke();
+  x.fillStyle = C_MAPINK;
+  x.fillText(barLab, bx0, by0 - 9);
+
+  // North arrow. The flood is drawn north-up and nothing on the canvas says so.
+  const nx = v.W - 27, ny = v.H - 27;
+  x.fillStyle = C_MAPPLATE;
+  x.beginPath(); x.arc(nx, ny, 16, 0, TAU); x.fill();
+  x.fillStyle = "#d8371f";
+  x.beginPath();
+  x.moveTo(nx, ny - 10.5); x.lineTo(nx + 5, ny + 3); x.lineTo(nx, ny + 0.5);
+  x.closePath(); x.fill();
+  x.fillStyle = C_MAPINK;
+  x.beginPath();
+  x.moveTo(nx, ny - 10.5); x.lineTo(nx - 5, ny + 3); x.lineTo(nx, ny + 0.5);
+  x.closePath(); x.fill();
+  x.font = "800 8.5px " + LABEL_FONT;
+  x.textAlign = "center";
+  x.fillText("N", nx, ny + 12);
+  x.textAlign = "left";
 
   if (BASE_TILES_OK === false) {
-    x.fillStyle = "#5b6570"; x.textAlign = "right";
-    x.fillText("basemap offline - flood and markers are unaffected", v.W - 8, 14);
+    x.font = "600 10.5px " + LABEL_FONT;
+    const msg = "basemap offline — flood and markers are unaffected";
+    const mw = x.measureText(msg).width;
+    x.fillStyle = C_MAPPLATE;
+    roundRectPath(x, v.W - mw - 19, 7, mw + 12, 18, 5); x.fill();
+    x.fillStyle = C_MAPINK;
+    x.fillText(msg, v.W - mw - 13, 20);
   }
 }
 
@@ -2443,8 +2996,11 @@ function showProbe(p, px, py) {
     `Risk area: ${p.hazard_class}</div>`;
   tip.style.display = "block";
   const w = tip.offsetWidth, h = tip.offsetHeight, c = $("map");
-  tip.style.left = Math.min(px + 14, c.width - w - 4) + "px";
-  tip.style.top = Math.max(4, Math.min(py + 14, c.height - h - 4)) + "px";
+  const r = c.getBoundingClientRect();
+  const scaleBackX = (r.width || 1) / (c.width || 1);
+  const scaleBackY = (r.height || 1) / (c.height || 1);
+  tip.style.left = Math.min(px * scaleBackX + 14, r.width - w - 4) + "px";
+  tip.style.top = Math.max(4, Math.min(py * scaleBackY + 14, r.height - h - 4)) + "px";
 }
 
 async function probeAt(px, py) {
@@ -2470,8 +3026,13 @@ async function probeAt(px, py) {
 (() => {
   const wrap = $("mapwrap");
   wrap.addEventListener("mousemove", ev => {
-    const r = $("map").getBoundingClientRect();
-    const px = ev.clientX - r.left, py = ev.clientY - r.top;
+    const mapEl = $("map");
+    const r = mapEl.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const scaleX = mapEl.width / r.width;
+    const scaleY = mapEl.height / r.height;
+    const px = (ev.clientX - r.left) * scaleX;
+    const py = (ev.clientY - r.top) * scaleY;
     clearTimeout(probeTimer);
     probeTimer = setTimeout(() => probeAt(px, py), 40);
   });
@@ -2496,6 +3057,11 @@ async function probeAt(px, py) {
    scrubber time, so the animation stops where the flood has stopped.        */
 
 let PARTICLES = [], flowRAF = null;
+
+/* Six speed bands. Enough that the ramp reads as continuous at these line
+   widths, few enough that the whole field is twelve stroke calls a frame. */
+const FLOW_BUCKETS = 6;
+let FLOW_ON = true;
 
 async function loadFields(runId) {
   FIELDS = null; FIELDSMETA = null; PARTICLES = [];
@@ -2539,33 +3105,112 @@ function velocityAt(col, row) {
   return (FIELDS.data[(r * w + c) * 4] / 255) * (FIELDSMETA.velocity_max_ms || 1);
 }
 
-/** Where the front was heading at this cell: the direction in which arrival
-    time increases fastest among the cells that are already wet at time t. */
+/** The same field, read bilinearly. Particles carry fractional positions, and
+    sampling the nearest cell made a streak change width in steps as it crossed
+    a cell boundary - visible as banding across a wide floodplain. */
+function velocitySmooth(col, row) {
+  if (!FIELDS || !FIELDSMETA) return 0;
+  const w = FIELDS.width, h = FIELDS.height, d = FIELDS.data;
+  let c = col, r = row;
+  if (!(c >= 0)) c = 0; else if (c > w - 1) c = w - 1;
+  if (!(r >= 0)) r = 0; else if (r > h - 1) r = h - 1;
+  const c0 = Math.floor(c), r0 = Math.floor(r);
+  const c1 = c0 + 1 < w ? c0 + 1 : c0, r1 = r0 + 1 < h ? r0 + 1 : r0;
+  const fx = c - c0, fy = r - r0;
+  const v = d[(r0 * w + c0) * 4] * (1 - fx) * (1 - fy)
+          + d[(r0 * w + c1) * 4] * fx * (1 - fy)
+          + d[(r1 * w + c0) * 4] * (1 - fx) * fy
+          + d[(r1 * w + c1) * 4] * fx * fy;
+  return (v / 255) * (FIELDSMETA.velocity_max_ms || 1);
+}
+
+/** Where the front was heading at this cell: DOWN the arrival-time gradient,
+    which is to say toward ground the water reached later.
+
+    This used to be the single steepest neighbour in a 5x5 stencil, which gives
+    exactly 24 possible headings - and a streak that snaps between 24 headings
+    draws a staircase. It is now the weighted mean direction over every
+    neighbour that arrived LATER and is already wet at time t, weighted by how
+    much later and how near. That is the same claim, resolved continuously:
+    only later-arriving cells contribute, so the result still points
+    downstream, and the argmax is kept as the fallback for the case where the
+    later neighbours cancel out.                                             */
 function flowDir(col, row, t) {
   const a = arrivalAt(col, row);
   if (a === null) return null;
-  let bx = 0, by = 0, best = a;
+  let vx = 0, vy = 0, wsum = 0, best = a, bx = 0, by = 0;
   for (let dr = -2; dr <= 2; dr++) {
     for (let dc = -2; dc <= 2; dc++) {
       if (!dc && !dr) continue;
       const n = arrivalAt(col + dc, row + dr);
-      if (n !== null && n > best && n <= t) { best = n; bx = dc; by = dr; }
+      if (n === null || n <= a || n > t) continue;
+      const inv = 1 / Math.hypot(dc, dr);
+      const wgt = (n - a) * inv;
+      vx += dc * inv * wgt; vy += dr * inv * wgt; wsum += wgt;
+      if (n > best) { best = n; bx = dc; by = dr; }
     }
   }
+  if (wsum > 0) {
+    const len = Math.hypot(vx, vy);
+    if (len > 1e-9) return [vx / len, vy / len];
+  }
   if (!bx && !by) return null;
-  const len = Math.hypot(bx, by);
-  return [bx / len, by / len];
+  const len2 = Math.hypot(bx, by);
+  return [bx / len2, by / len2];
+}
+
+/** The streak ramp. Slack water is a cool cyan; the peak velocity THIS RUN
+    recorded is a hot magenta-white. The number it encodes is max_velocity.tif
+    and the legend under the map prints the same ramp. */
+function flowColour(f, a) {
+  const r = f < 0.5 ? 138 + 188 * f : 232 + 46 * (f - 0.5);
+  const g = f < 0.5 ? 224 + 48 * f : 248 - 148 * (f - 0.5);
+  return `rgba(${r | 0},${g | 0},255,${a})`;
+}
+
+/** How many streaks this canvas can carry. Density is what turns a scatter of
+    dashes into a field, so it follows the canvas rather than sitting on a
+    constant that was tuned once against a 600 px map. */
+function flowTargetCount() {
+  const fc = $("flow");
+  const area = Math.max((fc.width || 600) * (fc.height || 380), 1);
+  return Math.max(300, Math.min(1600, Math.round(area / 560)));
+}
+
+/** Put a particle back into water the flood has already reached at the
+    scrubber's time. WET_CELLS turns this from rejection-sampling the whole
+    grid - up to forty misses on a run whose domain is mostly dry hillside -
+    into one lookup. */
+function respawnParticle(p) {
+  const w = PACKED ? PACKED.width : 0;
+  if (w && WET_CELLS && WET_CELLS.length) {
+    for (let i = 0; i < 20; i++) {
+      const cell = WET_CELLS[(Math.random() * WET_CELLS.length) | 0];
+      const col = cell % w, row = (cell / w) | 0;
+      const a = arrivalAt(col, row);
+      if (a !== null && a <= TNOW) {
+        p.col = col + Math.random(); p.row = row + Math.random();
+        p.life = 45 + Math.random() * 120;
+        p.trail = []; p.dx = 0; p.dy = 0;
+        return true;
+      }
+    }
+  }
+  p.life = 4; p.trail = []; p.dx = 0; p.dy = 0;
+  return false;
 }
 
 function seedParticles(n) {
   PARTICLES = [];
   if (!PACKED) return;
-  const w = PACKED.width, h = PACKED.height;
-  let guard = 0;
-  while (PARTICLES.length < n && guard++ < n * 60) {
-    const col = Math.floor(Math.random() * w), row = Math.floor(Math.random() * h);
-    if (arrivalAt(col, row) === null) continue;
-    PARTICLES.push({ col, row, life: Math.random() * 90 + 30, trail: [] });
+  for (let i = 0; i < n; i++) {
+    const p = { col: 0, row: 0, life: 0, trail: [], dx: 0, dy: 0 };
+    respawnParticle(p);
+    // Ages are staggered on purpose. Seeded with equal lifetimes the whole
+    // field expires on the same frame and the picture blinks once every couple
+    // of seconds instead of turning over continuously.
+    p.life = 8 + Math.random() * p.life;
+    PARTICLES.push(p);
   }
 }
 
@@ -2584,36 +3229,62 @@ function flowStep() {
      TRANSPARENT rather than to a colour. Painting a translucent background
      instead would smear a haze over the flood map underneath. */
   cx.globalCompositeOperation = "destination-out";
-  cx.fillStyle = "rgba(0,0,0,0.14)";
+  cx.fillStyle = "rgba(0,0,0,0.10)";
   cx.fillRect(0, 0, fc.width, fc.height);
   cx.globalCompositeOperation = "source-over";
 
-  if (!PACKED || !VIEW || !FIELDSMETA) { flowRAF = requestAnimationFrame(flowStep); return; }
-  if (!PARTICLES.length) seedParticles(520);
+  if (!FLOW_ON || !PACKED || !VIEW || !FIELDSMETA) {
+    flowRAF = requestAnimationFrame(flowStep); return;
+  }
+
+  const want = flowTargetCount();
+  if (!PARTICLES.length || Math.abs(PARTICLES.length - want) > want * 0.4) {
+    seedParticles(want);
+  }
 
   const bbox = VIEW.bbox, w = PACKED.width, h = PACKED.height;
   const vmax = Math.max(FIELDSMETA.velocity_max_ms || 1, 1e-6);
+  const frontHr = Math.max(ENDHR * FRONT_BAND, 1e-9);
 
-  cx.lineCap = "round";
+  /* Every streak in a speed band goes into one Path2D, so the whole field is
+     drawn in a dozen stroke calls rather than one per particle. That is what
+     pays for a thousand streaks AND for drawing each of them twice: once wide
+     and dim under `lighter` for the glow, once thin and bright for the core.
+     The second pass is what gives the field depth instead of leaving it a mesh
+     of equal hairlines - fast water blooms, slack water does not. */
+  const lanes = [];
+  for (let i = 0; i < FLOW_BUCKETS; i++) lanes.push(new Path2D());
+  const spray = new Path2D();
+  let sprayN = 0;
+
   for (const p of PARTICLES) {
     const a = arrivalAt(p.col, p.row);
-    // Respawn a particle that has left the water, aged out, or sits on ground
-    // the flood has not reached yet at the scrubber's time.
-    if (a === null || a > TNOW || p.life-- <= 0) {
-      let tries = 0;
-      do {
-        p.col = Math.floor(Math.random() * w); p.row = Math.floor(Math.random() * h);
-      } while (++tries < 40 && (arrivalAt(p.col, p.row) === null || arrivalAt(p.col, p.row) > TNOW));
-      p.life = Math.random() * 90 + 30; p.trail = [];
+    // Respawn a particle that has left the water, aged out, walked off the
+    // grid, or sits on ground the flood has not reached at the scrubber's time.
+    if (a === null || a > TNOW || p.life-- <= 0 ||
+        !(p.col >= 0) || !(p.row >= 0) || p.col >= w || p.row >= h) {
+      respawnParticle(p);
       continue;
     }
 
     const dir = flowDir(p.col, p.row, TNOW);
     if (!dir) { p.life = 0; continue; }               // at the front, respawn
 
-    const v = velocityAt(p.col, p.row);
-    const speed = 0.25 + 1.1 * (v / vmax);            // cells per frame
-    p.col += dir[0] * speed; p.row += dir[1] * speed;
+    /* The heading is low-passed rather than taken raw. flowDir is exact but it
+       is still resolved on a 5x5 stencil, and a streak that turns hard every
+       frame draws a staircase. Filtering changes no direction the data gave -
+       it is a blend of consecutive downstream headings - it makes the PATH
+       continuous, so the streak turns like water instead of like a knight. */
+    p.dx += (dir[0] - p.dx) * 0.45;
+    p.dy += (dir[1] - p.dy) * 0.45;
+    let hx = p.dx, hy = p.dy;
+    const hl = Math.hypot(hx, hy);
+    if (hl < 1e-6) { hx = dir[0]; hy = dir[1]; } else { hx /= hl; hy /= hl; }
+
+    const vel = velocitySmooth(p.col, p.row);
+    const f = Math.min(1, vel / vmax);
+    const speed = 0.22 + 1.25 * f;                    // cells per frame
+    p.col += hx * speed; p.row += hy * speed;
 
     const lon = bbox[0] + (p.col / w) * (bbox[2] - bbox[0]);
     const lat = bbox[3] - (p.row / h) * (bbox[3] - bbox[1]);
@@ -2627,27 +3298,183 @@ function flowStep() {
     if (p.trail.length > 9) p.trail.shift();
 
     if (p.trail.length > 1) {
-      // Only this frame's segment is drawn; the fade above keeps the rest of
+      // Only this frame's segment is added; the fade above keeps the rest of
       // the streak on screen, which is both cheaper and longer-tailed than
       // redrawing nine stored points every frame.
-      const f = Math.min(1, v / vmax);
-      cx.strokeStyle = `rgba(${Math.round(200 + 55 * f)},${Math.round(245 - 45 * f)},255,${0.30 + 0.55 * f})`;
-      cx.lineWidth = 1.1 + 1.9 * f;
       const n = p.trail.length;
-      cx.beginPath();
-      cx.moveTo(p.trail[n - 2][0], p.trail[n - 2][1]);
-      cx.lineTo(p.trail[n - 1][0], p.trail[n - 1][1]);
-      cx.stroke();
+      const lane = lanes[Math.min(FLOW_BUCKETS - 1, (f * FLOW_BUCKETS) | 0)];
+      lane.moveTo(p.trail[n - 2][0], p.trail[n - 2][1]);
+      lane.lineTo(sx, sy);
+
+      /* Spray. A particle still inside the front band is on water that arrived
+         in the last few model-minutes, so it gets a bright head - which makes
+         the leading edge the brightest thing in the field, exactly where the
+         warning time is being spent. */
+      if (TNOW - a < frontHr) {
+        spray.moveTo(sx + 1.7, sy);
+        spray.arc(sx, sy, 1.7, 0, TAU);
+        sprayN++;
+      }
     }
   }
+
+  cx.lineCap = "round";
+  cx.lineJoin = "round";
+  cx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < FLOW_BUCKETS; i++) {          // glow
+    const f = (i + 0.5) / FLOW_BUCKETS;
+    cx.strokeStyle = flowColour(f, 0.05 + 0.10 * f);
+    cx.lineWidth = 3.4 + 6.0 * f;
+    cx.stroke(lanes[i]);
+  }
+  for (let i = 0; i < FLOW_BUCKETS; i++) {          // core
+    const f = (i + 0.5) / FLOW_BUCKETS;
+    cx.strokeStyle = flowColour(f, 0.30 + 0.46 * f);
+    cx.lineWidth = 0.9 + 1.8 * f;
+    cx.stroke(lanes[i]);
+  }
+  if (sprayN) {
+    cx.fillStyle = "rgba(255,255,255,.40)";
+    cx.fill(spray);
+  }
+  cx.globalCompositeOperation = "source-over";
+
   flowRAF = requestAnimationFrame(flowStep);
 }
 if (!flowRAF) flowRAF = requestAnimationFrame(flowStep);
+
+/* The streaks are a reading of a measured field, but they are also continuous
+   motion on a page somebody may have to look at for an hour. The toggle is
+   real UI rather than a media query alone, because the reasons to want it off
+   are not all accessibility ones: a projector smears them, and a screenshot
+   for a report is cleaner without them. The choice is remembered. */
+(function wireFlowToggle() {
+  const btn = $("tflow");
+  if (!btn) return;
+  try {
+    const saved = localStorage.getItem("sih-flow");
+    if (saved === "off") FLOW_ON = false;
+  } catch (e) {}
+  const paint = () => {
+    btn.classList.toggle("on", FLOW_ON);
+    btn.setAttribute("aria-pressed", FLOW_ON ? "true" : "false");
+    btn.title = FLOW_ON
+      ? "Velocity streaks — the flow field the solver computed. Click to hide."
+      : "Velocity streaks hidden. Click to show the flow field.";
+  };
+  paint();
+  btn.addEventListener("click", () => {
+    FLOW_ON = !FLOW_ON;
+    try { localStorage.setItem("sih-flow", FLOW_ON ? "on" : "off"); } catch (e) {}
+    if (!FLOW_ON) {
+      const fc = $("flow");
+      fc.getContext("2d").clearRect(0, 0, fc.width, fc.height);
+    }
+    paint();
+  });
+})();
 
 function dl(fmt) {
   if (!RUN) { log("load a run first"); return; }
   window.location = `${API}/api/runs/${RUN}/export?format=${fmt}`;
 }
+
+/* ---------------------------------------------------------------- headline tiles
+
+   The Results list is a specification: eight rows, all equal, all small. That
+   is the right shape for checking a run and the wrong shape for reading one
+   across a room, which is what happens in front of a panel.
+
+   These tiles are that list's five or six load-bearing numbers, and nothing
+   else. Every value is copied out of META.results or the impact totals as the
+   backend sent it - no arithmetic, no unit conversion, no derived figure. A
+   number the run did not report produces NO TILE, which is the rule the rest
+   of this page keeps too: blank beats invented.                              */
+
+function paintKpis() {
+  const el = $("kpis");
+  if (!el) return;
+  const r = (META && META.results) || {};
+  const t = (IMPACT && IMPACT.totals) || {};
+
+  const dp = (v, n) => (v === undefined || v === null || !isFinite(v))
+                       ? null : Number(v).toFixed(n);
+  const grp = v => (v === undefined || v === null || !isFinite(v))
+                   ? null : Math.round(v).toLocaleString();
+
+  const tiles = [];
+  const add = (k, v, u, note, cls) => { if (v !== null) tiles.push([k, v, u, note, cls]); };
+
+  add("Peak discharge", grp(r.peak_discharge_cumecs), "m³/s",
+      "at the breach, off the outflow hydrograph", "is-info");
+  add("Max depth", dp(r.max_depth_m, 2), "m",
+      "deepest wet cell over the whole run", "is-bad");
+  add("Flooded area", dp(r.flood_area_km2, 2), "km²",
+      "cells wetted above the depth threshold", "is-info");
+  add("People reached", grp(t.population_affected), "",
+      (t.settlements_affected != null ? t.settlements_affected : 0)
+      + " settlements in the water", "is-bad");
+  add("Max velocity", dp(r.max_velocity_ms, 2), "m/s",
+      "peak depth-averaged flow speed", "is-warn");
+  add("Damage",
+      (t.damage_inr_crore == null || !isFinite(t.damage_inr_crore)) ? null
+        : Number(t.damage_inr_crore).toLocaleString(undefined,
+            { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+      "₹ cr", "exposure-based estimate, not an assessment", "is-violet");
+  add("Mass balance", dp(r.mass_balance_err_pct, 3), "%",
+      "closure error — the solver checking itself", "is-ok");
+
+  if (!tiles.length) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  el.innerHTML = tiles.map(([k, v, u, note, cls]) =>
+    `<div class="kpi ${cls}">` +
+      `<div class="k">${esc(k)}</div>` +
+      `<div class="v">${esc(String(v))}${u ? `<span class="u">${u}</span>` : ""}</div>` +
+      `<div class="n">${esc(note)}</div>` +
+    `</div>`).join("");
+}
+
+/* ---------------------------------------------------------------- theme switch
+
+   Chrome only. It flips one attribute on <html>, remembers the choice, and
+   redraws the canvases so the axes follow the page instead of staying on a
+   grey that is now invisible. It touches no input, submits nothing, and
+   re-solves nothing.                                                         */
+
+(function wireTheme() {
+  const btn = $("themebtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const root = document.documentElement;
+    const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    // Transitions off for one frame, or half the page cross-fades while the
+    // other half snaps and the switch reads as a rendering fault.
+    root.classList.add("theme-switching");
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("sih-theme", next); } catch (e) {}
+    btn.title = next === "dark" ? "Switch to light" : "Switch to dark";
+    repaintCharts();
+    requestAnimationFrame(() => requestAnimationFrame(
+      () => root.classList.remove("theme-switching")));
+  });
+})();
+
+/* Keyboard transport, the way a scrubber is expected to behave. Space plays
+   and pauses, the arrow keys step one frame, Home and End jump to the ends -
+   but only when the operator is not typing into a field, or the space bar
+   would start the flood in the middle of a dam name. */
+document.addEventListener("keydown", ev => {
+  const tag = (ev.target && ev.target.tagName) || "";
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag) || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const t = $("time");
+  if (!t) return;
+  const step = ev.shiftKey ? 10 : 1;
+  if (ev.code === "Space")            { ev.preventDefault(); $("tplay").click(); }
+  else if (ev.code === "ArrowRight")  { ev.preventDefault(); t.value = Math.min(100, +t.value + step); t.dispatchEvent(new Event("input")); }
+  else if (ev.code === "ArrowLeft")   { ev.preventDefault(); t.value = Math.max(0, +t.value - step);   t.dispatchEvent(new Event("input")); }
+  else if (ev.code === "Home")        { ev.preventDefault(); t.value = 0;   t.dispatchEvent(new Event("input")); }
+  else if (ev.code === "End")         { ev.preventDefault(); t.value = 100; t.dispatchEvent(new Event("input")); }
+});
 </script>
 </body>
 </html>
