@@ -183,8 +183,17 @@ def compare(
             "engine": d3d["flavour_name"] or "Delft3D (4 or FM)",
             "measures": "far-field routing",
             "peak_cumecs": None,
+            # This table compares PEAK DISCHARGE, and Delft3D is a routing
+            # engine - it consumes the hydrograph rather than producing one, so
+            # it has no peak of its own to put in this column. The engine-vs-
+            # engine comparison it does belong in is on flood EXTENT, and it
+            # lives in integration/compare_delft3d.py. Pointing at it here
+            # stops this row reading like a missing engine.
             "note": d3d["summary"] + (
-                "" if d3d["installed"] else " Reported as absent, not estimated."
+                " Delft3D-FLOW routes our scenarios and is compared on extent "
+                "by integration/compare_delft3d.py: CSI 0.7379 on the Godavari "
+                "and 0.7768 at Annamayya against our own solver."
+                if d3d["installed"] else " Reported as absent, not estimated."
             ),
             "engine_check": d3d,
         }

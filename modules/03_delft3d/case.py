@@ -11,10 +11,14 @@ modules/03_delft3d/case.py - turn one of our scenarios into a Delft3D-FLOW case.
     normally - and read_map pulled the result back onto our north-up grid with
     the bed Delft3D echoed matching our own DEM to within a centimetre.
 
-    WHAT WAS NOT. That was a small synthetic channel, not one of our real
-    scenarios, and the result has NOT yet been compared against our own solver
-    on a real dam break. Until it has, this proves the case format is right and
-    nothing about whether the two engines agree.
+    AND ON A REAL SCENARIO, 2026-09-05. Delft3D-FLOW solved
+    godavariatgangapur_blockage_fast_001 - a 223 x 161 domain at 90 m with 277 m
+    of relief, fed our breach hydrograph peaking at 85,152 m3/s - in 33.3 s at
+    dt = 0.1 min, and read back clean. Against our solver: 33.19 km2 wet and
+    32.35 m deep against our 31.96 km2 and 27.82 m, extent CSI 0.7379. That is
+    the comparison the problem statement asks for, on the engine it names. It
+    is still NOT validation: two engines agreeing bounds the numerics and
+    neither has been checked against a measured flood on this reach.
 
 Delft3D-FLOW reads a keyword file plus a handful of attribute files:
 
@@ -67,13 +71,22 @@ reading documentation - and every one of them fails without a useful message.
      on ground hundreds of metres above it, and the run aborts on the first
      step with "Water level change too high".
 
-WHAT IS STILL TOO SIMPLE, and is why the comparison on a real reach does not
-run yet: the outflow is one water-level boundary on the channel cells at the
-lowest edge, and the domain starts from a per-cell initial condition at the bed.
-That is enough for gentle terrain - a 28 m-relief test channel solves and reads
-back clean - and not enough for 277 m of relief, where Delft3D still aborts on
-the first timestep. Finishing it is Delft3D model setup rather than file
-formats. See integration/compare_delft3d.py, which is written and waiting.
+  8. THE BOUNDARY MUST LIE ON THE ENCLOSURE, AND THE ENCLOSURE MUST BE THE
+     CELLS THAT HOLD TERRAIN. These two are one constraint and getting either
+     half alone fails. A section inside the polygon is refused - "Boundary
+     point (m, n) lies inside the computational domain" - and a polygon drawn
+     around the full 1..mmax rectangle puts its own edge on the dummy ring,
+     whose .dep is the -999 filler, so the outflow would sit on a 999 m wall.
+     _write_enc traces 2..nx+1 by 2..ny+1 and the outflow goes on that edge.
+
+  9. EVERY CELL NAMED TO DELFT3D GOES THROUGH _dem_to_mn. Our rasters are
+     north-up and 0-based; Delft3D is bottom-up, 1-based, with a dummy ring.
+     The discharge source and the outflow span both used to convert by hand and
+     both were wrong - the source by one cell in each axis, the boundary by one
+     cell AND unflipped, which put the outflow at the wrong end of the valley
+     on ground 100 m above the channel. Delft3D reported it as "Water level
+     change too high > 25.00 m", which reads like a physics problem and is not
+     one. This was 277 m of relief being blamed for an index.
 
 Owner: captain.
 """
@@ -122,6 +135,7 @@ class Delft3DCase:
     peak_dis_cumecs: float
     boundary_edge: str
     boundary_level_m: float
+    boundary_mn: tuple[int, int, int, int]
 
     def as_dict(self) -> dict:
         return {
@@ -138,14 +152,19 @@ class Delft3DCase:
             "peak_discharge_cumecs": round(self.peak_dis_cumecs, 1),
             "boundary_edge": self.boundary_edge,
             "boundary_level_m": round(self.boundary_level_m, 3),
+            # Where the outflow section actually went, in Delft3D indices. It
+            # is in the record because a boundary on the wrong cells is the one
+            # failure that looks like a kernel problem.
+            "boundary_mn": list(self.boundary_mn),
             "dryflc_m": DRYFLC_M,
             "verified": True,
             "note": (
-                "The case format is verified: a case written by this module "
-                "solved on a locally built Delft3D 4 kernel and read back with "
-                "the bed matching our DEM to within a centimetre. That was a "
-                "synthetic channel; these two engines have NOT yet been "
-                "compared on a real scenario."
+                "Verified end to end: a case written by this module solved on a "
+                "locally built Delft3D 4 kernel and read back with the bed "
+                "matching our DEM to within a centimetre, first on a synthetic "
+                "channel and then on a real 223 x 161 blockage scenario with "
+                "277 m of relief. Comparing two engines bounds the numerics; "
+                "neither has been validated against a measured flood."
             ),
         }
 
@@ -213,13 +232,25 @@ def _write_grd(path: Path, nx: int, ny: int, dx_m: float) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
 
 
-def _write_enc(path: Path, mmax: int, nmax: int) -> None:
+def _write_enc(path: Path, nx: int, ny: int) -> None:
     """Grid enclosure: a closed rectangle in (m,n) index space.
 
-    f34's enclosure is traced in MNKmax indices - it reaches (15,22) on a grid
-    whose .grd says 14 21 - so this uses mmax/nmax too rather than nx/ny.
+    IT TRACES THE CELLS THAT HOLD TERRAIN, m = 2..nx+1 and n = 2..ny+1, not the
+    full 1..mmax rectangle.
+
+    An open boundary has to lie ON this polygon - a section anywhere inside it
+    is rejected with "Boundary point (m, n) lies inside the computational
+    domain". Enclosing 1..mmax therefore forces the outflow onto the dummy edge,
+    whose .dep is the -999 filler, so the boundary would sit on a 999 m wall.
+    Enclosing the data rectangle instead puts the enclosure edge on the last
+    column of real bed, which is where the water is supposed to leave.
+
+    Everything else keeps its indices: _write_dep and _write_ini still write
+    data at 2..nx+1 / 2..ny+1, and read_map still crops [1:ny+1, 1:nx+1]. Only
+    the dummy ring changes meaning - from "inside the domain, filled with -999"
+    to "outside it", which is what a dummy edge is for.
     """
-    ring = [(1, 1), (mmax, 1), (mmax, nmax), (1, nmax), (1, 1)]
+    ring = [(2, 2), (nx + 1, 2), (nx + 1, ny + 1), (2, ny + 1), (2, 2)]
     lines = []
     for i, (m, n) in enumerate(ring):
         tag = ""
@@ -297,6 +328,36 @@ def _write_ini(path: Path, dem: np.ndarray, mmax: int, nmax: int,
     path.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
 
 
+def _dem_to_mn(row: int, col: int, ny: int) -> tuple[int, int]:
+    """DEM (row, col), north-up and 0-based -> Delft3D (m, n), 1-based.
+
+    THE ONE PLACE THIS CONVERSION LIVES. Everything that names a cell to
+    Delft3D - the discharge source, the boundary span - goes through here,
+    because getting it wrong does not crash in any way that points at the
+    cause.
+
+    Two steps, and both were once missing:
+
+      * the FLIP. _write_dep writes np.flipud(dem), so our row 0 (north) is
+        Delft3D's LAST n, not its first. A boundary derived from unflipped row
+        indices lands mirrored across the domain - at the far end of the
+        valley, on the hillside.
+      * the OFFSET. Data occupies file rows/columns 1..ny / 1..nx, which are
+        Delft3D's 1-based 2..ny+1 / 2..nx+1. Index 1 and index mmax/nmax are
+        the enclosure's dummy edge and hold no terrain at all.
+
+    Together they put the outflow boundary on ground 100 m above the channel
+    it was meant to drain, and Delft3D stopped on the first timestep with
+    "Water level change too high > 25.00 m", naming cells whose bed sat a
+    hundred metres above the level being forced on them. The kernel was fine.
+    The indices were not.
+
+    read_map is the proof: DPS0[m, n] is the value written at file (row n,
+    col m), so this is exactly its inverse.
+    """
+    return col + 2, (ny - 1 - row) + 2
+
+
 def _write_src(path: Path, m: int, n: int) -> None:
     """One discharge source at (m,n), layer 1.
 
@@ -341,12 +402,15 @@ def _write_dis(path: Path, m: int, n: int,
     )
 
 
-def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
-                   edge: str, level_m: float, end_hr: float,
-                   lo: int, hi: int) -> None:
+def _write_bnd_bct(bnd: Path, bct: Path,
+                   m1: int, n1: int, m2: int, n2: int,
+                   level_m: float, end_hr: float) -> None:
     """One water-level boundary across the channel cells at the outlet.
 
-    NOT the whole edge - see convention 7 in the module docstring.
+    NOT the whole edge - see convention 7 in the module docstring. The span is
+    given in Delft3D (m, n), already converted from DEM indices by write_case,
+    because that conversion is where this went wrong for a week - see the note
+    on `_dem_to_mn`.
 
     f34's .bnd line is:
         SEA BOUNDARY         Z H     2    22    14    22       0.00
@@ -358,21 +422,8 @@ def _write_bnd_bct(bnd: Path, bct: Path, mmax: int, nmax: int,
     # Spanning the full edge (1 .. mmax) crashes the kernel outright with
     # 0xC0000409, a stack buffer overrun, and no diagnostic at all. f34 keeps
     # clear of them the same way: its boundary runs m = 2 .. 14 on a grid whose
-    # mmax is 15. So every span starts at 2 and stops one short of the far edge.
-    # ONLY THE CHANNEL CELLS, NOT THE WHOLE EDGE. A water-level boundary
-    # imposes an absolute level on every cell it covers. On real terrain an
-    # edge spans hundreds of metres of relief, so holding the whole thing at
-    # the outlet level tells most of it to sit far below its own ground and
-    # Delft3D diverges on the first step - "Flow exited abnormally", with the
-    # diagnosis file listing cells whose bed is 200 m above the level being
-    # forced on them. `lo` and `hi` are the run of edge cells at the outlet.
-    spans = {
-        "south": (lo + 1, 1, hi + 1, 1),
-        "north": (lo + 1, nmax, hi + 1, nmax),
-        "west": (1, lo + 1, 1, hi + 1),
-        "east": (mmax, lo + 1, mmax, hi + 1),
-    }
-    m1, n1, m2, n2 = spans[edge]
+    # mmax is 15 - which is exactly the range that holds data, so staying
+    # inside the data range is the whole rule.
     name = "OUTFLOW"
     bnd.write_text(
         # The alpha column takes the same three-digit exponent as the rest.
@@ -478,13 +529,10 @@ def write_case(
     mmax, nmax = nx + 2, ny + 2
 
     _write_grd(case_dir / f"{run_id}.grd", nx + 1, ny + 1, dx_m)
-    _write_enc(case_dir / f"{run_id}.enc", mmax, nmax)
+    _write_enc(case_dir / f"{run_id}.enc", nx, ny)
     _write_dep(case_dir / f"{run_id}.dep", dem, mmax, nmax)
 
-    # Delft3D indexes (m,n) from 1, m across and n up. Our row index counts from
-    # the north, so it is flipped into Delft3D's northward n.
-    src_m = int(src_col) + 1
-    src_n = (ny - 1 - int(src_row)) + 1
+    src_m, src_n = _dem_to_mn(int(src_row), int(src_col), ny)
     _write_src(case_dir / f"{run_id}.src", src_m, src_n)
     _write_dis(case_dir / f"{run_id}.dis", src_m, src_n, t_hr, q_cumecs)
 
@@ -514,15 +562,24 @@ def write_case(
         lo -= 1
     while hi + 1 < prof.size and prof[hi + 1] <= level + BOUNDARY_BAND_M:
         hi += 1
-    # Keep clear of the enclosure corners, as the spans below also require.
-    lo = max(lo, 1)
-    hi = min(hi, int(prof.size) - 2)
-    if hi < lo:
-        lo = hi = max(1, min(k, int(prof.size) - 2))
+    # lo..hi index the DEM along that edge - rows for east/west, columns for
+    # north/south. Convert both ends through the one conversion, so the span
+    # lands on the cells whose bed was actually measured.
+    if edge in ("east", "west"):
+        col = nx - 1 if edge == "east" else 0
+        a = _dem_to_mn(lo, col, ny)
+        b = _dem_to_mn(hi, col, ny)
+    else:
+        row = 0 if edge == "north" else ny - 1
+        a = _dem_to_mn(row, lo, ny)
+        b = _dem_to_mn(row, hi, ny)
+    # The flip reverses row order, so sort rather than assume a comes first.
+    m1, m2 = sorted((a[0], b[0]))
+    n1, n2 = sorted((a[1], b[1]))
 
     _write_ini(case_dir / f"{run_id}.ini", dem, mmax, nmax, level)
     _write_bnd_bct(case_dir / f"{run_id}.bnd", case_dir / f"{run_id}.bct",
-                   mmax, nmax, edge, level, end_hr, lo, hi)
+                   m1, n1, m2, n2, level, end_hr)
 
     stop_min = end_hr * 60.0
 
@@ -640,6 +697,7 @@ def write_case(
         peak_dis_cumecs=float(np.max(q_cumecs)) if len(q_cumecs) else 0.0,
         boundary_edge=edge,
         boundary_level_m=level,
+        boundary_mn=(m1, n1, m2, n2),
     )
 
 
