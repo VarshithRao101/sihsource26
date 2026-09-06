@@ -27,7 +27,6 @@ import asyncio
 import json
 import os
 import tempfile
-import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -49,7 +48,7 @@ from shared.contract import (
 from shared.io import RunFolder, list_runs, read_json, read_meta
 from shared.validate import validate_run
 
-from . import pipeline, reservoir
+from . import exports, pipeline, reservoir
 from .runner import SyntheticTerrain, run_scenario
 from .scenario import DEMO_SITES, ScenarioSpec, SiteSpec
 from .solver import warm_up_jit
@@ -1338,7 +1337,7 @@ def dam_detail(dam_id: str) -> dict:
 
 
 @app.get("/api/demo-runs", tags=["runs"])
-def demo_runs() -> dict:
+def demo_runs(category: Literal["dam", "river"] | None = None) -> dict:
     """The curated stored runs the console cycles through.
 
     A solve takes minutes on real terrain, which in front of a panel is the
@@ -1348,14 +1347,25 @@ def demo_runs() -> dict:
     Loading one goes down exactly the same path as loading a run somebody
     solved thirty seconds ago.
 
+    `category` is 'dam' or 'river' and both pages pass it, because the console
+    has a dam tab and a river tab and they are two different questions. Picking
+    the river tab and being handed a dam is the bug this parameter removes. A
+    row with no category at all - an older manifest - is treated as a dam,
+    which is what every row was before the river set existed.
+
+    Each row also carries `stage_timings`: the wall-clock seconds each pipeline
+    stage actually took when the run was built, measured off the same progress
+    stream the WebSocket carries. The workflow page paces its stored-run replay
+    against those rather than inventing a rhythm.
+
     Only runs actually present on disk are returned. The manifest is committed
     and the run folders are not - they are large and regenerable - so on a
-    fresh clone this correctly returns an empty list rather than four ids that
+    fresh clone this correctly returns an empty list rather than ten ids that
     404 one click later.
     """
     manifest = Path("data") / "demo_runs.json"
     if not manifest.is_file():
-        return {"runs": [], "count": 0,
+        return {"runs": [], "count": 0, "category": category, "counts": {},
                 "note": "no manifest; build with python -m integration.build_demo_runs"}
 
     try:
@@ -1366,13 +1376,22 @@ def demo_runs() -> dict:
     present, missing = [], []
     for r in rows:
         if (OUTPUTS / r["run_id"] / "meta.json").is_file():
-            present.append(r)
+            present.append({**r, "category": r.get("category", "dam")})
         else:
             missing.append(r["run_id"])
+
+    counts = {
+        "dam": sum(1 for r in present if r["category"] == "dam"),
+        "river": sum(1 for r in present if r["category"] == "river"),
+    }
+    if category:
+        present = [r for r in present if r["category"] == category]
 
     return {
         "runs": present,
         "count": len(present),
+        "category": category,
+        "counts": counts,
         "missing": missing,
         "note": (
             "Real runs through the same solver and the same code path as any "
@@ -2254,46 +2273,64 @@ def get_file(run_id: str, filename: str) -> FileResponse:
 def export(run_id: str, format: Literal["kml", "shp", "geojson"] = "kml") -> FileResponse:
     """Export the flood extent as KML, shapefile or GeoJSON.
 
-    NTRO asks for .shp or .kml explicitly. KML opens in Google Earth, which is
-    what a district administrator actually has; shapefile is what a GIS cell
-    will ask for.
+    Deliverable (iii) of the problem statement ends "Output should be converted
+    to .shp or .Kml file", and for a long time this satisfied that sentence by
+    writing the polygons out with five attributes attached. That is a file of
+    the right extension and very little else: opened in Google Earth it was a
+    grey blob with no legend, no arrival times, no names, and nothing to say
+    which numbers in it were measured and which were assumed.
+
+    All three are now packages rather than geometry dumps - see
+    modules/04_backend/exports.py, which builds them and carries the reasoning.
+    Every number in an export is read out of the run folder, and every caveat
+    the run recorded travels with it, because the export is the artefact that
+    leaves the building.
     """
+    def optional(name: str) -> dict | None:
+        """A run folder is allowed to be missing the optional files - a flood
+        map with nobody downstream has no impact.json - and an export must
+        degrade rather than 500."""
+        try:
+            return read_json(run_dir, name)
+        except (FileNotFoundError, ValueError):
+            return None
+
     run_dir = _require_run(run_id)
     meta = read_meta(run_dir)
-
-    if format == "geojson":
-        return FileResponse(
-            run_dir / "extent.geojson",
-            media_type="application/geo+json",
-            filename=f"{run_id}_extent.geojson",
-        )
-
-    import geopandas as gpd
-
-    gdf = gpd.read_file(run_dir / "extent.geojson")
-    gdf["run_id"] = run_id
-    gdf["engine"] = meta.get("engine")
-    gdf["is_fake"] = meta.get("is_fake", True)
-    gdf["site"] = (meta.get("site") or {}).get("name", "")
-    gdf["failure_mode"] = (meta.get("scenario") or {}).get("failure_mode", "")
+    extent = optional("extent.geojson") or {}
+    impact = optional("impact.json")
+    evacuation = optional("evacuation.json")
+    uncertainty = optional("uncertainty.json")
 
     tmp = Path(tempfile.mkdtemp(prefix=f"{run_id}_"))
 
+    if format == "geojson":
+        out = tmp / f"{run_id}_extent.geojson"
+        out.write_text(
+            json.dumps(
+                exports.build_geojson(run_id, meta, extent, impact, uncertainty),
+                indent=1, ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return FileResponse(
+            out, media_type="application/geo+json", filename=out.name
+        )
+
     if format == "kml":
-        out = tmp / f"{run_id}_extent.kml"
-        gdf.to_file(out, driver="KML")
+        out = tmp / f"{run_id}_flood.kml"
+        out.write_text(
+            exports.build_kml(run_id, meta, extent, impact, evacuation, uncertainty),
+            encoding="utf-8",
+        )
         return FileResponse(
             out, media_type="application/vnd.google-earth.kml+xml", filename=out.name
         )
 
-    # Shapefile is a set of sidecar files, so it ships as a zip.
-    shp_dir = tmp / run_id
-    shp_dir.mkdir()
-    gdf.to_file(shp_dir / f"{run_id}_extent.shp", driver="ESRI Shapefile")
-    zip_path = tmp / f"{run_id}_extent_shp.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for part in shp_dir.iterdir():
-            zf.write(part, part.name)
+    zip_path = tmp / f"{run_id}_gis_package.zip"
+    exports.build_shp_zip(
+        run_dir, run_id, meta, extent, impact, uncertainty, zip_path, tmp / "build"
+    )
     return FileResponse(zip_path, media_type="application/zip", filename=zip_path.name)
 
 
