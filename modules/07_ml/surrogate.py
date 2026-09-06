@@ -53,6 +53,17 @@ PARAM_SCALE = {
     "formation_time_hr": 3.0,
 }
 
+# The box the training set was drawn from. build_dataset() samples inside it,
+# and anything asking the emulator about a scenario outside it is extrapolating
+# - which the API says out loud rather than answering as if it knew.
+# formation_time_hr is absent on purpose: it is not sampled, it comes out of the
+# breach regression for each sampled (height, capacity, level).
+PARAM_RANGES = {
+    "reservoir_level_frac": (0.55, 1.0),
+    "capacity_mcm": (1.0, 60.0),
+    "dam_height_m": (25.0, 120.0),
+}
+
 # Fixed training site. The emulator is per-site by design: terrain is the one
 # input that does not vary within a deployment, and holding it fixed means the
 # network spends its capacity on the scenario response instead of relearning
@@ -120,9 +131,9 @@ def build_dataset(n: int = 60, seed: int = 26161, out_dir: Path = DATA_DIR) -> d
         rng.shuffle(pts)
         return pts
 
-    levels = strat(0.55, 1.0)
-    caps = strat(1.0, 60.0)
-    heights = strat(25.0, 120.0)
+    levels = strat(*PARAM_RANGES["reservoir_level_frac"])
+    caps = strat(*PARAM_RANGES["capacity_mcm"])
+    heights = strat(*PARAM_RANGES["dam_height_m"])
 
     samples, metas = [], []
     t0 = time.perf_counter()
