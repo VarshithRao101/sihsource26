@@ -387,17 +387,82 @@ def _check_hydrograph(run_dir: Path, rep: Report, meta: dict | None) -> None:
     # the water is behind a landslide dam whose volume was read off the DEM,
     # and the engineered dam's registered capacity is the wrong yardstick
     # entirely - a 1.5 MCM barrage can sit under a 6 MCM landslide lake.
-    cap = get_dotted(meta or {}, "blockage.impounded_volume_mcm")
-    cap_label = "impounded landslide lake"
-    if not (isinstance(cap, (int, float)) and cap > 0):
-        cap = get_dotted(meta or {}, "site.reservoir_capacity_mcm")
-        cap_label = "stated reservoir capacity"
-
-    if isinstance(cap, (int, float)) and cap > 0 and vol_mcm > 1.5 * cap:
-        rep.error(
-            f"released volume {vol_mcm:.1f} MCM exceeds 1.5x the {cap_label} "
-            f"{cap} MCM - the routing is creating water"
+    #
+    # And for failure_mode='river_flood' there is NO impounded volume of any
+    # kind. Nothing is emptied: a wave enters the top of the reach and the
+    # released volume is the integral of that wave, which is set by the peak
+    # discharge and the duration the operator asked for. site.reservoir_capacity
+    # _mcm is a placeholder there - SiteSpec.validate() only wants it positive -
+    # so comparing against it rejected every river flood ever run, at any size,
+    # as "creating water". The comparison is skipped rather than loosened,
+    # because a loose threshold on a meaningless number is still meaningless.
+    mode = get_dotted(meta or {}, "scenario.failure_mode")
+    if mode == "river_flood":
+        rep.fact(
+            "released volume unchecked - river_flood impounds nothing, so "
+            "there is no capacity to compare it against"
         )
+        cap, cap_label = None, ""
+    else:
+        # Order matters, and it is the order of what the run ACTUALLY emptied.
+        #
+        # A moraine-dammed lake that an operator measured off imagery overrides
+        # the DEM, because a 30 m DEM routinely cannot see the basin at all -
+        # runner.py says so at length and publishes both numbers. Checking the
+        # release against the DEM figure the run deliberately did not use
+        # rejected South Lhonak for emptying 67.9 MCM out of a lake it had
+        # correctly recorded as 68.9, while pointing at the 0.34 MCM the
+        # terrain holds. That is the validator marking a run wrong for doing
+        # exactly what its own meta.json documents.
+        cap = get_dotted(meta or {}, "glof_moraine.lake_volume_m3")
+        cap_label = "moraine lake volume this run released from"
+        if isinstance(cap, (int, float)) and cap > 0:
+            cap = cap / 1e6
+        else:
+            cap = get_dotted(meta or {}, "blockage.impounded_volume_mcm")
+            cap_label = "impounded landslide lake"
+        if not (isinstance(cap, (int, float)) and cap > 0):
+            cap = get_dotted(meta or {}, "site.reservoir_capacity_mcm")
+            cap_label = "stated reservoir capacity"
+
+    # A reservoir with an inflow arriving is a CONDUIT, not a bathtub, and
+    # comparing what left it against what it holds is then simply the wrong
+    # sum. Machchhu II is the case that proves it: 600 mm in 24 hours drove an
+    # inflow of 16,300 m3/s, which over the twelve hours simulated delivers
+    # 704 MCM through a reservoir that holds 100.55. The run released 766.5 MCM
+    # and was rejected as "creating water" when in fact it had conserved mass
+    # to 0.000% - the flagship demo of this repository, failing its own
+    # validator on arithmetic rather than on physics.
+    #
+    # So the yardstick is what was AVAILABLE to release: the stored volume plus
+    # everything the inflow delivered while the run lasted. The 1.5x margin is
+    # unchanged and still catches genuine mass creation, which is what it is
+    # for. Where there is no inflow the two forms are identical, so no existing
+    # run's verdict moves except the ones that were wrong.
+    inflow = get_dotted(meta or {}, "scenario.inflow_cumecs")
+    end_hr = get_dotted(meta or {}, "time.end_hr")
+    inflow_mcm = 0.0
+    if isinstance(inflow, (int, float)) and isinstance(end_hr, (int, float)):
+        inflow_mcm = max(0.0, float(inflow)) * float(end_hr) * 3600.0 / 1e6
+
+    if isinstance(cap, (int, float)) and cap > 0:
+        available = cap + inflow_mcm
+        if inflow_mcm > 0:
+            rep.fact(
+                f"available to release  {available:,.2f} MCM "
+                f"({cap:,.2f} stored + {inflow_mcm:,.2f} from inflow)"
+            )
+        if vol_mcm > 1.5 * available:
+            supply = (
+                f"the {cap_label} {cap} MCM plus {inflow_mcm:,.1f} MCM of "
+                f"inflow over {end_hr} hours"
+                if inflow_mcm > 0
+                else f"the {cap_label} {cap} MCM"
+            )
+            rep.error(
+                f"released volume {vol_mcm:.1f} MCM exceeds 1.5x {supply} "
+                f"- the routing is creating water"
+            )
 
     reported_peak = get_dotted(meta or {}, "results.peak_discharge_cumecs")
     if isinstance(reported_peak, (int, float)) and reported_peak > 0:

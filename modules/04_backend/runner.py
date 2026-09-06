@@ -391,6 +391,31 @@ def run_scenario(
     _node(progress, "breach", RUNNING)
     breach, ensemble = resolve_breach(spec)
 
+    def _release_step_hr(formation_time_hr: float | None) -> float:
+        """Sampling interval for the release hydrograph, in hours.
+
+        This used to be a flat min(output_step_hr, 0.05) - three minutes - and
+        that silently produced a WRONG ANSWER, not a coarse one, on any breach
+        that forms faster than the step. The Rishi Ganga barrier is the worked
+        example: 0.87 MCM behind 30 m of debris breaches in 0.046 hr, so the
+        entire release begins and ends between two samples. Both samples read
+        zero, hydrograph.csv came out all zeros, the solver received no water
+        and the run reported "no flood at all" for a barrier that had in fact
+        emptied 0.87 MCM in under three minutes.
+
+        Twenty samples across the formation time is the floor, so a breach is
+        always resolved by its own timescale rather than by a constant chosen
+        for slow ones. At Rishi Ganga that is 8 s and recovers 0.869 of the
+        0.869 MCM; at Phuktal, which formed in 0.47 hr and was already fine, it
+        refines 0.05 to 0.023 hr and changes nothing that matters.
+        """
+        step = min(spec.output_step_hr, 0.05)
+        if formation_time_hr and formation_time_hr > 0:
+            step = min(step, formation_time_hr / 20.0)
+        # Never below a second: past that the sample count buys nothing and the
+        # CSV grows without bound on a long run.
+        return max(step, 1.0 / 3600.0)
+
     # ---- river blockage: a natural dam, not an engineered one ----------
     # The problem statement asks for blockage as well as dam break, and it is
     # a different problem: nobody published the storage, so we read it off the
@@ -454,7 +479,7 @@ def run_scenario(
             spillway_length_m=spec.spillway_length_m,
             inflow_cumecs=spec.inflow_cumecs,
             duration_hr=spec.end_hr,
-            output_step_hr=min(spec.output_step_hr, 0.05),
+            output_step_hr=_release_step_hr(None),
             storage_exponent=spec.storage_exponent,
         )
         release_block = release.as_dict()
@@ -474,7 +499,7 @@ def run_scenario(
             duration_hr=spec.end_hr,
             base_flow_cumecs=spec.base_flow_cumecs,
             flood_duration_hr=spec.flood_duration_hr,
-            output_step_hr=min(spec.output_step_hr, 0.05),
+            output_step_hr=_release_step_hr(None),
         )
         # The wave arrives along the channel, so it enters over the channel
         # width implied by the peak discharge rather than over a breach.
@@ -522,7 +547,7 @@ def run_scenario(
             collapse_time_s=spec.collapse_time_min * 60.0,
             inflow_cumecs=spec.inflow_cumecs,
             duration_hr=spec.end_hr,
-            output_step_hr=min(spec.output_step_hr, 0.05),
+            output_step_hr=_release_step_hr(spec.collapse_time_min / 60.0),
             storage_exponent=spec.storage_exponent,
         )
         foundation_block = fnd.as_dict()
@@ -570,7 +595,7 @@ def run_scenario(
                 failure_mode="overtopping",
                 inflow_cumecs=spec.inflow_cumecs,
                 duration_hr=spec.end_hr,
-                output_step_hr=min(spec.output_step_hr, 0.05),
+                output_step_hr=_release_step_hr(breach.formation_time_hr),
                 storage_exponent=spec.storage_exponent,
             )
         else:
@@ -624,7 +649,7 @@ def run_scenario(
             ),
             inflow_cumecs=spec.inflow_cumecs,
             duration_hr=spec.end_hr,
-            output_step_hr=min(spec.output_step_hr, 0.05),
+            output_step_hr=_release_step_hr(spec.formation_time_hr or 0.5),
         )
         glof_block = moraine.as_dict()
         glof_block["dem_impounded_volume_m3"] = round(dem_volume_m3, 1)
@@ -670,7 +695,7 @@ def run_scenario(
             failure_mode=spec.failure_mode,
             inflow_cumecs=spec.inflow_cumecs,
             duration_hr=spec.end_hr,
-            output_step_hr=min(spec.output_step_hr, 0.05),
+            output_step_hr=_release_step_hr(breach.formation_time_hr),
             storage_exponent=spec.storage_exponent,
         )
 
@@ -834,7 +859,7 @@ def run_scenario(
         COMPLETE,
         f"breach regressions disagree by {_spread:.1f}x on peak discharge"
         if isinstance(_spread, (int, float))
-        else "outlet capacity and storage curve, not breach - controlled release",
+        else uncertainty.get("note", "").split(".")[0] or "published",
     )
 
     # ---- 6. meta.json --------------------------------------------------
@@ -960,6 +985,63 @@ def build_uncertainty(spec: ScenarioSpec, ensemble: dict, q_cumecs: np.ndarray) 
                 "SRTM": 3.7,
                 "NASADEM": 3.0,
                 "ALOS": 2.5,
+            },
+        }
+
+    if spec.failure_mode == "river_flood":
+        # The same argument as gated_release above, and it was missed here for
+        # longer than it should have been. A river flood has NO BARRIER: there
+        # is no reservoir, no embankment and nothing to breach, so
+        # site.dam_height_m and site.reservoir_capacity_mcm are placeholders
+        # that SiteSpec.validate only requires to be positive. Feeding those
+        # placeholders to Froehlich and Von Thun produced a published
+        # "peak envelope 19 to 540 m3/s" beside a routed peak of 3,400 - a
+        # citation-backed number describing a structure that does not exist,
+        # which is the most convincing possible way to be wrong. The real
+        # uncertainty in this mode is the peak the operator supplied, the shape
+        # assumed for the wave, and the ground it is routed over.
+        return {
+            "note": (
+                "This run is a ROUTED RIVER FLOOD, not a dam failure. There is "
+                "no barrier and nothing breaches, so breach regressions do not "
+                "apply and are deliberately absent. The uncertainty here is in "
+                "the peak discharge supplied, the hydrograph shape assumed for "
+                "it, and the terrain it is routed over."
+            ),
+            "scenario": "river_flood",
+            "routed_peak_cumecs": round(float(q_cumecs.max()), 1),
+            "supplied_peak_cumecs": round(float(spec.peak_discharge_cumecs), 1),
+            "supplied_peak_source": (
+                "OPERATOR INPUT - this is the boundary condition, not a result. "
+                "It is as good as the gauge record or published account it came "
+                "from, and this run does not check it."
+            ),
+            "time_to_peak_hr": spec.time_to_peak_hr,
+            "base_flow_cumecs": spec.base_flow_cumecs,
+            "hydrograph_shape": (
+                "NRCS dimensionless unit hydrograph - a synthetic shape used "
+                "because no gauge record exists for an arbitrary ungauged "
+                "reach. The recession is 1.67 times the rise by that "
+                "convention, not by measurement here."
+            ),
+            "manning_n": spec.manning_n,
+            "manning_n_source": (
+                "per-cell from ESA WorldCover land cover where available, "
+                "otherwise the scenario default. Roughness is the largest "
+                "single lever on depth in a routed flood and none of it is "
+                "calibrated against a measured stage."
+            ),
+            "dem_vertical_uncertainty_m": {
+                "FABDEM": 1.4,
+                "COP30": 1.7,
+                "SRTM": 6.0,
+                "note": (
+                    "RMSE figures from Hawker et al. (2022), Environmental "
+                    "Research Letters 17(2), 024016 for FABDEM/COP30, and the "
+                    "SRTM mission specification for SRTM. Bathymetry is not "
+                    "measured at all, which matters more here than in a dam "
+                    "break: an in-bank flood is mostly channel."
+                ),
             },
         }
 
