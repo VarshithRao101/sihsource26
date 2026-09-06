@@ -552,9 +552,23 @@
     </div>
 
     <div class="panel">
-      <h2>Flood — drag to step through time</h2>
+      <h2>Flood — play it, or drag through time</h2>
       <input id="time" type="range" min="0" max="100" value="100" style="width:100%">
-      <div class="muted" id="timelab">t = —</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button id="tplay" class="sec" style="width:auto;padding:3px 12px"
+                title="Run the flood forward from the moment of failure">&#9654; Play</button>
+        <select id="tspeed" style="width:auto;padding:3px 6px" title="Playback speed">
+          <option value="0.5">0.5&times;</option>
+          <option value="1" selected>1&times;</option>
+          <option value="2">2&times;</option>
+          <option value="4">4&times;</option>
+        </select>
+        <div class="muted" id="timelab">t = —</div>
+        <span class="grow" style="flex:1"></span>
+        <!-- The streaks are a velocity field, not decoration, so they get a
+             scale like any other quantity on this page. -->
+        <span class="muted" id="flowlegend" style="font-size:11px"></span>
+      </div>
       <div id="mapwrap">
         <canvas id="map" width="600" height="420"></canvas>
         <canvas id="flow" width="600" height="420"></canvas>
@@ -808,6 +822,7 @@ function setSource(src) {
   $("riverpick").style.display = src === "river" ? "" : "none";
   if (src === "river" && !RIVERS.length) loadRivers();
   buildModes();
+  paintDemoHint();
   previewMaybe();
 }
 
@@ -1269,22 +1284,68 @@ function drawBrief(d) {
     : `<div class="err">✗ NOT grounded — ${bad.length} of ${g.checked_values} numbers are not
          in this run: ${esc(bad.map(b => b.value).join(", "))}. Treat this briefing as unsafe.</div>`;
 
+  /* Confidence is the briefing's own reading of how much weight the run can
+     carry, and it is set from the run's validation and knife-edge fields
+     rather than from how plausible the numbers look. It sits next to the
+     grounding line because the two answer different questions: grounding is
+     "did the model make a number up", confidence is "is the run itself worth
+     acting on". A briefing can be perfectly grounded on a run nobody should
+     use. */
+  const CONF = {
+    "high":       ["var(--ok)",  "high confidence"],
+    "moderate":   ["var(--ok)",  "moderate confidence"],
+    "low":        ["#a35a00",    "LOW confidence"],
+    "not usable": ["var(--bad)", "NOT USABLE"],
+  };
+  const [cCol, cTxt] = CONF[a.confidence] || ["var(--muted)", esc(a.confidence)];
+
+  const hh = v => (v === 0 ? "at failure"
+                 : Number(v) < 1 ? `${Math.round(Number(v) * 60)} min`
+                 : `${Number(v).toFixed(2)} hr`);
+
   $("aibody").innerHTML = `
     ${check}
+    <div style="color:${cCol};font-weight:600;margin-top:3px">${cTxt}
+      <span class="muted" style="font-weight:400">— ${esc(a.confidence_basis)}</span></div>
+
     <p style="margin:8px 0 4px"><b>${esc(a.headline)}</b></p>
     <p style="margin:0 0 8px">Severity <b>${esc(a.severity)}</b> —
        <span class="muted">${esc(a.severity_basis)}</span></p>
+
+    <div style="border:1px solid var(--line);border-left:3px solid var(--bad);
+                padding:7px 9px;margin:8px 0;font-size:12.5px">
+      <div class="muted" style="font-size:10.5px;letter-spacing:.07em">
+        DRAFT ALERT — ${esc(String(a.alert_text || "").length)} characters ·
+        a human sends this, not the tool</div>
+      <div style="margin-top:3px">${esc(a.alert_text)}</div>
+    </div>
+
+    ${(a.timeline || []).length ? `
+    <h3 style="font-size:12px;margin:8px 0 2px">First hours, in order</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      ${a.timeline.map(t => `<tr>
+        <td style="white-space:nowrap;vertical-align:top;padding:2px 8px 2px 0;
+                   font-variant-numeric:tabular-nums"><b>${esc(hh(t.hours_after_failure))}</b></td>
+        <td style="padding:2px 0">${esc(t.what_happens)}
+          <span class="muted">${esc(t.who_is_affected)}</span></td></tr>`).join("")}
+    </table>` : ""}
+
     <h3 style="font-size:12px;margin:8px 0 2px">What the run shows</h3>
     <ul style="margin:0;padding-left:18px">
       ${a.findings.map(f => `<li>${esc(f.statement)}
         <span class="muted" style="font-size:11px">[${esc((f.evidence_keys||[]).join(", "))}]</span></li>`).join("")}
     </ul>
-    <h3 style="font-size:12px;margin:8px 0 2px">First hours</h3>
+    <h3 style="font-size:12px;margin:8px 0 2px">What to do first</h3>
     <ol style="margin:0;padding-left:18px">
       ${a.priority_actions.map(x => `<li>${esc(x)}</li>`).join("")}
     </ol>
     <h3 style="font-size:12px;margin:8px 0 2px">People</h3>
     <div>${esc(a.population_note)}</div>
+    ${(a.verify_before_acting || []).length ? `
+    <h3 style="font-size:12px;margin:8px 0 2px">Check these before acting on it</h3>
+    <ul style="margin:0;padding-left:18px">
+      ${a.verify_before_acting.map(x => `<li>${esc(x)}</li>`).join("")}
+    </ul>` : ""}
     <h3 style="font-size:12px;margin:8px 0 2px">What this cannot tell you</h3>
     <ul style="margin:0;padding-left:18px">
       ${a.limits.map(x => `<li>${esc(x)}</li>`).join("")}
@@ -1454,7 +1515,7 @@ async function poll(runId) {
    The curated list comes from GET /api/demo-runs. If that is unavailable the
    button falls back to whatever is newest on disk, which is what it used to
    do, rather than doing nothing. */
-let DEMOS = [], DEMO_I = -1;
+let DEMOS = [], DEMO_I = { dam: -1, river: -1 };
 
 async function loadDemos() {
   try {
@@ -1464,31 +1525,58 @@ async function loadDemos() {
   paintDemoHint();
 }
 
+/* The stored runs follow the tab. Five dams and the five rivers the problem
+   statement names live in the same manifest, and cycling a dam into the panel
+   while the operator is looking at the river picker is the one thing this
+   button must never do - the cases on screen would not even be legal for what
+   it loaded. `category` comes from data/demo_runs.json; a row without one is
+   a dam, which is what every row was before the river set existed. */
+function demosFor(src) {
+  return DEMOS.filter(d => (d.category || "dam") === src);
+}
+
 function paintDemoHint() {
   const el = $("demohint");
   if (!el) return;
-  if (!DEMOS.length) { el.textContent = ""; return; }
-  const next = DEMOS[(DEMO_I + 1) % DEMOS.length];
-  el.innerHTML = `${DEMOS.length} stored · next: <b>${esc(next.label)}</b>`;
+  const mine = demosFor(SRC);
+  const btn = $("loadlast");
+  if (btn) {
+    btn.textContent = mine.length
+      ? (SRC === "river" ? "Load a stored river run" : "Load a stored dam run")
+      : "Load a stored run";
+  }
+  if (!mine.length) {
+    el.innerHTML = DEMOS.length
+      ? `<span class="muted">no stored ${SRC} runs — build them with
+         <code>python -m integration.build_demo_runs</code></span>`
+      : "";
+    return;
+  }
+  const next = mine[(DEMO_I[SRC] + 1) % mine.length];
+  el.innerHTML = `${mine.length} stored ${SRC} run${mine.length === 1 ? "" : "s"}
+    · next: <b>${esc(next.label)}</b>`;
 }
 
 $("loadlast").onclick = async () => {
-  if (!DEMOS.length) {
+  const mine = demosFor(SRC);
+  if (!mine.length) {
     const r = await jget("/api/runs");
     const runs = r.runs || r;
     if (!runs.length) { log("no runs on disk"); return; }
+    log(`no stored ${SRC} runs in the manifest — loading the newest run on disk`);
     load(runs[0].run_id || runs[0]);
     return;
   }
-  DEMO_I = (DEMO_I + 1) % DEMOS.length;
-  const d = DEMOS[DEMO_I];
-  clearLog(`stored run ${DEMO_I + 1} of ${DEMOS.length} — ${d.label}`);
+  DEMO_I[SRC] = (DEMO_I[SRC] + 1) % mine.length;
+  const d = mine[DEMO_I[SRC]];
+  clearLog(`stored ${SRC} run ${DEMO_I[SRC] + 1} of ${mine.length} — ${d.label}`);
   if (d.why) log(d.why);
   paintDemoHint();
   load(d.run_id);
 };
 
 async function load(runId) {
+  stopPlay();
   RUN = runId;
   // A briefing belongs to one run. Leaving the previous one on screen beside
   // new numbers is how a wrong reading gets read out loud.
@@ -1932,7 +2020,83 @@ async function loadPacked(runId) {
   img.src = `${API}/api/runs/${runId}/file/packed.png`;
 }
 
-$("time").oninput = () => renderFlood($("time").value / 100);
+/* ------------------------------------------------------------ playback
+
+   FRONT_BAND is how much of the run counts as "the front" - cells whose
+   arrival time falls inside this fraction of the total duration behind the
+   present moment are drawn lit, and a settlement reached inside it gets its
+   ring. It is a rendering choice and nothing else: widen it and more of the
+   flood glows, narrow it and less does. It changes no number on this page.
+
+   Two per cent of the run is roughly fifteen model-minutes on a twelve-hour
+   scenario, which is short enough to read as an edge and long enough to still
+   be visible when the front is crossing a floodplain slowly. */
+const FRONT_BAND = 0.02;
+
+/* The flood, played rather than dragged. A dam break is an event with a shape
+   in time - a front that accelerates down a gorge and stalls on a floodplain -
+   and a slider at 100% shows only the envelope it eventually filled, which is
+   the one view in which every case looks alike.
+
+   The whole run is played over PLAY_SECONDS of real time at 1x, so the clock
+   on screen is model time and the pace is honest about being a compression of
+   it. Playback drives the same renderFlood() the slider does; there is no
+   second drawing path that could disagree with the first. */
+const PLAY_SECONDS = 20;
+let playRAF = null, playT0 = 0, playFrom = 0;
+
+function playing() { return playRAF !== null; }
+
+function stopPlay() {
+  if (playRAF !== null) cancelAnimationFrame(playRAF);
+  playRAF = null;
+  $("tplay").innerHTML = "&#9654; Play";
+}
+
+function startPlay() {
+  if (!PACKED) { log("load a run first"); return; }
+  // Restarting from the end replays from the beginning rather than sitting
+  // finished, which is what pressing play on a finished thing should do.
+  playFrom = (+$("time").value >= 99.5) ? 0 : +$("time").value / 100;
+  playT0 = performance.now();
+  $("tplay").innerHTML = "&#10073;&#10073; Pause";
+  const step = () => {
+    const speed = +$("tspeed").value || 1;
+    const frac = playFrom
+      + ((performance.now() - playT0) / 1000) * speed / PLAY_SECONDS;
+    if (frac >= 1) {
+      $("time").value = 100;
+      renderFlood(1);
+      stopPlay();
+      return;
+    }
+    $("time").value = Math.round(frac * 100);
+    renderFlood(frac);
+    playRAF = requestAnimationFrame(step);
+  };
+  playRAF = requestAnimationFrame(step);
+}
+
+$("tplay").onclick = () => (playing() ? stopPlay() : startPlay());
+$("tspeed").onchange = () => { if (playing()) { stopPlay(); startPlay(); } };
+
+/* Dragging the slider takes control back from the playhead. Leaving playback
+   running while somebody drags fights them for the same value. */
+$("time").oninput = () => { stopPlay(); renderFlood($("time").value / 100); };
+
+/* The streaks carry the velocity field, so they get a scale. Without one they
+   are an animation; with one they are a reading. */
+function paintFlowLegend() {
+  const el = $("flowlegend");
+  if (!el) return;
+  const vmax = FIELDSMETA && FIELDSMETA.velocity_max_ms;
+  if (!vmax) { el.textContent = ""; return; }
+  el.innerHTML =
+    `streaks follow measured velocity · thin/pale 0 m/s ` +
+    `<span style="display:inline-block;width:38px;height:3px;vertical-align:middle;` +
+    `background:linear-gradient(90deg,rgba(200,245,255,.5),rgba(255,200,255,1))"></span> ` +
+    `${Number(vmax).toFixed(1)} m/s peak`;
+}
 
 /* ---------------------------------------------------------------- map
 
@@ -2130,20 +2294,42 @@ function renderFlood(frac) {
   const dst = img.data, src = PACKED.data;
   const nPix = c.width * c.height;
   const invEnd = 1 / Math.max(ENDHR, 1e-9);
+  const tFrac = tNow * invEnd;
 
   for (let i = 0; i < nPix; i++) {
     const cell = CELL_LUT[i];
     if (cell < 0) continue;
     const s = cell * 4;
     if (!src[s + 3]) continue;                       // never wet
-    if ((src[s] / 255) > tNow * invEnd) continue;    // arrival still ahead
+    const arrFrac = src[s] / 255;
+    if (arrFrac > tFrac) continue;                   // arrival still ahead
     const d01 = src[s + 2] / 255;
     if (d01 <= 0) continue;
 
     const o = i * 4;
-    const a = 0.40 + 0.55 * d01;                     // deeper -> more opaque
+    let a = 0.40 + 0.55 * d01;                       // deeper -> more opaque
+    let r = 30 + 90 * (1 - d01), g = 110 + 90 * (1 - d01), b = 200 + 40 * (1 - d01);
+
+    /* The wave front, lit. `lead` is how long ago the front passed this cell,
+       as a fraction of the run; cells inside a narrow band behind the present
+       moment are the front itself and are drawn bright.
+
+       This is a rendering of arrival_time.tif and nothing else - the band is a
+       contour of a grid the solver computed, so what glows is where the water
+       actually arrived in the last few minutes of model time. It is the one
+       thing a still image of a flood map cannot show and the reason the flood
+       reads as moving rather than spreading. */
+    const lead = tFrac - arrFrac;
+    if (lead < FRONT_BAND) {
+      const f = 1 - lead / FRONT_BAND;               // 1 at the front
+      const lit = f * f;                             // keep the band tight
+      r += (255 - r) * 0.80 * lit;
+      g += (255 - g) * 0.80 * lit;
+      b += (255 - b) * 0.45 * lit;
+      a = Math.min(1, a + 0.38 * lit);
+    }
+
     const inv = 1 - a;
-    const r = 30 + 90 * (1 - d01), g = 110 + 90 * (1 - d01), b = 200 + 40 * (1 - d01);
     dst[o]     = dst[o]     * inv + r * a;
     dst[o + 1] = dst[o + 1] * inv + g * a;
     dst[o + 2] = dst[o + 2] * inv + b * a;
@@ -2161,6 +2347,24 @@ function renderFlood(frac) {
     const [sx, sy] = project(s.lon, s.lat, v);
     if (sx < -20 || sy < -20 || sx > v.W + 20 || sy > v.H + 20) continue;
     const reached = s.arrival_hr != null && s.arrival_hr <= tNow;
+
+    /* A settlement the water has JUST reached gets an expanding ring for the
+       few minutes of model time around its arrival. It marks the single event
+       on this map that a warning is about - the moment the water arrives
+       somewhere with a name - and the ring is drawn from that settlement's own
+       arrival_hr, so it cannot appear at a place or a time the run did not
+       compute. */
+    if (reached) {
+      const since = (tNow - s.arrival_hr) / Math.max(ENDHR * FRONT_BAND, 1e-9);
+      if (since < 1) {
+        x.beginPath();
+        x.arc(sx, sy, 5 + 16 * since, 0, Math.PI * 2);
+        x.strokeStyle = `rgba(255,255,255,${0.85 * (1 - since)})`;
+        x.lineWidth = 2.4 * (1 - since) + 0.6;
+        x.stroke();
+      }
+    }
+
     x.beginPath(); x.arc(sx, sy, 4.5, 0, Math.PI * 2);
     x.fillStyle = reached ? (HAZ[s.hazard_class] || "#a11212") : "#5b6570";
     x.fill();
@@ -2310,6 +2514,7 @@ async function loadFields(runId) {
     img.onerror = () => res();
     img.src = `${API}/api/runs/${runId}/fields.png`;
   });
+  paintFlowLegend();
 }
 
 /** Arrival hours at a grid cell, or null where the water never arrives.
@@ -2367,7 +2572,21 @@ function seedParticles(n) {
 function flowStep() {
   const fc = $("flow");
   const cx = fc.getContext("2d");
-  cx.clearRect(0, 0, fc.width, fc.height);
+
+  /* Fade the previous frame instead of clearing it. This is what turns a
+     scatter of short dashes into the streamline picture a wind map draws: a
+     particle leaves a tail that persists for a second or so and decays, so the
+     structure of the flow field - where it converges, where it accelerates
+     into a gorge, where it spreads across a floodplain - becomes visible in
+     the accumulation rather than having to be inferred frame by frame.
+
+     'destination-out' at low alpha subtracts opacity uniformly, which fades to
+     TRANSPARENT rather than to a colour. Painting a translucent background
+     instead would smear a haze over the flood map underneath. */
+  cx.globalCompositeOperation = "destination-out";
+  cx.fillStyle = "rgba(0,0,0,0.14)";
+  cx.fillRect(0, 0, fc.width, fc.height);
+  cx.globalCompositeOperation = "source-over";
 
   if (!PACKED || !VIEW || !FIELDSMETA) { flowRAF = requestAnimationFrame(flowStep); return; }
   if (!PARTICLES.length) seedParticles(520);
@@ -2400,15 +2619,24 @@ function flowStep() {
     const lat = bbox[3] - (p.row / h) * (bbox[3] - bbox[1]);
     const [sx, sy] = project(lon, lat, VIEW);
     p.trail.push([sx, sy]);
+    // The tail on screen comes from the canvas fade now, not from this array,
+    // but the array is still kept nine deep: it is the record of where a
+    // particle has actually been, and it is what makes the claim these streaks
+    // make - that they travel down the arrival-time gradient - testable rather
+    // than merely asserted. tests/e2e/console.spec.js walks it end to end.
     if (p.trail.length > 9) p.trail.shift();
 
     if (p.trail.length > 1) {
+      // Only this frame's segment is drawn; the fade above keeps the rest of
+      // the streak on screen, which is both cheaper and longer-tailed than
+      // redrawing nine stored points every frame.
       const f = Math.min(1, v / vmax);
-      cx.strokeStyle = `rgba(${Math.round(200 + 55 * f)},${Math.round(245 - 45 * f)},255,${0.35 + 0.5 * f})`;
+      cx.strokeStyle = `rgba(${Math.round(200 + 55 * f)},${Math.round(245 - 45 * f)},255,${0.30 + 0.55 * f})`;
       cx.lineWidth = 1.1 + 1.9 * f;
+      const n = p.trail.length;
       cx.beginPath();
-      cx.moveTo(p.trail[0][0], p.trail[0][1]);
-      for (let i = 1; i < p.trail.length; i++) cx.lineTo(p.trail[i][0], p.trail[i][1]);
+      cx.moveTo(p.trail[n - 2][0], p.trail[n - 2][1]);
+      cx.lineTo(p.trail[n - 1][0], p.trail[n - 1][1]);
       cx.stroke();
     }
   }

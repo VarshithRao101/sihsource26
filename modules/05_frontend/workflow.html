@@ -377,9 +377,26 @@
     <input id="endhr" type="number" value="8" min="1" max="72" step="1" style="min-width:88px">
   </div>
   <span class="grow"></span>
+  <!-- Stored runs. Five dams and the five rivers the problem statement names,
+       from data/demo_runs.json. The source select is not cosmetic: a dam and a
+       river are two different questions and the manifest keeps them apart, so
+       picking Rivers here can never hand back a dam. -->
+  <div class="fld">
+    <label for="storedsrc">Stored</label>
+    <select id="storedsrc">
+      <option value="dam">Dams</option>
+      <option value="river">Rivers</option>
+    </select>
+  </div>
+  <div class="fld">
+    <label for="storedcase">Case
+      <span id="storedcount" style="text-transform:none;letter-spacing:0"></span></label>
+    <select id="storedcase" style="min-width:270px"><option value="">loading…</option></select>
+  </div>
   <button class="btn play"  id="bPlay">&#9654;&nbsp; PLAY</button>
   <button class="btn pause" id="bPause" disabled>&#10073;&#10073;&nbsp; PAUSE</button>
   <button class="btn reset" id="bReset">&#8635;&nbsp; RESET</button>
+  <button class="btn"       id="bStored">&#9199;&nbsp; Load stored run</button>
   <button class="btn"       id="bLast">Replay last run</button>
 </div>
 
@@ -1132,6 +1149,8 @@ async function reset() {
   $("strip").className = "";
   $("drawer").classList.remove("open"); S.selected = null;
   $("log").innerHTML = "";
+  REPLAY_TOKEN++;          // abandons a stored-run walk in flight
+  $("bStored").disabled = false;
   resetStates();
   log("reset. every box is back to WAITING.");
 }
@@ -1177,11 +1196,22 @@ async function loadRun(runId, markGraph) {
    contains. A missing evacuation.json means the stage did not produce one, and
    the box says skipped rather than green. */
 function markGraphFromRun(d) {
+  const target = statesFromRun(d);
+  for (const id in target) S.states[id] = target[id];
+  paintStates();
+  runValidatorForReplay();
+}
+
+/* The same derivation, but returned instead of painted, so the paced replay
+   can walk it one stage at a time. Everything here is read off the run folder;
+   nothing is assumed and nothing is invented. */
+function statesFromRun(d) {
+  const out = {};
   const files = d.files || [];
   const has = f => files.includes(f);
   const meta = d.meta || {}, r = meta.results || {};
   const site = meta.site || {}, dem = meta.dem || {};
-  const set = (id, status, detail) => { S.states[id] = { status, detail, note: "" }; };
+  const set = (id, status, detail) => { out[id] = { status, detail, note: "" }; };
 
   set("input", "complete", `${(meta.scenario || {}).failure_mode || ""} at ${site.name || ""}`);
   set("catalogue", "complete",
@@ -1211,10 +1241,12 @@ function markGraphFromRun(d) {
   set("result", "complete",
       `${fmt(r.flood_area_km2)} km² flooded, max depth ${fmt(r.max_depth_m)} m, peak ${fmt(r.peak_discharge_cumecs, 0)} m³/s`);
   if (has("validation.json")) set("gee", "complete", "Sentinel-1 comparison stored with this run");
-  paintStates();
+  return out;
+}
 
-  /* The validator is the definition of done, so a replay runs it for real
-     rather than assuming the folder passed when it was written. */
+/* The validator is the definition of done, so a replay runs it for real rather
+   than assuming the folder passed when it was written. */
+function runValidatorForReplay() {
   jget(`/api/runs/${S.runId}/validate`).then(rep => {
     const n = rep.warnings.length;
     S.states.validate = rep.ok
@@ -1228,6 +1260,253 @@ function markGraphFromRun(d) {
     paintStates();
   });
 }
+
+/* ======================================================================
+   Stored runs, walked one stage at a time
+
+   WHAT THIS IS, SAID PLAINLY, BECAUSE IT DECIDES WHETHER IT MAY BE SHOWN.
+   A stored run is a real run: contract-valid folders written by
+   runner.run_scenario on COP30 terrain, built by
+   integration/build_demo_runs.py, and every box below reports what that run
+   folder ACTUALLY contains. Nothing is solving while this plays. The reason it
+   exists is that Machchhu II took twenty minutes of compute and a panel will
+   not watch twenty minutes of spinner - so the solve was done in advance and
+   what you are watching is the recorded shape of it.
+
+   The pace is not invented either. Each stage's dwell is proportional to the
+   wall-clock seconds that stage genuinely took when the run was built -
+   `stage_timings` in data/demo_runs.json, measured off the same progress
+   stream the WebSocket carries during a live PLAY - normalised onto a fifteen
+   second clock. So the stages that were slow look slow relative to the ones
+   that were fast, and the compression factor is printed in the log and on the
+   status chip. If a run has no measured timings the pace falls back to an even
+   split and SAYS SO rather than pretending the rhythm means something.
+
+   PLAY is still the live solve. This button is not a substitute for it.
+   ====================================================================== */
+
+const REPLAY_SECONDS = 15;      // inside the 10-20 s the demo script allows
+const REPLAY_FLOOR_S = 0.28;    // no stage flashes past unreadably
+
+/* Execution order, which is NOT the order the nodes are declared in for
+   layout. This is the order api._execute and runner.run_scenario actually
+   enter them; a node in the manifest but missing here is appended, so adding a
+   stage to pipeline.py can never make it silently vanish from a replay. */
+const REPLAY_ORDER = [
+  "input", "catalogue", "river", "terrain", "exposure", "inflow", "breach",
+  "sph", "solve", "surrogate", "grids", "impact", "evacuation", "uncertainty",
+  "sfincs", "delft3d", "compare", "gee", "validate", "result",
+];
+
+let DEMOS = [];
+let REPLAY_TOKEN = 0;
+
+function orderedNodeIds() {
+  const known = new Set(S.manifest.nodes.map(n => n.id));
+  const out = REPLAY_ORDER.filter(id => known.has(id));
+  for (const n of S.manifest.nodes) if (!out.includes(n.id)) out.push(n.id);
+  return out;
+}
+
+async function loadDemos() {
+  try {
+    const d = await jget("/api/demo-runs");
+    DEMOS = d.runs || [];
+  } catch { DEMOS = []; }
+  paintDemoList();
+}
+
+function demosFor(src) {
+  return DEMOS.filter(d => (d.category || "dam") === src);
+}
+
+function paintDemoList() {
+  const src = $("storedsrc").value;
+  const mine = demosFor(src);
+  const sel = $("storedcase");
+  sel.innerHTML = mine.length
+    ? mine.map(d => `<option value="${d.run_id}">${escapeHtml(d.label)}</option>`).join("")
+    : `<option value="">none built</option>`;
+  $("storedcount").textContent = `(${mine.length})`;
+  $("bStored").disabled = mine.length === 0;
+  $("bStored").title = mine.length
+    ? ""
+    : `No stored ${src} runs on disk. Build them with `
+      + `python -m integration.build_demo_runs`;
+}
+
+function currentDemo() {
+  const id = $("storedcase").value;
+  return DEMOS.find(d => d.run_id === id) || null;
+}
+
+/* Seconds each stage should hold the screen. Proportional to what it measured,
+   floored so nothing is invisible, then renormalised so the whole walk lands
+   on REPLAY_SECONDS however lopsided the real timings were. */
+function dwellPlan(ids, timings) {
+  const by = {};
+  for (const t of (timings || [])) by[t.node] = Number(t.seconds) || 0;
+  const measured = ids.reduce((a, id) => a + (by[id] || 0), 0);
+  let dwell = ids.map(id =>
+    measured > 0 ? (by[id] || 0) / measured * REPLAY_SECONDS
+                 : REPLAY_SECONDS / ids.length);
+  dwell = dwell.map(v => Math.max(v, REPLAY_FLOOR_S));
+  const sum = dwell.reduce((a, b) => a + b, 0);
+  const k = REPLAY_SECONDS / sum;
+  return { dwell: dwell.map(v => v * k), measured: measured, by: by };
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* One frame, or 30 ms, whichever arrives first.
+
+   setTimeout is NOT a reliable clock here. A browser throttles timers in a tab
+   it considers hidden or occluded - and an embedded preview pane frequently is
+   one - clamping every call to about a second however small the argument. On
+   this machine twenty setTimeout(210) calls took 18.9 s instead of 4.2, which
+   walked a fifteen second replay in thirty-one. requestAnimationFrame is tied
+   to the compositor and gives ~16 ms while the page is actually being drawn;
+   the setTimeout is the backstop for when it is not being drawn at all and
+   rAF never fires, in which case the walk degrades to roughly a stage a second
+   instead of hanging. */
+const tick = () => new Promise(r => {
+  let done = false;
+  const fin = () => { if (!done) { done = true; r(); } };
+  requestAnimationFrame(fin);
+  setTimeout(fin, 30);
+});
+
+async function playStored() {
+  if (S.mode === "running") {
+    log("a live solve is in flight - press RESET first", "warn");
+    return;
+  }
+  const demo = currentDemo();
+  if (!demo) { log("no stored run selected", "warn"); return; }
+
+  const token = ++REPLAY_TOKEN;
+  S.mode = "replay";
+  $("bStored").disabled = true;
+  resetStates();
+  $("strip").classList.remove("on");
+  $("log").innerHTML = "";
+
+  log(`stored run - ${demo.label}`, "ok");
+  if (demo.why) log(demo.why);
+
+  let d;
+  try {
+    d = await jget("/api/runs/" + demo.run_id);
+  } catch (e) {
+    log("could not open the stored run: " + e.message, "err");
+    S.mode = "idle"; $("bStored").disabled = false; return;
+  }
+  if (token !== REPLAY_TOKEN) return;
+
+  S.runId = demo.run_id;
+  S.meta = d.meta;
+  S.impact = d.impact || null;
+  chip("cRun", demo.run_id);
+  $("banner").style.display = d.is_fake ? "block" : "none";
+  try { S.evac = await jget(`/api/runs/${demo.run_id}/evacuation`); } catch { S.evac = null; }
+  if (token !== REPLAY_TOKEN) return;
+
+  const target = statesFromRun(d);
+  const ids = orderedNodeIds();
+  const plan = dwellPlan(ids, demo.stage_timings);
+
+  if (plan.measured > 0) {
+    const speed = plan.measured / REPLAY_SECONDS;
+    log(`${plan.measured.toFixed(1)} s of measured pipeline time, replayed over `
+        + `${REPLAY_SECONDS} s - ${speed.toFixed(0)}x. Nothing is solving now.`, "warn");
+  } else {
+    log(`this run has no measured stage timings, so the ${REPLAY_SECONDS} s are `
+        + `split evenly - the rhythm below means nothing. Nothing is solving now.`,
+        "warn");
+  }
+
+  /* Deadlines off one wall clock, not a chain of sleeps. An accumulated
+     setTimeout drifts: every await rounds up, every paintStates costs a few
+     milliseconds, and the first version of this walked a 15 s plan in 31 s on
+     this machine. Against a fixed start the error cannot accumulate - a slow
+     paint eats the next stage's slice instead of being added to the total - so
+     the walk lands on REPLAY_SECONDS whatever the page is doing. */
+  const t0 = performance.now();
+  let acc = 0;
+  /* Wait until `ms` after the start of the walk. `onTick` is called with the
+     elapsed time on the way there, which is how the solver bar fills smoothly
+     rather than in twelve visible jumps. */
+  const until = async (ms, onTick) => {
+    while (performance.now() - t0 < ms - 8) {
+      if (token !== REPLAY_TOKEN) return;
+      if (onTick) onTick(performance.now() - t0);
+      await tick();
+    }
+    if (onTick) onTick(ms);
+  };
+
+  for (let i = 0; i < ids.length; i++) {
+    if (token !== REPLAY_TOKEN) return;
+    const id = ids[i];
+    const node = S.nodeById[id] || {};
+    const end = target[id] || S.states[id] || { status: "waiting", detail: "" };
+    const slice = plan.dwell[i] * 1000;
+
+    // A stage that did not run in this run is never shown as running. It goes
+    // straight to skipped or absent, which is the whole point of those states.
+    const ran = end.status === "complete" || end.status === "failed"
+             || end.status === "running";
+    if (ran) {
+      S.states[id] = { status: "running", detail: "", note: "" };
+      chip("cStatus",
+           `replay ${i + 1}/${ids.length} - ${(node.title || id).toLowerCase()}`, "");
+      paintStates();
+      // The solver box carries a progress bar during a live run; drive it here
+      // too, from the same clock, so the replay reads the same as the real
+      // thing rather than jumping from 0 to 100.
+      if (id === "solve") {
+        // Only the bar is repainted while the solver box fills. A full
+        // paintStates costs about 12 ms - fine once per stage, far too much
+        // once per frame - and the bar is the only thing changing.
+        const bar = (S.nodeEl.solve || {}).querySelector
+          ? S.nodeEl.solve.querySelector(".bar i") : null;
+        await until(acc + slice, el => {
+          const pct = Math.max(0, Math.min(100, (el - acc) / slice * 100));
+          S.live.pct = pct;
+          if (bar) bar.style.width = pct + "%";
+        });
+      } else {
+        await until(acc + slice);
+      }
+      if (token !== REPLAY_TOKEN) return;
+    }
+
+    acc += slice;
+    S.states[id] = end;
+    const real = plan.by[id];
+    if (ran && end.detail) {
+      log(`${node.title || id} - ${end.detail}`
+          + (real ? `  [${real.toFixed(2)} s when it was solved]` : ""),
+          end.status === "failed" ? "err" : "ok");
+    }
+    paintStates();
+    // A stage that did not run still holds its slot, so the whole walk is one
+    // schedule rather than a walk plus a tail of extra pauses.
+    if (!ran) await until(acc);
+  }
+
+  if (token !== REPLAY_TOKEN) return;
+  S.mode = "done";
+  chip("cStatus", "stored run - nothing is solving", "");
+  runValidatorForReplay();
+  stripResult();
+  openNode("result");
+  $("bStored").disabled = false;
+  log("stored run complete. Press PLAY to solve a fresh scenario for real.", "ok");
+}
+
+$("storedsrc").onchange = paintDemoList;
+$("bStored").onclick = playStored;
 
 /* ======================================================================
    Boot
@@ -1274,6 +1553,7 @@ function buildLegend() {
 
   await loadStates2();
   await loadDams();
+  await loadDemos();
 })();
 
 let fitTimer = null;
